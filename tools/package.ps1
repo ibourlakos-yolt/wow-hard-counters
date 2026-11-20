@@ -2,7 +2,7 @@
 #   dist\HardCounters-<version>.zip   HardCounters\ (with Libs\), HardCounters_Diagnostics\, HardCounters_Farmer\,
 #                                     HardCounters_CharacterStats\ (each at the zip root, as WoW's AddOns wants them)
 # The version comes from "## Version:" in HardCounters\HardCounters.toc; the build fails if any shipped TOC says
-# otherwise. Entries use forward slashes (Windows PowerShell's Compress-Archive writes backslashes, which break
+# otherwise, or if the embedded LibGranaryDB is not an exact copy of ..\LibGranaryDB (when that folder exists). Entries use forward slashes (Windows PowerShell's Compress-Archive writes backslashes, which break
 # other unzippers).
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
@@ -27,6 +27,36 @@ $version = Get-TocVersion 'HardCounters' $folders['HardCounters']
 foreach ($name in $folders.Keys) {
     $v = Get-TocVersion $name $folders[$name]
     if ($v -ne $version) { Write-Error "$name.toc says $v, HardCounters.toc says $version"; exit 1 }
+}
+
+# The embedded LibGranaryDB must be an exact copy of ..\LibGranaryDB (tools\sync-libs.ps1 makes it one): same files,
+# same bytes. Without that sibling folder (a CI runner, a fresh clone) the check is skipped with a warning, as in
+# tests\toolchain_spec.lua.
+$libSrc = Join-Path $repo '..\LibGranaryDB\LibGranaryDB-1.0'
+$libDst = Join-Path $repo 'HardCounters\Libs\LibGranaryDB-1.0'
+if (Test-Path -LiteralPath $libSrc) {
+    function Get-TreeHashes([string]$root) {
+        $root = (Resolve-Path -LiteralPath $root).Path
+        $h = @{}
+        Get-ChildItem -LiteralPath $root -Recurse -File | ForEach-Object {
+            $h[$_.FullName.Substring($root.Length).TrimStart('\')] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        }
+        return $h
+    }
+    $a = Get-TreeHashes $libSrc
+    $b = Get-TreeHashes $libDst
+    $diff = @()
+    foreach ($k in $a.Keys) {
+        if (-not $b.ContainsKey($k)) { $diff += "missing from the embedded copy: $k" }
+        elseif ($a[$k] -ne $b[$k]) { $diff += "differs: $k" }
+    }
+    foreach ($k in $b.Keys) { if (-not $a.ContainsKey($k)) { $diff += "only in the embedded copy: $k" } }
+    if ($diff.Count -gt 0) {
+        Write-Error ("Embedded LibGranaryDB differs from ..\LibGranaryDB (run tools\sync-libs.ps1):`n  " + (($diff | Sort-Object) -join "`n  "))
+        exit 1
+    }
+} else {
+    Write-Warning "..\LibGranaryDB not found: not checking that the embedded LibGranaryDB is an exact copy."
 }
 
 $dist = Join-Path $repo 'dist'
