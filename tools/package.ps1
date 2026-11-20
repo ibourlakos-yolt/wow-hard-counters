@@ -2,8 +2,8 @@
 #   dist\HardCounters-<version>.zip   HardCounters\ (with Libs\), HardCounters_Diagnostics\, HardCounters_Farmer\,
 #                                     HardCounters_CharacterStats\ (each at the zip root, as WoW's AddOns wants them)
 # The version comes from "## Version:" in HardCounters\HardCounters.toc; the build fails if any shipped TOC says
-# otherwise, or if the embedded LibGranaryDB is not an exact copy of ..\LibGranaryDB (when that folder exists). Entries use forward slashes (Windows PowerShell's Compress-Archive writes backslashes, which break
-# other unzippers).
+# otherwise, or if the embedded LibGranaryDB is not an exact copy of ..\LibGranaryDB (when that folder exists).
+# Entries use forward slashes (Windows PowerShell's Compress-Archive writes backslashes, which break other unzippers).
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
