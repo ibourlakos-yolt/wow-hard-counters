@@ -1,0 +1,117 @@
+# CI: busted and luacheck on PUC Lua 5.1 for the engine and each pack, on every push and pull request.
+# A tag vX.Y.Z[-alphaN|-betaN|-rcN] also builds the bundle zip (tools/package.ps1) and attaches it to a GitHub
+# release, marked pre-release when the version has a suffix. No CurseForge upload here (yet).
+# The test job mirrors the local setup (docs/DEV_SETUP.md: Ubuntu 22.04 in WSL, lua5.1 from apt, busted, luacheck);
+# each .busted says lua = "lua5.1", so busted re-runs itself under that interpreter.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.suite.name }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - { name: engine, dir: . }
+          - { name: Farmer, dir: packs/Farmer }
+          - { name: CharacterStats, dir: packs/CharacterStats }
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Lua 5.1, busted and luacheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 liblua5.1-0-dev luarocks
+          sudo luarocks --lua-version=5.1 install busted 2.3.0
+          sudo luarocks --lua-version=5.1 install luacheck 1.2.0
+          lua5.1 -v
+          busted --version
+          luacheck --version
+
+      - name: busted
+        working-directory: ${{ matrix.suite.dir }}
+        run: busted
+
+      - name: luacheck
+        working-directory: ${{ matrix.suite.dir }}
+        run: luacheck .
+
+  release:
+    name: release zip
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: The tag matches the version and has a changelog entry
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toc = Get-Content -Raw HardCounters\HardCounters.toc
+          if ($toc -notmatch '(?m)^## Version:\s*(\S+)') { throw '## Version not found in HardCounters.toc' }
+          $version = $Matches[1]
+          if ($env:TAG -ne "v$version") { throw "Tag $env:TAG does not match the version $version (tools\bump.ps1 first)" }
+          if ($version -notmatch '^\d+\.\d+\.\d+(-(alpha\d+|beta\d+|rc\d+))?$') { throw "Not a releasable version: $version" }
+          # The release notes are the version's CHANGELOG.md entry: from "## <version>" to the next "## ".
+          $lines = Get-Content CHANGELOG.md -Encoding UTF8
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match ('^## ' + [regex]::Escape($version) + '(\s|$)')) { $start = $i; break }
+          }
+          if ($start -lt 0) { throw "CHANGELOG.md has no entry for $version" }
+          $end = $lines.Count
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^## ') { $end = $i; break } }
+          $notes = ''
+          if ($end -gt $start + 1) { $notes = ($lines[($start + 1)..($end - 1)] -join "`n").Trim() }
+          if (-not $notes) { throw "CHANGELOG.md's entry for $version is empty" }
+          # UTF-8 without BOM (Windows PowerShell's Out-File -Encoding utf8 adds one).
+          [IO.File]::WriteAllText("$PWD\release-notes.md", $notes, (New-Object System.Text.UTF8Encoding($false)))
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "VERSION=$version`n")
+
+      - name: Build the zip
+        shell: powershell
+        run: .\tools\package.ps1
+
+      - name: Check the zip's tree
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead("$PWD\dist\HardCounters-$env:VERSION.zip")
+          try { $entries = $zip.Entries | ForEach-Object { $_.FullName } } finally { $zip.Dispose() }
+          $expected = 'HardCounters', 'HardCounters_CharacterStats', 'HardCounters_Diagnostics', 'HardCounters_Farmer'
+          $roots = $entries | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique
+          if (Compare-Object $expected $roots) { throw "Top-level folders: $($roots -join ', ')" }
+          foreach ($f in $expected) {
+            foreach ($need in "$f/$f.toc", "$f/LICENSE.txt") {
+              if ($entries -notcontains $need) { throw "Missing from the zip: $need" }
+            }
+          }
+          if ($entries | Where-Object { $_ -match '\\' }) { throw 'Backslashes in zip entry names' }
+          "$($entries.Count) files in $($expected.Count) folders"
+
+      - name: Create the GitHub release
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $flags = @()
+          if ($env:VERSION -match '-(alpha|beta|rc)\d+$') { $flags += '--prerelease' }
+          gh release create $env:TAG "dist\HardCounters-$env:VERSION.zip" --title "Hard Counters $env:VERSION" --notes-file release-notes.md @flags
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed ($LASTEXITCODE)" }

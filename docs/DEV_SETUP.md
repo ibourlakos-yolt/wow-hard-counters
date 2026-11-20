@@ -83,3 +83,6 @@ Each repo gets wrapper scripts under `tools/` so nobody has to remember these. L
 - **HardCounters and the packs are developed mostly the usual way** (`/reload`, BugSack, screenshots). Their capture and UI code can't be meaningfully tested offline, so expect little offline coverage there: unit tests for pure helpers only, in-game checklists for the rest.
 - **Reading files across `/mnt/c` is slower than native Linux**, but fine for repos this size.
 - **If GitHub is added later:** move lint and tests into GitHub Actions (the ecosystem norm), and WSL remains the local mirror.
+  **Done 2026-11-20:** `.github/workflows/ci.yml` runs the same busted and luacheck on an Ubuntu 22.04 runner (lua5.1
+  from apt, the busted and luacheck versions used here) for the engine and each pack, and builds the release zip on
+  a `v*` tag. Without a sibling `../LibGranaryDB` there, the library-copy check is pending; it runs locally.

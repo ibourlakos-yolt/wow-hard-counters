@@ -95,6 +95,9 @@ displays, with a public API for packs.
   `packs/Farmer` and `packs/CharacterStats` (each with its own tests, lint and docs).
 - Tools: `tools\test.ps1`, `lint.ps1`, `link.ps1`, `link-sv.ps1`, `package.ps1` (the bundle zip), `bump.ps1` (one
   version everywhere), `sync-libs.ps1`, `decode-report.ps1`. Development setup: [docs/DEV_SETUP.md](docs/DEV_SETUP.md)
+- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)): busted and luacheck on PUC Lua 5.1 for the engine and
+  each pack on every push; a `v*` tag builds the zip and attaches it to a GitHub release (a pre-release for alpha,
+  beta and rc versions).
 - WoW API we call: [docs/WOW_API.md](docs/WOW_API.md); API verdicts: [docs/api-surface.md](docs/api-surface.md);
   research: [docs/research.md](docs/research.md)
 - Open work and bugs: [GitHub Issues](https://github.com/ibourlakos-yolt/wow-hard-counters/issues). Design notes
