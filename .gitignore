@@ -1,0 +1,7 @@
+dist/
+*.zip
+.vscode/
+.DS_Store
+Thumbs.db
+/SavedVariables/
+report*.txt

@@ -1,0 +1,14 @@
+## Interface: 16001
+## Title: Hard Counters: Farmer
+## Notes: Count what you farm: a money ledger by source and the run report (gold/h, items, best drop, XP, reputation).
+## Author: Ioannis (John) Bourlakos
+## Version: 0.1.0-dev
+## X-License: MIT
+## X-AI-Assisted: Claude (Anthropic), via Claude Code
+## Dependencies: HardCounters
+## X-Category: Data Broker
+
+Parse.lua
+Attribution.lua
+Farmer.lua
+UI\Ledger.lua

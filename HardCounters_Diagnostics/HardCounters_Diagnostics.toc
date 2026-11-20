@@ -1,0 +1,14 @@
+## Interface: 16001
+## Title: Hard Counters: Diagnostics
+## Notes: The Hard Counters dev console: log, live values, storage, probes, snapshots. Turn it on when asked, or out of curiosity.
+## Author: Ioannis (John) Bourlakos
+## Version: 0.1.0-dev
+## X-License: MIT
+## X-AI-Assisted: Claude (Anthropic), via Claude Code
+## Dependencies: HardCounters
+## SavedVariables: HardCountersDiagDB
+## X-Category: Development Tools
+
+Diag.lua
+Probes.lua
+Console.lua

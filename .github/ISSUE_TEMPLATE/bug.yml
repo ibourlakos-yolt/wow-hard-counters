@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Hard Counters doesn't work or shows a wrong number.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! In game, type `/hc report`, copy the text in the box (Ctrl+A, Ctrl+C) and paste it
+        below. It contains no character names or realms.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, and what you saw.
+      placeholder: I put "Gold/h" on a board, looted a few things, and it stayed at 0.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: The /hc report text
+      description: Paste the whole text. `/hc report addons` also lists your other addons, if you're fine sharing that.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message (if any)
+      description: From BugSack or the game's error window.
+      render: text
+  - type: dropdown
+    id: packs
+    attributes:
+      label: Which part?
+      multiple: true
+      options:
+        - Boards and readings (Hard Counters)
+        - Farmer (Ledger, loot, reputation)
+        - Character Stats
+        - Diagnostics
+        - Not sure

@@ -1,0 +1,51 @@
+## Interface: 16001
+## Title: Hard Counters
+## Notes: Counters for anything you care about: periods, records, runs and displays, with a public API for packs.
+## Author: Ioannis (John) Bourlakos
+## Version: 0.1.0-dev
+## X-License: MIT
+## X-AI-Assisted: Claude (Anthropic), via Claude Code
+## SavedVariables: HardCountersDB, HardCountersSettings
+## X-Category: Data Broker
+
+Libs\embeds.xml
+
+Locale\enUS.lua
+
+Core\Init.lua
+Core\WoW.lua
+Core\Util.lua
+Core\Ring.lua
+Core\Log.lua
+Core\Callbacks.lua
+Core\Events.lua
+Core\Settings.lua
+Core\Engine.lua
+Core\API.lua
+Core\Registry.lua
+Core\Trackers.lua
+Core\Time.lua
+Core\Odometer.lua
+Core\Phases.lua
+Core\Runs.lua
+Core\Views.lua
+Core\Readings.lua
+Core\Migrations.lua
+Core\Report.lua
+Core\DiagBridge.lua
+
+Basics\Basics.lua
+
+UI\CopyBox.lua
+UI\Slash.lua
+UI\Options.lua
+UI\RunCommands.lua
+UI\Widgets.lua
+UI\Windows.lua
+UI\Menu.lua
+UI\BoardModel.lua
+UI\Boards.lua
+UI\Trackers.lua
+UI\RunList.lua
+UI\Broker.lua
+UI\Minimap.lua
