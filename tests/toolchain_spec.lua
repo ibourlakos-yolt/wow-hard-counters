@@ -8,6 +8,7 @@ local ADDONS = {
   "packs/Farmer/HardCounters_Farmer/HardCounters_Farmer.toc",
   "packs/CharacterStats/HardCounters_CharacterStats/HardCounters_CharacterStats.toc",
 }
+local WEBSITE = "https://github.com/ibourlakos-yolt/wow-hard-counters"
 -- Lua files that carry the version as a string (tools\bump.ps1 writes them all).
 local VERSION_SOURCES = {
   { "HardCounters/Core/Init.lua", 'HC%.VERSION = "([^"]+)"' },
@@ -36,6 +37,22 @@ describe("toolchain", function()
       assert.are.equal("MIT", F.tocFields(toc)["X-License"])
       assert.is_truthy(F.tocFields(toc)["X-AI-Assisted"], "the AI-assistance note (README, How it's made)")
     end)
+
+    it(toc .. ": links the public repo", function()
+      assert.are.equal(WEBSITE, F.tocFields(toc)["X-Website"])
+    end)
+
+    -- The client's AddOn list (Blizzard_AddOnList, forever branch, 1.60.1) nests an addon under the one whose
+    -- folder name EXACTLY equals its ## Group; a wrong value drops it back to the top level.
+    it(toc .. ": sits under Hard Counters in the AddOn list (## Group)", function()
+      assert.are.equal("HardCounters", F.tocFields(toc).Group)
+    end)
+
+    if toc ~= ADDONS[1] then
+      it(toc .. ": needs Hard Counters (## Dependencies)", function()
+        assert.are.equal("HardCounters", F.tocFields(toc).Dependencies)
+      end)
+    end
   end
 
   it("one version everywhere: every shipped TOC and every VERSION string (tools\\bump.ps1)", function()

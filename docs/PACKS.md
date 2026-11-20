@@ -19,6 +19,9 @@ Packs are **collections of counters** built **only on Hard Counters' public API*
 - **TOC files:**
   - `## Dependencies: HardCounters`
   - `## Interface: 16001`
+  - `## Group: HardCounters` (optional) nests the pack under Hard Counters in the game's AddOn list. The client
+    often guesses the group from the folder name and dependencies; an explicit value must match the folder name
+    `HardCounters` exactly, or the pack drops back to the top level. The packs in this repo set it.
   - `_Forever.toc` (or Interface 16001 in a plain TOC)
   - `## LoadOnDemand: 1` where possible. Hard Counters loads the packs the user has switched on.
 - **What a pack contains:**
