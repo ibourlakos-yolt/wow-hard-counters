@@ -3,6 +3,10 @@
 What changed for players, newest first. Alpha versions may reset saved data; when one does, its entry says so at
 the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+<!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
+
 ## 0.1.0-alpha1 (2026-11-21)
 
 The first experimental build: Hard Counters, Farmer, Character Stats and Diagnostics in one download.

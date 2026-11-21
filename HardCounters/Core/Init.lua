@@ -6,7 +6,7 @@ local HC = {}
 ns.HC = HC
 ns.ADDON = ADDON
 
-HC.VERSION = "0.1.0-alpha1"
+HC.VERSION = "0.1.1-dev"
 HC.API_VERSION = 1      -- experimental until 2-3 packs have shipped against it (DESIGN §10)
 HC.EXPERIMENTAL = true
 

@@ -11,7 +11,7 @@ local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfo
 local GetTime = GetTime
 local tonumber, type, pairs = tonumber, type, pairs
 
-ns.VERSION = "0.1.0-alpha1"
+ns.VERSION = "0.1.1-dev"
 local pack = HC:RegisterPack("Farmer", { namespace = "hcfarm", version = ns.VERSION, title = "Farmer" })
 ns.pack = pack
 
