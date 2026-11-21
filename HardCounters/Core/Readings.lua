@@ -509,7 +509,8 @@ function ns.ReadingLive(r, arg)
   return v
 end
 
-local LIVE_FORMAT = { percent = "%.2f%%", number = "%.0f", duration = nil, money = nil }
+-- Same decimals as the formatters out of combat (percent: U.number(v, 1)), so the text doesn't jump at combat edges.
+local LIVE_FORMAT = { percent = "%.1f%%", number = "%.0f", duration = nil, money = nil }
 --- The format a display passes a live value through: the reading's `liveFormat`, or one for its formatter (money and
 --- durations need arithmetic to format: none, so no pass-through for them).
 function ns.LiveFormat(r)

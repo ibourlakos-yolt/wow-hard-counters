@@ -7,6 +7,10 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
+### Fixes
+- Percent tiles keep one decimal in combat ("5.2%"), as out of combat; they showed two ("5.20%") and the text
+  jumped at every fight's start and end.
+
 ## 0.1.0-alpha1 (2026-11-21)
 
 The first experimental build: Hard Counters, Farmer, Character Stats and Diagnostics in one download.

@@ -221,7 +221,7 @@ describe("live in combat by passing the value through (CS-9, 2026-11-19)", funct
       local got = {}
       w.value.SetFormattedText = function(_, fmt, v) got.fmt, got.v = fmt, v end
       B.Refresh(b.id)
-      assert.are.equal("%.2f%%", got.fmt)
+      assert.are.equal("%.1f%%", got.fmt)
       assert.are.equal(secret, got.v)
       assert.is_nil(w.label:GetText():find("in combat", 1, true))   -- it is live: no mark
       -- the API never hands out the secret: the stale value, marked
@@ -230,7 +230,7 @@ describe("live in combat by passing the value through (CS-9, 2026-11-19)", funct
       assert.are.equal("stale", state)
       local lv, fmt = HC:ReadingLive("tli:dodge")
       assert.are.equal(secret, lv)
-      assert.are.equal("%.2f%%", fmt)
+      assert.are.equal("%.1f%%", fmt)
       -- a bar needs arithmetic: no pass-through, the stale value and its mark
       M.SetTarget(t, "10")
       M.SetDisplay(t, "bar")
