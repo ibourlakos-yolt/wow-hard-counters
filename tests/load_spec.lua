@@ -286,7 +286,7 @@ describe("load smoke test", function()
       local r = last("TR-1 movement")
       assert.are.equal("ok", r.status)
       assert.truthy(r.detail:find("taxi ticks/moved=1/1", 1, true))
-      assert.truthy(r.detail:find("spells[short:1953=1]", 1, true))
+      assert.truthy(r.detail:find("short:1953=1", 1, true))
       r = last("TR-1 area IDs")
       assert.are.equal("map=1429 n=2 ids=12,87 subzoneMatch=yes zoneMatch=yes subzoneEmpty=false", r.detail)
       r = last("TR-1 taxi nodes")
@@ -308,6 +308,118 @@ describe("load smoke test", function()
       for label, h in pairs(_G.HardCountersDiagDB.probes.funcs) do
         if label:find("^TR%-1") then scan(h[#h].detail) end
       end
+      assert.are.same({}, env.errors)
+    end)
+    for _, n in ipairs(names) do rawset(_G, n, saved[n]) end
+    if not ok then error(err, 0) end
+  end)
+
+  -- TR-5: across loading screens (teleports with their spell, continent numbers), boat ticks aren't blinks, any jump
+  -- over 40 yards is long, area answers on zone changes, the flight master's nodes, the Exploration category
+  it("probes travel, second round: gaps, carried, contexts, area answers, taxi map, exploration", function()
+    local names = { "UnitPosition", "UnitOnTaxi", "GetUnitSpeed", "IsMounted", "IsSwimming", "GetInstanceInfo", "C_Map",
+      "C_MapExplorationInfo", "GetSubZoneText", "GetTaxiMapID", "C_TaxiMap", "NumTaxiNodes", "GetCategoryList",
+      "GetCategoryInfo", "GetCategoryNumAchievements", "GetAchievementInfo", "GetAchievementNumCriteria",
+      "GetAchievementCriteriaInfo" }
+    local saved = {}
+    for _, n in ipairs(names) do saved[n] = rawget(_G, n) end
+    local ok, err = pcall(UI.with, function(ctx)
+      local env, D = ctx.env, ctx.diag
+      local pos = { 1000, 1000, 0, 0 }
+      local speed, inst = 7, 0
+      rawset(_G, "UnitPosition", function()
+        if pos[1] == nil then return nil, nil, nil, 34 end
+        return pos[1], pos[2], pos[3], pos[4]
+      end)
+      rawset(_G, "UnitOnTaxi", function() return false end)
+      rawset(_G, "GetUnitSpeed", function() return speed, 7, 7, 4.7 end)
+      rawset(_G, "IsMounted", function() return false end)
+      rawset(_G, "IsSwimming", function() return false end)
+      rawset(_G, "GetInstanceInfo", function() return "World", "none", 0, "", 0, 0, false, inst end)
+      local function step(dx, dt)
+        env.t = env.t + (dt or 0.25)
+        if pos[1] then pos[1] = pos[1] + (dx or 0) end
+        D.TravelTick()
+      end
+      local trv = _G.HardCountersDiagDB.probes.travel
+      assert.are.equal(5, trv.v)
+      -- HardCountersDiagDB outlives a boot within one test run (the TR-1 test's counts are in it): wipe in place,
+      -- the sampler holds this same table
+      for k in pairs(trv) do trv[k] = nil end
+      trv.v, trv.flags, trv.jumpSpells, trv.jumpCtx, trv.mapIds, trv.areaAnswers = 5, {}, {}, {}, {}, {}
+      step(0); step(1.75)
+      D.TravelCast("player", "guid", 8690)                 -- a hearth: the cast ends, then the loading screen
+      env.t = env.t + 1
+      local x = pos[1]; pos[1] = nil; step(0); step(0)     -- two nil reads
+      pos[1] = x + 500; step(0)                            -- same continent, 500 yards on
+      assert.are.equal(1, trv.jump_gap)
+      assert.are.equal(1, trv.jumpSpells["gap:8690"])
+      assert.are.equal(500, trv.gapYdMax)
+      assert.are.equal(1, trv.jumpCtx["gap:foot"])
+      env.t = env.t + 10
+      pos[1] = nil; step(0); pos[1] = 50; pos[4] = 1; inst = 1; step(0)   -- a boat to the other continent
+      assert.are.equal(1, trv.mapChangeAcrossGap)
+      assert.are.equal(1, trv.mapIds["pos4=1 instance=1"])
+      speed = 0; step(9); speed = 7                        -- a boat tick past 8 yards: not a blink
+      assert.are.equal(1, trv.jump_shortCarried)
+      assert.is_nil(trv.jump_short)
+      step(300, 1.0)                                       -- 300 yards over a 1 s gap: long, not a speed
+      assert.are.equal(1, trv.jump_long)
+      assert.is_true((trv.vmaxOther or 0) < 100)
+      -- area answers on zone changes
+      rawset(_G, "C_Map", {
+        GetBestMapForUnit = function() return 1429 end,
+        GetPlayerMapPosition = function() return { x = 0.4, y = 0.6 } end,
+        GetAreaInfo = function(id) return id == 87 and "Goldshire" or "Elwynn Forest" end,
+        GetMapInfo = function() return { mapType = 3, parentMapID = 13 } end,
+      })
+      local ids = { 87 }
+      rawset(_G, "C_MapExplorationInfo", { GetExploredAreaIDsAtPosition = function() return ids end })
+      local subText = "Goldshire"
+      rawset(_G, "GetSubZoneText", function() return subText end)
+      D.TravelArea()
+      ids, subText = nil, ""; D.TravelArea()
+      assert.are.equal(1, trv.areaAnswers["match:named"])
+      assert.are.equal(1, trv.areaAnswers["nil:unnamed"])
+      ids, subText = { 87 }, "Goldshire"
+      -- the flight master's map
+      rawset(_G, "GetTaxiMapID", function() return 1414 end)
+      rawset(_G, "C_TaxiMap", { GetAllTaxiNodes = function(m)
+        assert.are.equal(1414, m)
+        return { { state = 0 }, { state = 1 }, { state = 1 }, { state = 2 } }
+      end })
+      rawset(_G, "NumTaxiNodes", function() return 4 end)
+      D.TravelTaxiMap()
+      assert.are.same({ opens = 1, map = 1414, taxiMapID = true, n = 4, current = 1, reachable = 2, unreachable = 1,
+        legacy = 4 }, trv.taxiMap)
+      -- the Exploration category
+      rawset(_G, "GetCategoryList", function() return { 92, 97, 14777 } end)
+      rawset(_G, "GetCategoryInfo", function(id)
+        if id == 97 then return "Exploration", -1 elseif id == 14777 then return "Eastern Kingdoms", 97 end
+        return "General", -1
+      end)
+      rawset(_G, "GetCategoryNumAchievements", function(id) return id == 14777 and 2 or 0 end)
+      rawset(_G, "GetAchievementInfo", function(_, i) return i == 1 and 776 or 777 end)
+      rawset(_G, "GetAchievementNumCriteria", function(id) return id == 776 and 2 or 0 end)
+      rawset(_G, "GetAchievementCriteriaInfo", function(_, j)
+        return j == 2 and "Goldshire" or "Northshire", 43, true, 0, 1, "", 0, j == 2 and 87 or 9
+      end)
+      ctx.diag.RunProbes()
+      local r = _G.HardCountersDiagDB.probes.funcs["TR-5 exploration"]
+      r = r[#r]
+      assert.are.equal("ok", r.status)
+      assert.are.equal("root=97 achievements=2 Exploration=0 Eastern Kingdoms=2 | area=87 (match) assetMatch=776"
+        .. " nameMatch=776", r.detail)
+      r = _G.HardCountersDiagDB.probes.funcs["TR-1 movement"]
+      assert.truthy(r[#r].detail:find("TR-5: gap jumps=1", 1, true))
+      -- privacy: no name kept
+      local function scan(v)
+        if type(v) == "string" then
+          assert.is_nil(v:find("Goldshire", 1, true)); assert.is_nil(v:find("Northshire", 1, true))
+        elseif type(v) == "table" then for k, y in pairs(v) do scan(k); scan(y) end end
+      end
+      scan(trv)
+      scan(_G.HardCountersDiagDB.probes.funcs["TR-5 exploration"])
       assert.are.same({}, env.errors)
     end)
     for _, n in ipairs(names) do rawset(_G, n, saved[n]) end
