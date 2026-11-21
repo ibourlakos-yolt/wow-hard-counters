@@ -48,6 +48,11 @@ describe("toolchain", function()
       assert.are.equal("HardCounters", F.tocFields(toc).Group)
     end)
 
+    -- Without ## IconTexture the AddOn list shows a red question mark; every shipped addon uses the main icon.
+    it(toc .. ": shows the Hard Counters icon in the AddOn list (## IconTexture)", function()
+      assert.are.equal("Interface\\AddOns\\HardCounters\\Media\\Icon", F.tocFields(toc).IconTexture)
+    end)
+
     if toc ~= ADDONS[1] then
       it(toc .. ": needs Hard Counters (## Dependencies)", function()
         assert.are.equal("HardCounters", F.tocFields(toc).Dependencies)

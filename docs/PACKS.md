@@ -22,6 +22,9 @@ Packs are **collections of counters** built **only on Hard Counters' public API*
   - `## Group: HardCounters` (optional) nests the pack under Hard Counters in the game's AddOn list. The client
     often guesses the group from the folder name and dependencies; an explicit value must match the folder name
     `HardCounters` exactly, or the pack drops back to the top level. The packs in this repo set it.
+  - `## IconTexture:` (optional) the icon beside the pack in the AddOn list; without one the client shows a red
+    question mark. The packs in this repo use Hard Counters' own, `Interface\AddOns\HardCounters\Media\Icon`;
+    a pack with its own icon ships it in its own folder.
   - `_Forever.toc` (or Interface 16001 in a plain TOC)
   - `## LoadOnDemand: 1` where possible. Hard Counters loads the packs the user has switched on.
 - **What a pack contains:**

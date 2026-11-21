@@ -7,6 +7,7 @@
 ## X-AI-Assisted: Claude (Anthropic), via Claude Code
 ## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters
 ## Group: HardCounters
+## IconTexture: Interface\AddOns\HardCounters\Media\Icon
 ## Dependencies: HardCounters
 ## X-Category: Data Broker
 
