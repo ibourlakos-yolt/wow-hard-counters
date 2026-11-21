@@ -206,6 +206,114 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
+  -- TR-1 (Traveler, proposed): the movement sampler keeps counts, never coordinates; the area, achievement and taxi
+  -- probes record counts, IDs and types, never names
+  it("probes travel: position on taxi, blinks, carried, map changes, combat; area IDs, achievements, taxi nodes", function()
+    local names = { "UnitPosition", "UnitOnTaxi", "IsFalling", "GetUnitSpeed", "IsMounted", "IsSwimming", "C_Map",
+      "C_MapExplorationInfo", "C_TaxiMap", "GetSubZoneText", "GetZoneText", "GetAchievementNumCriteria",
+      "GetAchievementCriteriaInfo", "GetAchievementInfo" }
+    local saved = {}
+    for _, n in ipairs(names) do saved[n] = rawget(_G, n) end
+    local ok, err = pcall(UI.with, function(ctx)
+      local env, D = ctx.env, ctx.diag
+      local BASE = 4321.25                                  -- a coordinate that must never reach the saved file
+      local pos = { BASE, BASE, 0, 0 }
+      local taxi, speed, combat, secretPos = false, 7, false, false
+      rawset(_G, "UnitPosition", function()
+        if secretPos then return env:secretValue(), env:secretValue(), 0, 0 end
+        if pos[1] == nil then return nil, nil, nil, 34 end
+        return pos[1], pos[2], pos[3], pos[4]
+      end)
+      rawset(_G, "UnitOnTaxi", function() return taxi end)
+      rawset(_G, "IsFalling", function() return false end)
+      rawset(_G, "GetUnitSpeed", function() if combat then return env:secretValue() end return speed, 7, 7, 4.7 end)
+      rawset(_G, "IsMounted", function() if combat then return env:secretValue() end return false end)
+      rawset(_G, "IsSwimming", nil)
+      D.B.Wow.inCombat = function() return combat end
+      local function step(dx, dt)
+        env.t = env.t + (dt or 0.25)
+        if pos[1] then pos[1] = pos[1] + (dx or 0) end
+        D.TravelTick()
+      end
+      step(0)                                              -- the first read: a baseline
+      step(1.75); step(1.75); step(1.75)                   -- running, 7 yd/s
+      taxi = true; step(8); taxi = false                   -- a taxi tick that moves, 32 yd/s
+      D.TravelCast("player", "guid", 1953); step(20)       -- a blink right after a plain cast
+      speed = 0; step(2); speed = 7                        -- carried: moving at 8 yd/s with your own speed 0
+      env.t = env.t + 3; pos[4] = 1; step(0)               -- a continent change 3 s later
+      combat = true; step(1.75)
+      D.TravelCast("player", "guid", env:secretValue())
+      secretPos = true; step(0); secretPos = false
+      combat = false; pos[1] = nil; step(0)                -- inside an instance: no position
+      local trv = _G.HardCountersDiagDB.probes.travel
+      assert.are.equal(1, trv.taxiTicks)
+      assert.are.equal(1, trv.taxiMoved)
+      assert.are.equal(32, trv.vmaxTaxi)
+      assert.are.equal(1, trv.jump_short)
+      assert.are.equal(1, trv.jumpSpells["short:1953"])
+      assert.are.equal(1, trv.carriedTicks)
+      assert.are.equal(1, trv.mapChange)
+      assert.are.equal(1, trv.mapChangeAfterCarried)
+      assert.are.equal(1, trv.posPlainIn)
+      assert.are.equal(1, trv.posSecretIn)
+      assert.are.equal(1, trv.posNil)
+      assert.are.equal(1, trv.castPlainOut)
+      assert.are.equal(1, trv.castSecretIn)
+      assert.is_true(trv.zZero > 0)
+      assert.is_true(trv.flags.IsMounted.plainOut > 0)
+      assert.is_true(trv.flags.IsSwimming.missing > 0)
+      -- area IDs: numbers kept, names only compared
+      rawset(_G, "C_Map", {
+        GetBestMapForUnit = function() return 1429 end,
+        GetPlayerMapPosition = function() return { x = 0.4, y = 0.6 } end,
+        GetAreaInfo = function(id) return id == 87 and "Goldshire" or "Elwynn Forest" end,
+        GetMapInfo = function(m) return m == 1429 and { mapType = 3, parentMapID = 13 } or { mapType = 2 } end,
+      })
+      rawset(_G, "C_MapExplorationInfo", { GetExploredAreaIDsAtPosition = function() return { 12, 87 } end })
+      rawset(_G, "GetSubZoneText", function() return "Goldshire" end)
+      rawset(_G, "GetZoneText", function() return "Elwynn Forest" end)
+      rawset(_G, "C_TaxiMap", { GetTaxiNodesForMap = function(m)
+        if m == 1429 then return { { nodeID = 2, isUndiscovered = false }, { nodeID = 5, isUndiscovered = true } } end
+        return { { nodeID = 2 }, { nodeID = 5, isUndiscovered = true }, { nodeID = 9 } }
+      end })
+      rawset(_G, "GetAchievementNumCriteria", function(id) if id == 776 then return 3 end end)
+      rawset(_G, "GetAchievementCriteriaInfo", function(_, i) return "Goldshire", 43, i <= 2, 0, 1 end)
+      ctx.diag.RunProbes()
+      local function last(label)
+        local r = _G.HardCountersDiagDB.probes.funcs[label]
+        return r and r[#r]
+      end
+      local r = last("TR-1 movement")
+      assert.are.equal("ok", r.status)
+      assert.truthy(r.detail:find("taxi ticks/moved=1/1", 1, true))
+      assert.truthy(r.detail:find("spells[short:1953=1]", 1, true))
+      r = last("TR-1 area IDs")
+      assert.are.equal("map=1429 n=2 ids=12,87 subzoneMatch=yes zoneMatch=yes subzoneEmpty=false", r.detail)
+      r = last("TR-1 taxi nodes")
+      assert.are.equal("zone 1429:n=2 undiscovered=1 nodeID=number; continent 13:n=3 undiscovered=1 nodeID=number",
+        r.detail)
+      r = last("TR-1 exploration achievements")
+      assert.truthy(r.detail:find("776=n:3 done:2 type:43 shape:string,number,boolean,number,number", 1, true))
+      assert.truthy(r.detail:find("42=nil", 1, true))
+      -- privacy: no coordinate and no name anywhere in what the probes keep
+      local function scan(v)
+        if type(v) == "number" then assert.is_true(v < 4000, "a coordinate was kept: " .. v)
+        elseif type(v) == "string" then
+          assert.is_nil(v:find("4321", 1, true))
+          assert.is_nil(v:find("Goldshire", 1, true))
+          assert.is_nil(v:find("Elwynn", 1, true))
+        elseif type(v) == "table" then for k, x in pairs(v) do scan(k); scan(x) end end
+      end
+      scan(trv)
+      for label, h in pairs(_G.HardCountersDiagDB.probes.funcs) do
+        if label:find("^TR%-1") then scan(h[#h].detail) end
+      end
+      assert.are.same({}, env.errors)
+    end)
+    for _, n in ipairs(names) do rawset(_G, n, saved[n]) end
+    if not ok then error(err, 0) end
+  end)
+
   -- HC-42 (c): do Blizzard's Edit Mode callbacks reach an addon? Counted as they fire, saved at once
   it("probes Edit Mode: EventRegistry's Enter/Exit and the manager frame's show/hide, hooked late", function()
     local savedR, savedM = rawget(_G, "EventRegistry"), rawget(_G, "EditModeManagerFrame")

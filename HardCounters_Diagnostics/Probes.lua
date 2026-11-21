@@ -444,6 +444,262 @@ FUNCS[#FUNCS + 1] = { "HC-42 Edit Mode", function()
   return "ok", detail
 end }
 
+-- TR-1 (Traveler, a proposed pack; notes packs/Traveler/docs/DESIGN.md): what the client gives for travel. A sampler
+-- reads the position 4 times a second and keeps counts only, in HardCountersDiagDB.probes.travel, summed across
+-- loads: never a coordinate, never a name. It answers: does the position move on a taxi; are boats a ride or a
+-- loading screen (moving while your own speed is 0); is positionZ a height; which state flags are secret in
+-- combat; which spell IDs come right before a jump (blink, hearth); what a 0.25 s poll costs.
+local TR_TICK = 0.25
+local trv                                          -- P().travel once started
+local trLast = { ok = false, x = 0, y = 0, z = 0, m = 0, t = 0, carriedT = -1000 }
+local trCast = { id = nil, t = -1000 }             -- the latest plain spell ID the player cast
+local TR_FLAGS = { "IsMounted", "IsSwimming", "IsSubmerged", "IsFlying", "IsFalling", "UnitOnTaxi", "UnitInVehicle",
+  "UnitIsGhost", "GetPlayerFacing" }
+local TR_UNIT_ARG = { UnitOnTaxi = true, UnitInVehicle = true, UnitIsGhost = true }
+local sqrt = math.sqrt
+
+local function trCount(key, n) trv[key] = (trv[key] or 0) + (n or 1) end
+
+-- One flag: count plain / secret / missing, split by combat. Returns the value when plain.
+local function trFlag(name, inCombat)
+  local fn = _G[name]
+  local f = trv.flags[name]
+  if not f then f = {}; trv.flags[name] = f end
+  if type(fn) ~= "function" then f.missing = (f.missing or 0) + 1; return nil end
+  local ok, v
+  if TR_UNIT_ARG[name] then ok, v = pcall(fn, "player") else ok, v = pcall(fn) end
+  local key
+  if not ok then key = "error"
+  elseif W.isSecret(v) then key = inCombat and "secretIn" or "secretOut"
+  else key = inCombat and "plainIn" or "plainOut" end
+  f[key] = (f[key] or 0) + 1
+  if ok and not W.isSecret(v) then return v end
+  return nil
+end
+
+local function trJump(kind)
+  trCount("jump_" .. kind)
+  if trCast.id and W.time() - trCast.t <= 2 then
+    local key = kind .. ":" .. tostring(trCast.id)
+    trv.jumpSpells[key] = (trv.jumpSpells[key] or 0) + 1
+  end
+end
+
+local trTicks = 0
+local function travelTick()
+  if not trv then return end
+  local t0 = W.ms()
+  trTicks = trTicks + 1
+  local now = W.time()
+  local okC, inCombat = pcall(W.inCombat)
+  inCombat = okC and inCombat or false
+  -- the flags once a second (every 4th tick); taxi and falling every tick (they decide this tick's numbers)
+  if trTicks % 4 == 0 then
+    for i = 1, #TR_FLAGS do trFlag(TR_FLAGS[i], inCombat) end
+  end
+  local fnTaxi, fnFall = _G.UnitOnTaxi, _G.IsFalling
+  local okT, taxi = false, nil
+  if type(fnTaxi) == "function" then okT, taxi = pcall(fnTaxi, "player") end
+  taxi = okT and not W.isSecret(taxi) and taxi or false
+  local okF, falling = false, nil
+  if type(fnFall) == "function" then okF, falling = pcall(fnFall) end
+  falling = okF and not W.isSecret(falling) and falling or false
+  local fnPos = _G.UnitPosition
+  if type(fnPos) ~= "function" then trCount("posMissing"); trLast.ok = false; return end
+  local okP, x, y, z, m = pcall(fnPos, "player")
+  if not okP then trCount("posError"); trLast.ok = false; return end
+  if W.isSecret(x) or W.isSecret(y) or W.isSecret(m) then
+    trCount(inCombat and "posSecretIn" or "posSecretOut"); trLast.ok = false; return
+  end
+  if type(x) ~= "number" or type(y) ~= "number" then trCount("posNil"); trLast.ok = false; return end
+  trCount(inCombat and "posPlainIn" or "posPlainOut")
+  if type(z) == "number" and not W.isSecret(z) then
+    if z == 0 then trCount("zZero") else trCount("zNonZero") end
+    if falling and trLast.ok and z ~= trLast.z then trCount("zMovesFalling") end
+  end
+  if trLast.ok then
+    local dt = now - trLast.t
+    if m ~= trLast.m then
+      trCount("mapChange")
+      if now - trLast.carriedT <= 10 then trCount("mapChangeAfterCarried") end
+      trJump("map")
+    elseif dt > 0 then
+      local dx, dy = x - trLast.x, y - trLast.y
+      local d = sqrt(dx * dx + dy * dy)
+      local v = d / dt
+      if taxi then
+        trCount("taxiTicks")
+        if d > 0.5 then trCount("taxiMoved") end
+        if d <= 200 and v > (trv.vmaxTaxi or 0) then trv.vmaxTaxi = v end
+      end
+      if dt <= 0.6 and d >= 8 and d <= 40 and v > 20 and not taxi then trJump("short")
+      elseif dt <= 0.6 and d > 40 and not taxi then trJump("long")
+      elseif not taxi and d > 0 and v > (trv.vmaxOther or 0) then trv.vmaxOther = v end
+      -- carried: the position moves while your own speed is 0 (out of combat: speed is secret in combat)
+      if not taxi and v > 1 and d <= 40 then
+        local fnSpeed = _G.GetUnitSpeed
+        if type(fnSpeed) == "function" then
+          local okS, cur = pcall(fnSpeed, "player")
+          if okS and type(cur) == "number" and not W.isSecret(cur) and cur == 0 then
+            trCount("carriedTicks"); trLast.carriedT = now
+          end
+        end
+      end
+    end
+  end
+  trLast.ok, trLast.x, trLast.y, trLast.z, trLast.m, trLast.t = true, x, y, z, m, now
+  trCount("ticks")
+  trv.ms = (trv.ms or 0) + (W.ms() - t0)
+end
+
+-- UNIT_SPELLCAST_SUCCEEDED (player): spell ID plain or secret, in and out of combat; a plain one is remembered for 2 s
+local function travelCast(unit, _, spellID)
+  if not trv or unit ~= "player" then return end
+  local okC, inCombat = pcall(W.inCombat)
+  inCombat = okC and inCombat or false
+  if W.isSecret(spellID) then trCount(inCombat and "castSecretIn" or "castSecretOut"); return end
+  trCount(inCombat and "castPlainIn" or "castPlainOut")
+  if type(spellID) == "number" then trCast.id, trCast.t = spellID, W.time() end
+end
+ns.TravelTick, ns.TravelCast = travelTick, travelCast   -- for the tests
+
+local function startTravel(p)
+  p.travel = type(p.travel) == "table" and p.travel or {}
+  trv = p.travel
+  trv.flags = type(trv.flags) == "table" and trv.flags or {}
+  trv.jumpSpells = type(trv.jumpSpells) == "table" and trv.jumpSpells or {}
+  trLast.ok = false
+  if W.newTicker then W.newTicker(TR_TICK, function() local ok = pcall(travelTick); if not ok then trCount("errors") end end) end
+end
+
+FUNCS[#FUNCS + 1] = { "TR-1 movement", function()
+  if not trv then return "missing", "sampler not started" end
+  local function n(k) return trv[k] or 0 end
+  local flags = {}
+  for _, name in ipairs(TR_FLAGS) do
+    local f = trv.flags[name] or {}
+    flags[#flags + 1] = format("%s=%d/%d/%d/%d%s", name, f.plainOut or 0, f.secretOut or 0, f.plainIn or 0,
+      f.secretIn or 0, (f.missing or f.error) and "/x" or "")
+  end
+  local spells = {}
+  for k, v in pairs(trv.jumpSpells) do spells[#spells + 1] = k .. "=" .. v end
+  table.sort(spells)
+  return "ok", format("ticks=%d avgms=%.3f pos plain out/in=%d/%d secret out/in=%d/%d nil=%d z zero/other/falling=%d/%d/%d"
+    .. " taxi ticks/moved=%d/%d vmax taxi/other=%.1f/%.1f carried=%d mapChange=%d afterCarried=%d"
+    .. " jumps short/long/map=%d/%d/%d cast plain out/in=%d/%d secret out/in=%d/%d spells[%s]"
+    .. " flags(plainOut/secretOut/plainIn/secretIn) %s",
+    n("ticks"), n("ticks") > 0 and n("ms") / n("ticks") or 0, n("posPlainOut"), n("posPlainIn"), n("posSecretOut"),
+    n("posSecretIn"), n("posNil"), n("zZero"), n("zNonZero"), n("zMovesFalling"), n("taxiTicks"), n("taxiMoved"),
+    n("vmaxTaxi"), n("vmaxOther"), n("carriedTicks"), n("mapChange"), n("mapChangeAfterCarried"), n("jump_short"),
+    n("jump_long"), n("jump_map"), n("castPlainOut"), n("castPlainIn"), n("castSecretOut"), n("castSecretIn"),
+    table.concat(spells, " "), table.concat(flags, " ")):sub(1, 1200)
+end }
+
+-- TR-1 (e): subzones as numbers. The area IDs at the player's map position, and whether one of them is named like
+-- the subzone and the zone the game shows (compared here, never stored).
+FUNCS[#FUNCS + 1] = { "TR-1 area IDs", function()
+  local best, pos = G("C_Map.GetBestMapForUnit"), G("C_Map.GetPlayerMapPosition")
+  local at, info = G("C_MapExplorationInfo.GetExploredAreaIDsAtPosition"), G("C_Map.GetAreaInfo")
+  if type(at) ~= "function" then return "missing", "C_MapExplorationInfo.GetExploredAreaIDsAtPosition" end
+  if type(best) ~= "function" or type(pos) ~= "function" then return "missing", "C_Map position calls" end
+  local okM, map = pcall(best, "player")
+  if not okM or type(map) ~= "number" then return "ok", "no map here (instance?)" end
+  local okP, p = pcall(pos, map, "player")
+  if not okP or p == nil then return "ok", "no map position" end
+  local okA, ids = pcall(at, map, p)
+  if not okA then return "error", tostring(ids):sub(1, 120) end
+  if type(ids) ~= "table" then return "ok", "ids=" .. describe(ids) end
+  local sub, zone = G("GetSubZoneText"), G("GetZoneText")
+  local okS, subText = false, nil
+  if type(sub) == "function" then okS, subText = pcall(sub) end
+  local okZ, zoneText = false, nil
+  if type(zone) == "function" then okZ, zoneText = pcall(zone) end
+  local list, subMatch, zoneMatch = {}, "no", "no"
+  for i, id in ipairs(ids) do
+    if i <= 8 then list[#list + 1] = describe(id) == "number" and tostring(id) or describe(id) end
+    if type(info) == "function" and type(id) == "number" then
+      local okN, name = pcall(info, id)
+      if okN and type(name) == "string" and not W.isSecret(name) then
+        if okS and name == subText then subMatch = "yes" end
+        if okZ and name == zoneText then zoneMatch = "yes" end
+      end
+    end
+  end
+  return "ok", format("map=%d n=%d ids=%s subzoneMatch=%s zoneMatch=%s subzoneEmpty=%s", map, #ids,
+    table.concat(list, ","), subMatch, zoneMatch, tostring(okS and subText == ""))
+end }
+
+-- TR-1 (f): "x of y subzones explored" needs a total. Exploration achievements list a zone's subzones as criteria:
+-- are they readable here? Counts and types only (criteria are subzone names). 776 Explore Elwynn Forest, 42 Explore
+-- Eastern Kingdoms, 43 Explore Kalimdor (Retail and Classic IDs; Forever's may differ).
+FUNCS[#FUNCS + 1] = { "TR-1 exploration achievements", function()
+  local infoA, numC, crit = G("GetAchievementInfo"), G("GetAchievementNumCriteria"), G("GetAchievementCriteriaInfo")
+  if type(numC) ~= "function" or type(crit) ~= "function" then
+    return "missing", format("GetAchievementInfo=%s GetAchievementNumCriteria=%s GetAchievementCriteriaInfo=%s",
+      describe(infoA), describe(numC), describe(crit))
+  end
+  local parts = {}
+  for _, id in ipairs({ 776, 42, 43 }) do
+    local okN, n = pcall(numC, id)
+    if not okN or type(n) ~= "number" or W.isSecret(n) then
+      parts[#parts + 1] = format("%d=%s", id, okN and describe(n) or "error")
+    else
+      local done, shape, ctype = 0, nil, nil
+      for i = 1, math.min(n, 60) do
+        local r = { pcall(crit, id, i) }
+        if r[1] then
+          if r[4] == true then done = done + 1 end
+          if not shape then
+            local t = {}
+            for k = 2, math.min(#r, 12) do t[#t + 1] = describe(r[k]) end
+            shape = table.concat(t, ",")
+            ctype = type(r[3]) == "number" and not W.isSecret(r[3]) and tostring(r[3]) or describe(r[3])
+          end
+        end
+      end
+      parts[#parts + 1] = format("%d=n:%d done:%d type:%s shape:%s", id, n, done, tostring(ctype), tostring(shape))
+    end
+  end
+  return "ok", table.concat(parts, " | "):sub(1, 600)
+end }
+
+-- TR-1 (g): flight points known, for the zone and its continent (C_TaxiMap.GetTaxiNodesForMap: all nodes of a map,
+-- each with isUndiscovered). Counts and the node ID's type only.
+local function continentOf(map)
+  local getInfo = G("C_Map.GetMapInfo")
+  local CONTINENT = G("Enum.UIMapType.Continent") or 2
+  for _ = 1, 8 do
+    if type(getInfo) ~= "function" or type(map) ~= "number" then return nil end
+    local ok, mi = pcall(getInfo, map)
+    if not ok or type(mi) ~= "table" then return nil end
+    if mi.mapType == CONTINENT then return map end
+    map = mi.parentMapID
+  end
+  return nil
+end
+FUNCS[#FUNCS + 1] = { "TR-1 taxi nodes", function()
+  local nodes, best = G("C_TaxiMap.GetTaxiNodesForMap"), G("C_Map.GetBestMapForUnit")
+  if type(nodes) ~= "function" then return "missing", "C_TaxiMap.GetTaxiNodesForMap" end
+  if type(best) ~= "function" then return "missing", "C_Map.GetBestMapForUnit" end
+  local okM, map = pcall(best, "player")
+  if not okM or type(map) ~= "number" then return "ok", "no map here (instance?)" end
+  local function count(m)
+    if not m then return "none" end
+    local ok, list = pcall(nodes, m)
+    if not ok then return "error" end
+    if type(list) ~= "table" then return describe(list) end
+    local undiscovered, idType = 0, "none"
+    for i, node in ipairs(list) do
+      if type(node) == "table" then
+        if node.isUndiscovered == true then undiscovered = undiscovered + 1 end
+        if i == 1 then idType = describe(node.nodeID) end
+      end
+    end
+    return format("%d:n=%d undiscovered=%d nodeID=%s", m, #list, undiscovered, idType)
+  end
+  return "ok", format("zone %s; continent %s", count(map), count(continentOf(map)))
+end }
+
 -- Events: count fires per instance type; first fires record argument types and secretness.
 local EVENTS = {
   "CHAT_MSG_MONEY", "CHAT_MSG_LOOT", "CHAT_MSG_COMBAT_XP_GAIN", "CHAT_MSG_COMBAT_FACTION_CHANGE", "CHAT_MSG_SYSTEM",
@@ -459,6 +715,9 @@ local EVENTS = {
   -- HC-30 / HC-34: Alt + right-click on a tile, and dropping an item on one
   "MODIFIER_STATE_CHANGED", "CURSOR_CHANGED",
   "UPDATE_INVENTORY_DURABILITY",
+  -- TR-1 (Traveler): discoveries, summons, subzone changes, taxi start and end (control lost and gained)
+  "MAP_EXPLORATION_UPDATED", "TAXI_NODE_STATUS_CHANGED", "CONFIRM_SUMMON", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
+  "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED",
 }
 -- CS-1: unit stat events, for the player only (RegisterUnitEvent where the client has it; UNIT_AURA fires for every
 -- unit around you otherwise)
@@ -619,6 +878,8 @@ function ns.StartProbes()
   editMode.reg, editMode.hook = nil, nil
   local okE, errE = pcall(listenEditMode)
   if not okE then B.Log("warn", "Diag", "Edit Mode probe failed: %s", tostring(errE)) end
+  local okT, errT = pcall(startTravel, p)
+  if not okT then B.Log("warn", "Diag", "travel sampler failed to start: %s", tostring(errT)) end
   local f = CreateFrame("Frame")
   for _, ev in ipairs(EVENTS) do
     local ok
@@ -631,6 +892,7 @@ function ns.StartProbes()
     local ok, err = pcall(recordEvent, event, ...)
     if not ok then B.Log("warn", "Diag", "probe %s failed: %s", event, tostring(err)) end
     if event == "LOADING_SCREEN_ENABLED" or event == "LOADING_SCREEN_DISABLED" then onLoading(event) end
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then pcall(travelCast, ...) end
     if event == "PLAYER_ENTERING_WORLD" then pcall(hookEditMode) end   -- the manager frame may load late
     -- CS-1: are stat values secret in combat? Run the probes once per login/reload a moment into the first fight.
     if event == "PLAYER_REGEN_DISABLED" and not combatRan then
