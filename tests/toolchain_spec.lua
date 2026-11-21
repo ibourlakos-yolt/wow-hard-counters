@@ -9,6 +9,8 @@ local ADDONS = {
   "packs/CharacterStats/HardCounters_CharacterStats/HardCounters_CharacterStats.toc",
 }
 local WEBSITE = "https://github.com/ibourlakos-yolt/wow-hard-counters"
+-- The one CurseForge project the zip is uploaded to (all four folders ship in it).
+local CURSE_PROJECT_ID = "1820964"
 -- Lua files that carry the version as a string (tools\bump.ps1 writes them all).
 local VERSION_SOURCES = {
   { "HardCounters/Core/Init.lua", 'HC%.VERSION = "([^"]+)"' },
@@ -40,6 +42,10 @@ describe("toolchain", function()
 
     it(toc .. ": links the public repo", function()
       assert.are.equal(WEBSITE, F.tocFields(toc)["X-Website"])
+    end)
+
+    it(toc .. ": names the CurseForge project (## X-Curse-Project-ID)", function()
+      assert.are.equal(CURSE_PROJECT_ID, F.tocFields(toc)["X-Curse-Project-ID"])
     end)
 
     -- The client's AddOn list (Blizzard_AddOnList, forever branch, 1.60.1) nests an addon under the one whose
