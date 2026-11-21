@@ -12,7 +12,7 @@ if not HC or (HC.API_VERSION or 0) < 1 or not (HC.Supports and HC:Supports("live
 
 local type, select, ipairs = type, select, ipairs
 
-ns.VERSION = "0.1.0-dev"
+ns.VERSION = "0.1.0-alpha1"
 ns.pack = HC:RegisterPack("CharacterStats", { namespace = "hcstats", version = ns.VERSION, title = "Character Stats" })
 
 ---------------------------------------------------------------------------
