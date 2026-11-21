@@ -10,6 +10,8 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 ### Fixes
 - Percent tiles keep one decimal in combat ("5.2%"), as out of combat; they showed two ("5.20%") and the text
   jumped at every fight's start and end.
+- The Hard Counters window's tabs show their whole name ("Character Stats", "Diagnostics"); longer names were cut
+  short with "...".
 
 ## 0.1.0-alpha1 (2026-11-21)
 

@@ -312,12 +312,26 @@ local function layoutMain()
 end
 
 local SELECT, DESELECT, RESIZE = "PanelTemplates_SelectTab", "PanelTemplates_DeselectTab", "PanelTemplates_TabResize"
+local TAB_ROOM = 4
+
+-- Blizzard's PanelTemplates_TabResize (forever branch, 1.60.1) sets the label's width to exactly its
+-- GetStringWidth(): in game a label wider than the side art's minimum lost its last letters to "..." (HC-59:
+-- "Character S...", "Diagnost..."). Keep its sizing, add a little room, then leave the label unconstrained (width 0,
+-- the template's own default). The tab's OnShow and OnEvent (DISPLAY_SIZE_CHANGED) resize it again, so it is hooked.
+local function sizeTab(b)
+  pcall(G(RESIZE), b, TAB_ROOM)
+  if type(b.Text) == "table" then b.Text:SetWidth(0) end
+end
 
 local function newTab(i)
   local b
   if type(G(SELECT)) == "function" then
     local ok, t = pcall(CreateFrame, "Button", MAIN_NAME .. "Tab" .. i, main, "PanelTabButtonTemplate")
-    if ok and widget(t) then b, t.blizzard = t, true end
+    if ok and widget(t) then
+      b, t.blizzard = t, true
+      b:HookScript("OnShow", sizeTab)
+      b:HookScript("OnEvent", sizeTab)
+    end
   end
   if not b then
     b = Wd.Button(main, "", 80, nil)
@@ -345,7 +359,7 @@ local function refreshTabs()
     if prev then b:SetPoint("LEFT", prev, "RIGHT", b.blizzard and 3 or 2, 0)
     else b:SetPoint("TOPLEFT", main, "BOTTOMLEFT", b.blizzard and 11 or 8, b.blizzard and 2 or 0) end
     if b.blizzard then
-      pcall(G(RESIZE), b, 0)
+      sizeTab(b)
       pcall(G(id == c.selected and SELECT or DESELECT), b)
     else
       local fs = b:GetFontString()

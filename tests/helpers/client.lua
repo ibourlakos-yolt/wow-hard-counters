@@ -86,6 +86,10 @@ function C.install(env, opts)
       f.PortraitContainer = { portrait = C.frame(client) }
       f.TitleContainer = { TitleText = C.frame(client) }
     end
+    if templates and template == "PanelTabButtonTemplate" then
+      f.Text, f.Left, f.Right = C.frame(client), C.frame(client), C.frame(client)
+      f.Left._w, f.Right._w = 20, 20                    -- the side art, the tab's minimum width
+    end
     if name then G[name] = f end
     return f
   end

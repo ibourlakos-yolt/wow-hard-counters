@@ -176,6 +176,44 @@ describe("windows", function()
     end)
   end)
 
+  -- HC-59: Blizzard's resize sets the label's width to exactly its string width; in game a label wider than the side
+  -- art's minimum then lost its last letters ("Character S...", "Diagnost..."). Labels are left unconstrained.
+  it("never pins a tab's label to its exact width, including when the tab shows again (HC-59)", function()
+    UI.with(function(ctx)
+      local HC, Win = ctx.HC, ctx.hc.Windows
+      -- PanelTemplates_TabResize as on the forever branch (1.60.1), without its absolute and maximum sizes
+      _G.PanelTemplates_TabResize = function(tab, padding, _, minWidth)
+        tab.Text:SetWidth(0)
+        local textWidth = tab.Text:GetStringWidth()
+        local width = textWidth + 20 + (padding or 0)
+        minWidth = minWidth or (tab.Left:GetWidth() + tab.Right:GetWidth())
+        if width < minWidth then width = minWidth; textWidth = width - 20 - (padding or 0) end
+        tab.Text:SetWidth(textWidth)
+        tab:SetWidth(width)
+      end
+      HC:RegisterWindow("t:long", counting({ title = "A rather long tab title" }))
+      Win.ShowMain(true)
+      local main = Win.Host("_main")
+      local long
+      for _, tab in ipairs(main.tabs) do
+        tab.Text.GetStringWidth = function() return 6 * #(tab:GetText() or "") end
+        if tab:GetText() == "A rather long tab title" then long = tab end
+      end
+      HC:ShowWindow("t:long", true)                      -- redraws the tabs, now with the measuring label
+      assert.truthy(long)
+      assert.are.equal(6 * 23 + 20 + 4, long:GetWidth())  -- Blizzard's width, plus a little room
+      for _, tab in ipairs(main.tabs) do
+        if tab:IsShown() then assert.are.equal(0, tab.Text:GetWidth(), tab:GetText()) end
+      end
+      long:Hide()
+      long:Show()                                        -- the template's OnShow resizes it again
+      assert.are.equal(0, long.Text:GetWidth())
+      long:GetScript("OnEvent")(long, "DISPLAY_SIZE_CHANGED")
+      assert.are.equal(0, long.Text:GetWidth())
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+
   it("falls back to its own plain frame on a client without those templates", function()
     UI.with(function(ctx)
       local HC, Win = ctx.HC, ctx.hc.Windows
