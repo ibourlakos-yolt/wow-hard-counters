@@ -11,6 +11,8 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 - Per-hour numbers, board clocks and gold counts no longer stop when the saved history can't be written: they froze
   for the rest of the session while XP kept counting (gold per hour and time to level read "-"). History missed in
   such a session is still lost.
+- The cause of that: storage upkeep failed once any saved total passed about 2.1 billion (gold in copper gets there),
+  which switched history off for the session at every login. Fixed (LibGranaryDB r5).
 - Percent tiles keep one decimal in combat ("5.2%"), as out of combat; they showed two ("5.20%") and the text
   jumped at every fight's start and end.
 - The Hard Counters window's tabs show their whole name ("Character Stats", "Diagnostics"); longer names were cut

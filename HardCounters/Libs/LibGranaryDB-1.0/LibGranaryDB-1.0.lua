@@ -4,7 +4,7 @@
 -- and Core/Init.lua wires everything up. If an equal or newer copy is already loaded, every file
 -- of this copy returns immediately.
 
-local MAJOR, MINOR = "LibGranaryDB-1.0", 4
+local MAJOR, MINOR = "LibGranaryDB-1.0", 5
 local lib, oldMinor = LibStub:NewLibrary(MAJOR, MINOR)
 if not lib then return end
 

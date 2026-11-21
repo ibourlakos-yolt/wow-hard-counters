@@ -11,9 +11,13 @@ local format, concat, floor, sort, byte, gsub, sub = string.format, table.concat
 local P = {}
 M.Pack = P
 
---- Shortest text that reads back as exactly the same double.
+--- Shortest text that reads back as exactly the same double. Integers go through "%.0f", never "%d": the game's
+--- string.format raises "integer overflow attempting to store" for %d past 32 bits (r5; a 4.9e9 sum broke packing).
 local function fmtNum(v)
-  if v == floor(v) and v > -9007199254740992 and v < 9007199254740992 then return format("%d", v) end
+  if v == floor(v) and v > -9007199254740992 and v < 9007199254740992 then
+    if v == 0 then return "0" end               -- not "-0"
+    return format("%.0f", v)
+  end
   local s = format("%.15g", v)
   if tonumber(s) == v then return s end
   s = format("%.16g", v)
