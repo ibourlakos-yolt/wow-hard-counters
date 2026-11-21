@@ -61,6 +61,34 @@ describe("odometers", function()
     assert.are.equal(7000, (l.HC:Reading("t:owned", "now")))    -- a stock's last value is known before it is observed again
   end)
 
+  -- 2026-11-21: LibGranaryDB's maintenance failed at load and switched storage to read-only; every counter with
+  -- history then lost its live count too (active time, gold), so per-hour read "-" while XP (history off) counted
+  it("keep counting live when storage refuses writes (read-only), and say so once", function()
+    local env = boot()
+    local HC, ns = env.HC, env.ns
+    HC:SetTrackerHistory("t:on", "lifetime")
+    assert.are.equal("lifetime", HC:CounterState("t:gold").history)
+    HC:Emit("t:gold", 100, "loot")
+    ns.db._ro, ns.db._roReason = true, "test: maintenance failed"   -- what LibGranaryDB does on an internal error
+    local active0 = ns.Win.Active(ns.Session())
+    assert.is_true(HC:Emit("t:gold", 50, "vendor"))
+    assert.is_true(HC:EmitCtx("t:gold", 5, { zone = 1 }, "loot"))
+    assert.is_true(HC:Observe("t:owned", 7000))
+    env:advance(120)                                            -- two flushes of active time
+    assert.are.equal(155, ns.odo["t:gold"].s)
+    assert.are.equal(155, (HC:Reading("t:gold", "session")))
+    assert.are.equal(7000, (HC:Reading("t:owned", "now")))
+    assert.is_true(ns.Win.Active(ns.Session()) - active0 >= 119)
+    assert.is_true(ns.health.session.storageRefused >= 3)
+    local warned = 0
+    for _, w in ipairs(ns.RecentWarnings()) do
+      if w.msg:find("storage refused", 1, true) then warned = warned + 1 end
+    end
+    assert.are.equal(1, warned)
+    assert.is_false(HC:Emit("t:gold", 0 / 0, "loot"))           -- an invalid value is still refused
+    assert.are.equal(155, ns.odo["t:gold"].s)
+  end)
+
   it("are per character: an alt has its own, and the main's are untouched", function()
     local env = boot()
     env.HC:Emit("t:gold", 100, "loot")

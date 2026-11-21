@@ -376,20 +376,31 @@ local function liveOk(v)
   return type(v) == "number" and v == v and v ~= HUGE and v ~= -HUGE
 end
 
+-- Storage refused a valid value (LibGranaryDB read-only: 2026-11-21 its maintenance failed at load and switched
+-- storage off for the session). The live numbers (odometers, windows, boards) keep counting; history isn't saved.
+-- Counted every time, said once per session.
+local refusedSaid = false
+local function storageRefused(c)
+  ns.Count("storageRefused")
+  if refusedSaid then return end
+  refusedSaid = true
+  local ro, why = false, nil
+  if ns.db and ns.db.IsReadOnly then ro, why = ns.db:IsReadOnly() end
+  ns.Log("warn", "HC", "storage refused a write to %s%s: live numbers keep counting, history isn't saved this session",
+    tostring(c.id), ro and (" (read-only: " .. tostring(why) .. ")") or "")
+end
+
 --- Add v to a flow counter. Dimensions in declared order. Returns true when counted, false when refused (secret
---- or invalid value, unknown counter, storage read-only) or quietly ignored (the counter is off: no tracker that
---- is on needs it, or storage isn't attached yet).
+--- or invalid value, unknown counter) or quietly ignored (the counter is off: no tracker that is on needs it, or
+--- storage isn't attached yet). A valid value storage won't take (read-only) still counts live.
 function HC:Emit(id, v, ...)
   local c = ns.counters[id]
   if not c then return unknown(id) end
   if not c.active then return false end
   if isSecret(v) then ns.Count("secretsRejected"); return false end
+  if not liveOk(v) then return false end
   local h = c.h
-  if h then
-    if not h:Add(v, ...) then return false end
-  elseif not liveOk(v) then
-    return false
-  end
+  if h and not h:Add(v, ...) then storageRefused(c) end
   afterWrite(c, v, nil, ...)
   return true
 end
@@ -400,12 +411,9 @@ function HC:EmitCtx(id, v, ctx, ...)
   if not c then return unknown(id) end
   if not c.active then return false end
   if isSecret(v) then ns.Count("secretsRejected"); return false end
+  if not liveOk(v) then return false end
   local h = c.h
-  if h then
-    if not h:AddCtx(v, ctx, ...) then return false end
-  elseif not liveOk(v) then
-    return false
-  end
+  if h and not h:AddCtx(v, ctx, ...) then storageRefused(c) end
   afterWrite(c, v, ctx, ...)
   return true
 end
@@ -422,18 +430,16 @@ function HC:ObserveCtx(id, v, ctx, ...)
   if not c then return unknown(id) end
   if not c.active then return false end
   if isSecret(v) then ns.Count("secretsRejected"); return false end
-  local ok
+  if not liveOk(v) then return false end
   if c.h then
-    if ctx ~= nil then ok = c.h:ObserveCtx(v, ctx, ...) else ok = c.h:Observe(v, ...) end
-  else
-    ok = liveOk(v)
+    local stored
+    if ctx ~= nil then stored = c.h:ObserveCtx(v, ctx, ...) else stored = c.h:Observe(v, ...) end
+    if not stored then storageRefused(c) end
   end
-  if ok then
-    odoObserve(c, v, ...)
-    if ns.ObserveWindows then ns.ObserveWindows(c.id, v) end
-    ns.dirty = true
-  end
-  return ok
+  odoObserve(c, v, ...)
+  if ns.ObserveWindows then ns.ObserveWindows(c.id, v) end
+  ns.dirty = true
+  return true
 end
 
 ---------------------------------------------------------------------------

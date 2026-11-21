@@ -56,7 +56,7 @@ single value with context, kept live during a run: use it for big dimensions suc
 
 | Call | Returns |
 |---|---|
-| `HC:Emit(id, value, dim1, ..., dim6)` | `true` stored; `false` refused (secret value, unknown counter, storage not ready or read-only). Dimensions in declared order. |
+| `HC:Emit(id, value, dim1, ..., dim6)` | `true` counted; `false` refused (secret or invalid value, unknown counter, storage not ready). Dimensions in declared order. When storage is read-only the value still counts live (odometers, windows, boards) and only history misses it (counted as `storageRefused`, one warning per session). Same for `EmitCtx` and `Observe`. |
 | `HC:EmitCtx(id, value, ctx, dims...)` | Same, with a context table for records (read, never kept: reuse one table). |
 | `HC:Observe(id, value, dims...)` | Stocks (levels such as gold owned). |
 | `HC:ObserveCtx(id, value, ctx, dims...)` | Stocks, with a context table for records (HC-26): storage keeps it with a new lowest or highest value, if the counter declares `context = { max = { ... } }` (or `min`). Read, never kept: reuse one table. Query rows give it back as `row.ctx`, values as text. |
