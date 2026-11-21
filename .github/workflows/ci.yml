@@ -104,6 +104,7 @@ jobs:
               if ($entries -notcontains $need) { throw "Missing from the zip: $need" }
             }
           }
+          if ($entries -notcontains 'HardCounters/Media/Icon.tga') { throw 'Missing from the zip: HardCounters/Media/Icon.tga' }
           if ($entries | Where-Object { $_ -match '\\' }) { throw 'Backslashes in zip entry names' }
           "$($entries.Count) files in $($expected.Count) folders"
 

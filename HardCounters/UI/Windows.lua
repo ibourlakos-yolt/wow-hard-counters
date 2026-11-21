@@ -16,7 +16,8 @@ local floor, max, min = math.floor, math.max, math.min
 local MAIN, MAIN_NAME = "_main", "HardCountersMain"
 local MAX_W, MAX_H = 1600, 1200
 local MAIN_MIN_W = 340                 -- portrait, title, header buttons
-local ICON = "Interface\\Icons\\INV_Misc_PocketWatch_01"
+-- The addon's own icon (tools/draw-icon.py; same path as ## IconTexture): minimap button, compartment, Broker, portrait.
+local ICON = "Interface\\AddOns\\HardCounters\\Media\\Icon"
 ns.ICON = ICON
 
 -- Blizzard panel chrome (ButtonFrameTemplate): title bar 24, the "attic" under it down to 60 when there's a

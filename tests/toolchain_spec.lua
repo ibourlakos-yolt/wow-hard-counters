@@ -55,6 +55,24 @@ describe("toolchain", function()
     end
   end
 
+  -- The addon icon: ## IconTexture and ns.ICON name the same file, inside the HardCounters folder that
+  -- tools\package.ps1 zips whole, as a 64x64 uncompressed 32-bit TGA with an 8-bit alpha (tools/draw-icon.py).
+  it("the icon file exists, ships, and is a TGA the client reads", function()
+    local path = F.tocFields("HardCounters/HardCounters.toc").IconTexture
+    assert.are.equal("Interface\\AddOns\\HardCounters\\Media\\Icon", path)
+    local lua = F.read("HardCounters/UI/Windows.lua"):match('local ICON = "([^"]+)"')
+    assert.are.equal(path, (lua:gsub("\\\\", "\\")))
+    local tga = F.read((path:gsub("^Interface\\AddOns\\", ""):gsub("\\", "/")) .. ".tga")
+    assert.is_truthy(tga, "the icon file is missing")
+    local function u16(i) return tga:byte(i) + 256 * tga:byte(i + 1) end
+    assert.are.equal(2, tga:byte(3), "image type: uncompressed true-colour")
+    assert.are.equal(64, u16(13), "width")
+    assert.are.equal(64, u16(15), "height")
+    assert.are.equal(32, tga:byte(17), "bits per pixel")
+    assert.are.equal(8, tga:byte(18) % 16, "alpha bits")
+    assert.is_true(#tga >= 18 + tga:byte(1) + 64 * 64 * 4, "header, ID field and every pixel")
+  end)
+
   it("one version everywhere: every shipped TOC and every VERSION string (tools\\bump.ps1)", function()
     local v = F.tocFields("HardCounters/HardCounters.toc").Version
     assert.is_truthy(v)

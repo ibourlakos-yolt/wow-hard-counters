@@ -123,7 +123,7 @@ local function create()
     local def = HC:GetView(id)
     if def.feed then
       feeds[id] = LDB:NewDataObject("HC: " .. (def.title or id), { type = "data source", text = "-", label = def.title or id,
-        icon = "Interface\\Icons\\INV_Misc_PocketWatch_01" })
+        icon = ns.ICON })
     end
   end
   update()

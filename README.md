@@ -94,7 +94,8 @@ displays, with a public API for packs.
 - Layout: `HardCounters/` (engine, Basics, boards, embedded libraries), `HardCounters_Diagnostics/`, and the packs in
   `packs/Farmer` and `packs/CharacterStats` (each with its own tests, lint and docs).
 - Tools: `tools\test.ps1`, `lint.ps1`, `link.ps1`, `link-sv.ps1`, `package.ps1` (the bundle zip), `bump.ps1` (one
-  version everywhere), `sync-libs.ps1`, `decode-report.ps1`. Development setup: [docs/DEV_SETUP.md](docs/DEV_SETUP.md)
+  version everywhere), `sync-libs.ps1`, `decode-report.ps1`, `draw-icon.py` (the icon and logo, drawn in code; WSL,
+  Pillow). Development setup: [docs/DEV_SETUP.md](docs/DEV_SETUP.md)
 - CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)): busted and luacheck on PUC Lua 5.1 for the engine and
   each pack on every push; a `v*` tag builds the zip and attaches it to a GitHub release (a pre-release for alpha,
   beta and rc versions).

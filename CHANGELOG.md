@@ -21,6 +21,7 @@ The first experimental build: Hard Counters, Farmer, Character Stats and Diagnos
 - History off by default, one switch per tracker to keep day-by-day totals and records.
 - Edit a board from its hover tab, or every board with Blizzard's Edit Mode.
 - Opens from `/hc`, the minimap button and the game's AddOns menu.
+- Its own icon, a gold number sign, on the minimap button and in the AddOn list.
 - `/hc report`: a copyable report for bug reports, with no character names.
 
 ### Farmer
