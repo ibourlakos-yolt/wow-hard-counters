@@ -55,12 +55,20 @@ Last updated: 2026-11-20.
 
 | Item | Status | Evidence / notes |
 |---|---|---|
-| `UnitPosition("player")` outdoors | 🟡 present | In the Forever API dump |
+| `UnitPosition("player")` outdoors | ✅ plain, **in combat too** | 2026-11-21: 10,745 reads out of combat and 976 in combat at 4 Hz, none secret (Diagnostics travel sampler). Distance can come from position through fights, unlike speed |
+| `UnitPosition` third return (`positionZ`) | ⛔ always 0 | 2026-11-21: 11,721 of 11,721 reads. No heights, so no fall distance |
+| `IsMounted`, `IsSwimming`, `IsSubmerged`, `IsFlying`, `IsFalling`, `UnitOnTaxi`, `UnitInVehicle`, `UnitIsGhost`, `GetPlayerFacing` | ✅ plain in and out of combat | 2026-11-21: 2,685 reads out of combat and 244 in combat each, none secret |
+| `UNIT_SPELLCAST_SUCCEEDED` spell ID (player) | ✅ plain in combat | 2026-11-21: 84 casts in combat, 40 out, none secret, though the API docs mark the event `SecretWhenUnitSpellCastRestricted` |
+| Boats between continents | ✅ a continuous ride, then a loading screen | 2026-11-21: Darkshore to Wetlands: the position moves while `GetUnitSpeed`'s current speed is 0 (out of combat), about 60 s at up to 31 yd/s; one nil position read at the crossing |
+| `C_MapExplorationInfo.GetExploredAreaIDsAtPosition` | ⛔ returns nil | 2026-11-21: in Darkshore, Wetlands and Stormwind, with a valid map ID and map position |
+| Exploration achievement criteria (`GetAchievementNumCriteria`, `GetAchievementCriteriaInfo`) | ✅ readable / ⚠️ the metas | 2026-11-21: 776 (Explore Elwynn Forest) gives 12 criteria (type 43) with done flags and an asset ID; 42 and 43 (Explore Eastern Kingdoms / Kalimdor) give 0 criteria |
+| `C_TaxiMap.GetTaxiNodesForMap` | ⚠️ the continent's list, `isUndiscovered` never true | 2026-11-21: 38 nodes for any Kalimdor zone, 36 for Eastern Kingdoms, none undiscovered on two characters (one too low to know them all) |
+| `MAP_EXPLORATION_UPDATED`, `ZONE_CHANGED` | ✅ fire | 2026-11-21: 13 and 58 fires in a 55-minute session |
 | `C_Map.GetPlayerMapPosition` / `GetBestMapForUnit` | 🟡 present | "AllowedWhenUntainted" |
 | Position inside instances | ⚠️ | Run 2: no usable `GetBestMapForUnit` in The Deadmines (the zone key fell back to the zone text); run 3: nil again in The Hall of Thanes. Position itself not probed |
 | `GetInstanceInfo()` instance ID inside a dungeon | ✅ | Run 3, third session: `type=party id=3065` in The Hall of Thanes; the zone key was `103065` (HC-13) |
 | Position on taxi (flight path) | ❓ | |
-| `GetUnitSpeed`, `IsMounted`, `IsFlying`, `IsSwimming`, `UnitOnTaxi`, `C_PlayerInfo.GetGlidingInfo` | 🟡 present | Secret during combat? ❓ Azeroth Odometer says speed is hidden in combat, so it estimates. |
+| `GetUnitSpeed` | ✅ out of combat / ⛔ in combat | Secret in combat (CS-1, and the 2026-11-21 travel probes); Azeroth Odometer estimates in combat for that reason. `C_PlayerInfo.GetGlidingInfo` present, unprobed |
 | Does addon code run during loading screens? | ❓ | QuestieTrace's "frame heartbeat" probes exactly this |
 | Jump detection (`hooksecurefunc("JumpOrAscendStart")` or similar) | ❓ | Hooks under the new restrictions are untested |
 
