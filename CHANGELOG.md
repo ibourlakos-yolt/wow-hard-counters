@@ -21,6 +21,8 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 ### Developer notes
 - Readings and counters take three more formatters: `distance` (yards), `speed` (yards a second) and `speedpct`
   (yards a second shown as a percentage of the 100% run speed, 7 yd/s).
+- A reading's parameter can take a set of members instead of one (`param.multi`, with presets and a default): a
+  tile then counts the members ticked in its menu ("Includes: ...").
 
 ## 0.1.0-alpha1 (2026-11-21)
 

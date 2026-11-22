@@ -106,7 +106,7 @@ end
 local function compareFor(board, i)
   local tile = board.tiles[i]
   if not (tile and tile.kind == "reading" and M.Footprint(tile) == "hero" and M.HasExtra(tile, "vsUsual")
-    and tile.scope == "run") or tile.arg ~= nil or tile.who == "account" then return nil end
+    and tile.scope == "run") or tile.arg ~= nil or M.HasSet(tile) or tile.who == "account" then return nil end
   local zone = HC:ZoneKey()
   local calc = M.TileCalc(tile)
   if calc == "recent" then calc = "perHour" end   -- past runs have no recent rate: their per hour
@@ -381,7 +381,7 @@ local function drawRow(w, board)
   elseif row.kind == "hero" then
     local st, v = drawReading(board, i, w.label, w.value)
     -- (HC-52) the recent rate at each of the last active minutes; until two are sampled, gains per minute
-    local vals = not st and tile.arg == nil and M.HasExtra(tile, "sparkline")
+    local vals = not st and tile.arg == nil and not M.HasSet(tile) and M.HasExtra(tile, "sparkline")
       and (M.RecentSparkline(tile, board, SPARK_N, sparkBuf) or M.Sparkline(tile.reading, SPARK_N, 60, sparkBuf))
     w.spark:SetShown(vals and true or false)
     if vals then
@@ -1077,8 +1077,8 @@ local function readingItems(board, look, anchor)
       unused[tid] = unused[tid] or {}
       list = unused[tid]
     end
-    if r.param then
-      -- a reading with a parameter: choose the member next
+    if ns.NeedsArg(r) then
+      -- a reading with a parameter: choose the member next (a set reading starts with its default: HC-60)
       list[#list + 1] = { text = ns.ReadingTitle(r, nil), tip = r.description, func = function()
         Boards.MemberMenu(anchor, rid, function(arg) addReading(board, rid, look, arg) end)
       end }
@@ -1158,7 +1158,27 @@ function Boards.TileMenu(anchor, board, i)
         func = function() M.SetWho(tile, "account", board); Boards.Refresh(board.id, true) end },
     } }
     local rdef = ns.readings[tile.reading]
-    if rdef and rdef.param then
+    if rdef and rdef.param and rdef.param.multi then
+      -- (HC-60) the tile's filter: the reading's presets, then a checklist of its members
+      local sub, cur = {}, M.TileSet(tile)
+      local inSet = {}
+      for _, m in ipairs(cur or {}) do inSet[m] = true end
+      for _, ps in ipairs(rdef.param.presets or {}) do
+        sub[#sub + 1] = { text = ps.name, checked = ns.SameSet(ps.members, cur), func = function()
+          M.SetArg(tile, ps.members, board); Boards.Refresh(board.id, true)
+        end }
+      end
+      local choices = M.SetChoices(tile.reading)
+      if #choices > 0 and #sub > 0 then sub[#sub + 1] = { text = L["Or tick each:"], disabled = true } end
+      for _, c in ipairs(choices) do
+        sub[#sub + 1] = { text = c.label, checked = inSet[c.arg] or false, func = function()
+          if not M.ToggleMember(tile, c.arg, board) then ns.Print(L["A filter keeps at least one kind."]) end
+          Boards.Refresh(board.id, true)
+        end }
+      end
+      if #sub == 0 then sub[1] = { text = L["Nothing counted yet"], disabled = true } end
+      items[#items + 1] = { text = format(L["Includes: %s"], ns.MemberLabel(rdef, tile.arg)), sub = sub }
+    elseif rdef and rdef.param then
       items[#items + 1] = { text = format(L["Showing: %s (change)"], ns.MemberLabel(rdef, tile.arg)), func = function()
         Boards.MemberMenu(anchor, tile.reading, function(arg) M.SetArg(tile, arg, board); Boards.Refresh(board.id, true) end, tile.arg)
       end }

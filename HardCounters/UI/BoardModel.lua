@@ -256,7 +256,7 @@ local function watchOf(board, account)
   local out
   for _, t in ipairs(board.tiles) do
     local r = t.kind == "reading" and t.scope == "run" and t.arg ~= nil and ns.readings[t.reading]
-    if r and r.param and ((t.who == "account") == (account and true or false)) then
+    if r and r.param and not r.param.multi and ((t.who == "account") == (account and true or false)) then
       for _, id in ipairs({ r.counter or false, r.minus or false }) do
         local c = id and ns.counters[id]
         for _, d in ipairs(c and c.bigDims or {}) do
@@ -473,7 +473,7 @@ end
 --- dimension's member nothing watched before, DESIGN §16.8); nil when the tile's number covers the whole period.
 function M.LateSince(tile, board)
   local r = tile.kind == "reading" and tile.arg ~= nil and ns.readings[tile.reading]
-  if not (r and r.param) then return nil end
+  if not (r and r.param) or r.param.multi then return nil end
   local w = M.TileWindow(tile, board)
   local late = w and w.late
   if not late then return nil end
@@ -557,7 +557,7 @@ function HC:RegisterBoardPreset(key, def)
       end
       tile.extras = ex
     end
-    tile.arg = t.arg
+    tile.arg = type(t.arg) == "table" and ns.NormalizeSet(t.arg) or t.arg   -- (HC-60: a set, the pack's own copy)
     tiles[i] = tile
   end
   if not M.PRESETS[key] then M.PRESET_ORDER[#M.PRESET_ORDER + 1] = key end
@@ -1157,6 +1157,16 @@ M.MEMBER_CHOICES = 40
 --- dimension's member nothing kept before: from now, "since").
 function M.SetArg(tile, arg, board)
   if tile.kind ~= "reading" then return false end
+  local r = ns.readings[tile.reading]
+  if r and r.param and r.param.multi and type(arg) == "table" then
+    -- (HC-60) a set, kept sorted; the reading's default (or every listed member, when that is the default) is nil
+    arg = ns.NormalizeSet(arg)
+    if #arg == 0 then return false end
+    local p = r.param
+    if ns.SameSet(arg, p.defaultSet) or (not p.defaultSet and p.members and ns.SameSet(arg, ns.NormalizeSet(p.members))) then
+      arg = nil
+    end
+  end
   tile.arg = arg
   board = board or M.BoardOf(tile)
   if ns.ready and board and M.TileWindow(tile, board) then watchTiles(board) end
@@ -1191,6 +1201,52 @@ function M.MemberChoices(readingId, all)
   local more = #out > M.MEMBER_CHOICES
   while #out > M.MEMBER_CHOICES do table.remove(out) end
   return out, more
+end
+
+---------------------------------------------------------------------------
+-- A tile's filter (HC-60): a reading with param.multi sums a set of members; the tile keeps the set in tile.arg
+-- (nil: the reading's default). Small dimensions only.
+---------------------------------------------------------------------------
+
+--- Does the tile show a set reading?
+function M.HasSet(tile)
+  local r = tile and tile.kind == "reading" and ns.readings[tile.reading]
+  return r and r.param and r.param.multi and true or false
+end
+
+--- The members the tile's checklist offers, in the reading's order (its param.members), else the ones counted so
+--- far: { { arg, label }, ... }.
+function M.SetChoices(readingId)
+  local r = ns.readings[readingId]
+  if not (r and r.param and r.param.multi) then return {} end
+  if not r.param.members then return (M.MemberChoices(readingId, true)) end
+  local out = {}
+  for _, m in ipairs(r.param.members) do out[#out + 1] = { arg = m, label = ns.MemberLabel(r, m) } end
+  return out
+end
+
+--- The members the tile reads now, as a set: its own, the reading's default, or every choice (everything).
+function M.TileSet(tile)
+  local r = ns.readings[tile.reading]
+  if not (r and r.param and r.param.multi) then return nil end
+  local set = ns.ReadingSet(r, tile.arg)
+  if set then return set end
+  local all = {}
+  for _, c in ipairs(M.SetChoices(tile.reading)) do all[#all + 1] = c.arg end
+  return ns.NormalizeSet(all)
+end
+
+--- Tick or untick one member of the tile's set. The last member stays (false): an empty filter counts nothing.
+function M.ToggleMember(tile, member, board)
+  local cur = M.TileSet(tile)
+  if not cur then return false end
+  local next, had = {}, false
+  for _, m in ipairs(cur) do
+    if m == member then had = true else next[#next + 1] = m end
+  end
+  if not had then next[#next + 1] = member end
+  if #next == 0 then return false end
+  return M.SetArg(tile, next, board)
 end
 
 ---------------------------------------------------------------------------

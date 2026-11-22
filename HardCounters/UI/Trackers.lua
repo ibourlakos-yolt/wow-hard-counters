@@ -207,7 +207,7 @@ local function addToBoard(readingId, anchor)
       end)
     end
     -- a reading with a parameter (DESIGN 16.4): pick the member first
-    if r and r.param and anchor then ns.Boards.MemberMenu(anchor, readingId, add) else add() end
+    if ns.NeedsArg(r) and anchor then ns.Boards.MemberMenu(anchor, readingId, add) else add() end
   end
   local targets = BM.AddTargets()
   if #targets == 0 then return addTo(newBoard) end

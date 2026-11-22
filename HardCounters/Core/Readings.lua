@@ -136,7 +136,76 @@ function ns.CalcFits(r, calc, scope, who)
   if not CLOCK_SCOPES[scope] then return false, "scope" end
   if who == "account" then return false, "account" end
   if r and r.param and r.param.dim == "zone" then return false, "zone" end
+  if r and r.param and r.param.multi then return false, "set" end   -- (HC-60: a set's recent rate, later)
   return true
+end
+
+---------------------------------------------------------------------------
+-- Sets of members (HC-60): a reading with param.multi reads the sum of a set of members of a small dimension. The
+-- set is the tile's (an array), else the reading's default (param.default), else everything: the counter's whole
+-- total, "other" included.
+---------------------------------------------------------------------------
+
+--- A set as kept: a new array, sorted (numbers before strings), without duplicates.
+function ns.NormalizeSet(list)
+  local out, seen = {}, {}
+  for _, m in ipairs(list or {}) do
+    if m ~= nil and not seen[m] then seen[m] = true; out[#out + 1] = m end
+  end
+  table.sort(out, function(a, b)
+    local ta, tb = type(a), type(b)
+    if ta ~= tb then return ta < tb end
+    return a < b
+  end)
+  return out
+end
+
+--- Are two normalized sets the same?
+function ns.SameSet(a, b)
+  if a == b then return true end
+  if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then return false end
+  for i = 1, #a do if a[i] ~= b[i] then return false end end
+  return true
+end
+
+--- Does a reading need one member picked before it can be read? (A set reading reads its default without one.)
+function ns.NeedsArg(r)
+  return r ~= nil and r.param ~= nil and not r.param.multi
+end
+
+--- The members a set reading reads with this argument: the argument (a set), its default, or nil for everything.
+function ns.ReadingSet(r, arg)
+  if type(arg) == "table" then return arg end
+  return r.param.defaultSet
+end
+
+--- A set's name: the preset it equals, one member's label, up to three labels joined, else "n kinds"; nil (no set
+--- chosen) names the default.
+function ns.SetLabel(r, set)
+  local p = r.param
+  local L = ns.L or {}
+  if set == nil then
+    if p.defaultName then return p.defaultName end
+    set = p.defaultSet
+    if set == nil then return L["everything"] or "everything" end
+  end
+  for _, ps in ipairs(p.presets or {}) do
+    if ns.SameSet(ps.members, set) then return ps.name end
+  end
+  if #set <= 3 then
+    -- in the pack's order when it lists its members ("Walking + swim"), else the set's
+    local parts, order = {}, set
+    if p.members then
+      local inSet = {}
+      for i = 1, #set do inSet[set[i]] = true end
+      order = {}
+      for _, m in ipairs(p.members) do if inSet[m] then order[#order + 1] = m; inSet[m] = nil end end
+      for i = 1, #set do if inSet[set[i]] then order[#order + 1] = set[i] end end
+    end
+    for i = 1, #order do parts[i] = ns.MemberLabel(r, order[i]) end
+    return table.concat(parts, " + ")
+  end
+  return format(L["%d kinds"] or "%d kinds", #set)
 end
 
 --- The calc a reading is read with when none is asked for: its own default (an alias's calc, perHour for `per`),
@@ -220,6 +289,36 @@ function HC:RegisterReading(id, def)
     if p.label ~= nil and type(p.label) ~= "function" then misuse("RegisterReading('%s'): param.label must be a function", id) end
     if def.best then misuse("RegisterReading('%s'): a best reading takes no param", id) end
     param = { dim = p.dim, type = p.type or "enum", label = p.label }
+    if p.multi ~= nil then
+      -- (HC-60) a set of members instead of one: a tile's filter
+      if p.multi ~= true then misuse("RegisterReading('%s'): param.multi must be true", id) end
+      if param.type ~= "enum" then misuse("RegisterReading('%s'): param.multi takes an enum parameter", id) end
+      param.multi = true
+      if p.members ~= nil then
+        if type(p.members) ~= "table" or #p.members == 0 then misuse("RegisterReading('%s'): param.members must be a non-empty array", id) end
+        param.members = U.copy(p.members)
+      end
+      if p.presets ~= nil then
+        if type(p.presets) ~= "table" then misuse("RegisterReading('%s'): param.presets must be an array", id) end
+        param.presets = {}
+        for _, ps in ipairs(p.presets) do
+          if type(ps) ~= "table" or type(ps.name) ~= "string" or type(ps.members) ~= "table" or #ps.members == 0 then
+            misuse("RegisterReading('%s'): each preset is { name = \"...\", members = { ... } }", id)
+          end
+          param.presets[#param.presets + 1] = { name = ps.name, members = ns.NormalizeSet(ps.members) }
+        end
+      end
+      if type(p.default) == "string" then
+        for _, ps in ipairs(param.presets or {}) do
+          if ps.name == p.default then param.defaultSet, param.defaultName = ps.members, ps.name end
+        end
+        if not param.defaultSet then misuse("RegisterReading('%s'): param.default names no preset", id) end
+      elseif type(p.default) == "table" and #p.default > 0 then
+        param.defaultSet = ns.NormalizeSet(p.default)
+      elseif p.default ~= nil then
+        misuse("RegisterReading('%s'): param.default must be a preset's name or a non-empty array", id)
+      end
+    end
   end
   if def.rateTitle ~= nil and type(def.rateTitle) ~= "string" then misuse("RegisterReading('%s'): rateTitle must be a string", id) end
   if def.recentTitle ~= nil and type(def.recentTitle) ~= "string" then misuse("RegisterReading('%s'): recentTitle must be a string", id) end
@@ -265,7 +364,9 @@ local function publicCopy(r)
     calc = def, calcs = U.copy(ns.ReadingCalcs(r)), rateTitle = ns.RateTitle(r), aliasOf = r.aliasOf,
     scopes = U.copy(r.scopes), best = r.best, formatter = r.formatter, headline = r.headline,
     order = r.order, description = r.description, computed = r.compute ~= nil, inputs = r.inputs and U.copy(r.inputs),
-    param = r.param and { dim = r.param.dim, type = r.param.type } or nil,
+    param = r.param and { dim = r.param.dim, type = r.param.type, multi = r.param.multi,
+      members = r.param.members and U.copy(r.param.members), presets = r.param.presets and U.copy(r.param.presets),
+      default = r.param.defaultName or (r.param.defaultSet and U.copy(r.param.defaultSet)) } or nil,
     applies = ns.ReadingApplies(r) }   -- (evaluated now: HC-28's rule for this character)
 end
 
@@ -508,6 +609,21 @@ local function counterValue(id, measure, scope, w, dim, arg)
   return v, state
 end
 
+--- (HC-60) The sum of a set of members: each member as counterValue reads it (our windows: kept per member; storage:
+--- one cached filtered query per member). A member past a cap is left out; all of them past it: "capped".
+local function setValue(id, measure, scope, w, dim, set)
+  local sum, any, capped = 0, false, 0
+  for i = 1, #set do
+    local v, state = counterValue(id, measure, scope, w, dim, set[i])
+    if state == "capped" then capped = capped + 1
+    elseif state then return nil, state
+    elseif type(v) == "number" then sum, any = sum + v, true end
+  end
+  if capped > 0 and capped == #set then return nil, "capped" end
+  if not any then return nil end
+  return sum
+end
+
 ---------------------------------------------------------------------------
 -- Live in combat by passing the value through (CS-9, answered in game 2026-11-19: a secret handed unchanged to a
 -- font string's SetText / SetFormattedText or a StatusBar's SetValue raises no error). A reading that is "stale"
@@ -565,8 +681,9 @@ end
 
 --- Display text for a member of a reading's parameter: the pack's own label function, a zone's name, else as is.
 function ns.MemberLabel(r, arg)
-  if arg == nil then return "?" end
   local p = r and r.param
+  if p and p.multi and (arg == nil or type(arg) == "table") then return ns.SetLabel(r, arg) end
+  if arg == nil then return "?" end
   if p and p.label then
     local ok, text = pcall(p.label, arg)
     if ok and type(text) == "string" and text ~= "" then return text end
@@ -605,7 +722,9 @@ end
 function ns.ReadingTitle(r, arg, calc)
   local title = calcTitle(r, calc)
   if not r.param then return title end
-  if arg == nil then return (title:gsub("%%s", "...")) end
+  -- (HC-60) a set reading with no set chosen reads its default: the plain title says what it is
+  if r.param.multi and arg == nil and not title:find("%%s") then return title end
+  if arg == nil and not r.param.multi then return (title:gsub("%%s", "...")) end
   local label = ns.MemberLabel(r, arg)
   if title:find("%%s") then return (title:gsub("%%s", (label:gsub("%%", "%%%%")))) end
   return title .. ": " .. label
@@ -631,7 +750,7 @@ local function readInner(r, scope, w, arg, calc)
   if not r.scopeSet[scope] then return nil, true, "scope" end
   if not ns.CalcAllowed(r, calc) or not ns.CalcFits(r, calc, scope, curWho) then return nil, true, "calc" end
   if r.applies and not ns.ReadingApplies(r) then return nil, true, "inapplicable" end
-  if r.param and arg == nil then return nil, true, "noarg" end
+  if r.param and arg == nil and not r.param.multi then return nil, true, "noarg" end
   -- switched off (HC-19): its tracker is off, or nothing keeps its counter running. Shown as "off", never 0.
   if r.tracker and ns.trackers and ns.trackers[r.tracker] and not HC:IsTrackerOn(r.tracker) then return nil, true, "off" end
   if r.counter then
@@ -692,11 +811,17 @@ local function readInner(r, scope, w, arg, calc)
     end
     return v, ns.Win.Active(win) >= ns.RATE_SETTLE and gains >= ns.RECENT_MIN_GAINS
   end
-  local v, state = counterValue(r.counter, measure, scope, w, dim, arg)
+  local set = r.param and r.param.multi and ns.ReadingSet(r, arg)
+  if r.param and r.param.multi and not set then dim = nil end    -- everything: the whole total
+  local v, state
+  if set then v, state = setValue(r.counter, measure, scope, w, dim, set)
+  else v, state = counterValue(r.counter, measure, scope, w, dim, arg) end
   if state then return nil, true, state end
   if v == nil then return nil, true end
   if r.minus then
-    local m, mstate = counterValue(r.minus, measure, scope, w, dim, arg)
+    local m, mstate
+    if set then m, mstate = setValue(r.minus, measure, scope, w, dim, set)
+    else m, mstate = counterValue(r.minus, measure, scope, w, dim, arg) end
     if mstate then return nil, true, mstate end
     v = v - (m or 0)
   end

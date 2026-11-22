@@ -901,6 +901,28 @@ adds:
 - **Not built:** dragging an item onto the Trackers window or onto empty screen (a new board); a bank count; a
   search box for long lists.
 
+#### As built (HC-60, 2026-11-22): a tile's filter, a set of members
+
+Agreed with the Traveler pack (its "Distance travelled" counts every way of moving; a tile picks which). A reading
+declares `param = { dim, multi = true, members, presets, default }` (an `enum` parameter of a small dimension):
+
+- **What it reads:** the sum of a set of members. The set is the tile's (`tile.arg`, a sorted array, saved with the
+  board; no migration: absent is the default), else the reading's `default` (a preset's name or a list), else
+  **everything**: the counter's whole total, "other" included. `minus` reads the same set.
+- **How:** our windows (run, session, the board's) add the members' totals, which they keep per member already;
+  storage scopes ask one filtered query per member, each cached 10 s as a single member is. A member past a cap
+  is left out; all of them past it read "over the limit". Per hour divides by all active time. Recent and Trend
+  are not offered for a set yet (`CalcFits` says "set"). Sparklines and "vs usual" are off on set tiles.
+- **Ratios over the same filter** need nothing new: a computed reading with the same `param` gets the set as its
+  argument, and `get` passes it to the readings it reads (average speed = filtered distance ÷ filtered time).
+  So the queue's "second counter for the rate's denominator" was not built.
+- **Choosing:** adding the reading needs no member first (it starts on its default). The tile's menu has
+  "Includes: <name>": the reading's presets, then a checklist of its `members` in the pack's order (else the
+  members counted so far). Unticking the last one is refused. A set equal to the default is kept as nil, so the
+  tile follows the default if the pack changes it.
+- **Names:** no set chosen shows the plain title; otherwise the preset it equals, up to three member labels joined
+  with "+", else "n kinds".
+
 ### 16.5 Character or account, per tile (user, 2026-11-18)
 
 A tile setting next to scope and argument: **this character**, **whole account** (later maybe a named character).
