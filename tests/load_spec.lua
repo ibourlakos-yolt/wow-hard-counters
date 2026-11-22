@@ -426,6 +426,162 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
+  -- TR-6: spacebar jumps through the secure hook, falls and their auras, forms, speeds and the casts that change them,
+  -- auras in combat, a dungeon (rooms by text, never stored; speed x time), and a death with its corpse run
+  it("probes TR-6: jumps, falls, forms, speeds, auras, a dungeon and a death", function()
+    local names = { "JumpOrAscendStart", "IsFalling", "UnitPosition", "UnitOnTaxi", "GetUnitSpeed", "IsMounted",
+      "IsSwimming", "UnitIsGhost", "GetShapeshiftForm", "GetShapeshiftFormID", "GetShapeshiftFormInfo", "C_UnitAuras",
+      "GetInstanceInfo", "GetSubZoneText", "C_Map", "C_MapExplorationInfo", "C_DeathInfo" }
+    local saved = {}
+    for _, n in ipairs(names) do saved[n] = rawget(_G, n) end
+    rawset(_G, "JumpOrAscendStart", function() end)       -- before the boot: the hook is set at login
+    local ok, err = pcall(UI.with, function(ctx)
+      local env, D = ctx.env, ctx.diag
+      local BASE = 4321.25                                  -- coordinates that must never reach the saved file
+      local pos = { BASE, BASE, 0, 0 }
+      local falling, combat, ghost, inst, form = false, false, false, nil, 0
+      local cur, run, sub = 0, 7, ""
+      rawset(_G, "UnitPosition", function()
+        if inst then return nil, nil, nil, inst end
+        return pos[1], pos[2], pos[3], pos[4]
+      end)
+      rawset(_G, "IsFalling", function() return falling end)
+      rawset(_G, "UnitOnTaxi", function() return false end)
+      rawset(_G, "IsMounted", function() return false end)
+      rawset(_G, "IsSwimming", function() return false end)
+      rawset(_G, "UnitIsGhost", function() return ghost end)
+      rawset(_G, "GetUnitSpeed", function()
+        if combat then return env:secretValue(), env:secretValue(), env:secretValue(), env:secretValue() end
+        return cur, run, 4.72, 4.72
+      end)
+      rawset(_G, "GetShapeshiftForm", function() if combat then return env:secretValue() end return form end)
+      rawset(_G, "GetShapeshiftFormID", function() if form == 0 then return nil end return 3 end)
+      rawset(_G, "GetShapeshiftFormInfo", function(i) return "icon", true, true, i == 3 and 783 or 0 end)
+      rawset(_G, "C_UnitAuras", {
+        GetAuraDataByIndex = function(_, i)
+          if i > 1 then return nil end
+          return { spellId = combat and env:secretValue() or 130 }
+        end,
+        GetPlayerAuraBySpellID = function(id)
+          if combat then return env:secretValue() end
+          if id == 2983 or id == 130 then return { spellId = id } end
+          return nil
+        end,
+      })
+      rawset(_G, "GetInstanceInfo", function() return "X", inst and "party" or "none", 1, "", 5, 0, false, inst or 0 end)
+      rawset(_G, "GetSubZoneText", function() return sub end)
+      D.B.Wow.inCombat = function() return combat end
+      D.B.Wow.instanceType = function() return inst and "party" or "none" end
+      local function step(n, dx)
+        for _ = 1, n or 1 do
+          env.t = env.t + 0.25
+          pos[1] = pos[1] + (dx or 0)
+          D.TravelTick()
+        end
+      end
+      local t6 = _G.HardCountersDiagDB.probes.tr6
+      assert.are.equal(1, t6.v)
+      assert.are.equal("ok", t6.hook)
+      for _, v in pairs(t6) do if type(v) == "table" then for k in pairs(v) do v[k] = nil end end end
+      step(2)
+      -- (c) a spacebar jump: the hooked press, then 0.75 s in the air; a fall of 2.5 s with Slow Fall's aura up
+      env:callHook("JumpOrAscendStart")
+      assert.are.equal(1, t6.presses.ground)
+      falling = true; step(3); falling = false; step(1)
+      assert.are.equal(1, t6.takeoffs["press:foot"])
+      assert.are.equal(1, t6.air["jump:0.5-1"])
+      step(4)
+      falling = true; step(10); falling = false; step(1)
+      assert.are.equal(1, t6.takeoffs["nopress:foot"])
+      assert.are.equal(1, t6.air["fall:2-4"])
+      assert.are.equal(1, t6.longFallAuras["130"])
+      -- (d) a form, plain out of combat; speeds by state with the auras up; auras and forms in combat
+      form = 3; step(16); form = 0
+      assert.is_true((t6.forms["idx=3 id=3 spell=783:out"] or 0) > 0)
+      local key = "ground:form3 run=7.00 flight=4.72 swim=4.72"
+      assert.are.equal(1, t6.speeds[key])
+      assert.are.equal("130", t6.speedAuras[key])
+      combat = true; step(16); combat = false
+      assert.is_true((t6.forms["idx=secret id=nil spell=-:in"] or 0) > 0)
+      assert.is_true((t6.speedAnswers.secretIn or 0) > 0)
+      assert.are.equal(1, t6.auraIdx["in:table:secretId"])
+      assert.are.equal(1, t6.auraById["in:secret"])
+      -- §0.3 a dungeon: no position; two rooms by text; speed x time out of combat, secret in a fight
+      rawset(_G, "C_Map", { GetBestMapForUnit = function() return nil end })
+      inst, cur = 36, 7
+      sub = "The Goblin Foundry"; step(4)
+      sub = "Mast Room"; step(4)
+      combat = true; step(4); combat = false
+      local e = t6.inst[36]
+      assert.are.equal("party", e.kind)
+      assert.are.equal(3, e.ticks)
+      assert.are.equal(2, e.rooms)
+      assert.are.equal(3, e.named)
+      assert.are.equal(1, e.subChanges)
+      assert.are.equal(7, e.estYd)
+      assert.are.equal(1, e.speedSecretIn)
+      assert.is_nil(e.map)
+      inst, cur, sub = nil, 0, ""
+      step(4)
+      -- (a) a death outdoors: the release jump, the ghost's corpse distance (both orders), the end of the corpse run
+      env:fire("PLAYER_DEAD")
+      step(1, 300)                                         -- the release: 300 yards in one tick
+      ghost = true
+      env:fire("PLAYER_ALIVE")
+      rawset(_G, "C_Map", {
+        GetBestMapForUnit = function() return 1429 end,
+        GetMapInfo = function() return { mapType = 3, parentMapID = 13 } end,
+        GetWorldPosFromMapPos = function() return 0, { x = BASE + 3, y = BASE + 300 } end,
+      })
+      rawset(_G, "C_DeathInfo", { GetCorpseMapPosition = function() return { x = 0.5, y = 0.5 } end })
+      step(4)
+      assert.is_true((t6.corpse.plain or 0) > 0)
+      ghost = false
+      env:fire("PLAYER_UNGHOST")
+      local d = t6.deaths[1]
+      assert.truthy(d:find("^DEAD:g0 J:long:200%-400 ALIVE:g1 UNGHOST:g0 corpse=400%-800/<8 first=<8$"), d)
+      env:fire("PLAYER_ALIVE")                             -- outside a death: counted as stray
+      assert.are.equal(1, t6.deathStray["ALIVE:g0"])
+      -- (d) Sprint: its aura half a second later and the run speed it changed (out of combat)
+      D.TravelCast("player", "guid", 2983)
+      run = 9.8
+      env:advance(0.5)
+      assert.are.equal(1, t6.casts[2983])
+      assert.are.equal(1, t6.castWithAura[2983])
+      assert.are.equal("7.00>9.80", t6.speedCasts[2983])
+      -- the rows
+      ctx.diag.RunProbes()
+      local function last(label)
+        local r = _G.HardCountersDiagDB.probes.funcs[label]
+        return r and r[#r]
+      end
+      local r = last("TR-6 dungeons")
+      assert.are.equal("ok", r.status)
+      assert.truthy(r.detail:find("inst=36 party ticks=3 fight=1 sub named/empty=3/0 rooms=2 changes=1", 1, true), r.detail)
+      r = last("TR-6 jumps")
+      assert.truthy(r.detail:find("JumpOrAscendStart=function hook=ok presses[ground=1]", 1, true), r.detail)
+      r = last("TR-6 forms and speeds")
+      assert.truthy(r.detail:find("speedCasts[2983=7.00>9.80]", 1, true), r.detail)
+      r = last("TR-6 deaths")
+      assert.truthy(r.detail:find("GetCorpseMapPosition=function", 1, true), r.detail)
+      -- privacy: no coordinate and no subzone text anywhere in what the probes keep
+      local function scan(v)
+        if type(v) == "number" then assert.is_true(v < 4000, "a coordinate was kept: " .. v)
+        elseif type(v) == "string" then
+          assert.is_nil(v:find("4321", 1, true)); assert.is_nil(v:find("4324", 1, true))
+          assert.is_nil(v:find("Goblin", 1, true)); assert.is_nil(v:find("Mast", 1, true))
+        elseif type(v) == "table" then for k, x in pairs(v) do scan(k); scan(x) end end
+      end
+      scan(t6)
+      for label, h in pairs(_G.HardCountersDiagDB.probes.funcs) do
+        if label:find("^TR%-6") then scan(h[#h].detail) end
+      end
+      assert.are.same({}, env.errors)
+    end)
+    for _, n in ipairs(names) do rawset(_G, n, saved[n]) end
+    if not ok then error(err, 0) end
+  end)
+
   -- HC-42 (c): do Blizzard's Edit Mode callbacks reach an addon? Counted as they fire, saved at once
   it("probes Edit Mode: EventRegistry's Enter/Exit and the manager frame's show/hide, hooked late", function()
     local savedR, savedM = rawget(_G, "EventRegistry"), rawget(_G, "EditModeManagerFrame")

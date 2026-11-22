@@ -477,6 +477,363 @@ local function trFlag(name, inCombat)
   return nil
 end
 
+-- TR-6 (Traveler; agreed 2026-11-22, notes packs/Traveler/docs/DESIGN.md §0.2 a, c, d, §0.3): deaths, spacebar
+-- jumps, forms, speed boosts and dungeons. Kept in HardCountersDiagDB.probes.tr6, apart from TR-5's counts (not run
+-- yet when this was built). Game IDs (spell, aura, map, instance, form), game speeds, counts and yard buckets only:
+-- never a coordinate, never a name (dungeon subzone texts are compared in memory and never saved).
+local t6                                           -- P().tr6 once started
+local T6_V = 1
+local t6Fall = { on = false, t = 0, press = -1000, withPress = false, mounted = false }
+local t6Rooms = {}                                 -- [instance ID] = { n = distinct subzone texts, [text] = true }: memory only
+local t6LastSub = {}                               -- [instance ID] = the subzone text of the last sample: memory only
+local t6InstT = 0                                  -- the time of the last instance sample (speed x time estimate)
+local t6Death                                      -- the open death's notes, or nil
+local t6Corpse = { d = nil, dSwap = nil, first = nil }
+local t6Run = { v = nil }                          -- the latest plain run speed, out of combat
+local T6_CAP = 200                                 -- distinct keys per table (casts, auras, speeds)
+
+local function t6Inc(tbl, key, n)
+  if tbl[key] == nil then
+    tbl._n = (tbl._n or 0) + 1
+    if tbl._n > T6_CAP then tbl._over = (tbl._over or 0) + 1; return end
+  end
+  tbl[key] = (tbl[key] or 0) + (n or 1)
+end
+
+local function t6Bucket(yd)
+  if yd < 8 then return "<8" elseif yd < 40 then return "8-40" elseif yd < 100 then return "40-100"
+  elseif yd < 200 then return "100-200" elseif yd < 400 then return "200-400" elseif yd < 800 then return "400-800"
+  elseif yd < 1600 then return "800-1600" end
+  return "1600+"
+end
+
+local function t6AirBucket(s)
+  if s < 0.5 then return "<0.5" elseif s < 1 then return "0.5-1" elseif s < 2 then return "1-2"
+  elseif s < 4 then return "2-4" end
+  return "4+"
+end
+
+local function t6Plain(fn, ...)
+  if type(fn) ~= "function" then return nil, "missing" end
+  local ok, v = pcall(fn, ...)
+  if not ok then return nil, "error" end
+  if W.isSecret(v) then return nil, "secret" end
+  return v, v == nil and "nil" or type(v)
+end
+
+-- The player's helpful aura spell IDs right now, sorted, as text ("" when none). Out of combat only (documented
+-- secret when restricted); IDs only.
+local function t6Auras()
+  local ids = {}
+  local get = G("C_UnitAuras.GetAuraDataByIndex")
+  if type(get) == "function" then
+    for i = 1, 40 do
+      local ok, a = pcall(get, "player", i, "HELPFUL")
+      if not ok or type(a) ~= "table" then break end
+      local id = a.spellId
+      if type(id) == "number" and not W.isSecret(id) then ids[#ids + 1] = id end
+    end
+  else
+    local buff = G("UnitBuff")
+    if type(buff) ~= "function" then return "noapi" end
+    for i = 1, 40 do
+      local r = { pcall(buff, "player", i) }
+      if not r[1] or r[2] == nil then break end
+      local id = r[11]
+      if type(id) == "number" and not W.isSecret(id) then ids[#ids + 1] = id end
+    end
+  end
+  table.sort(ids)
+  return table.concat(ids, ",", 1, math.min(#ids, 16))
+end
+
+-- What the player is doing, in the words of the jump rules: taxi, swim, air (already falling), mounted, ground
+local function t6Ctx()
+  if t6Plain(_G.UnitOnTaxi, "player") == true then return "taxi" end
+  if t6Plain(_G.IsSwimming) == true then return "swim" end
+  if t6Plain(_G.IsFalling) == true then return "air" end
+  if t6Plain(_G.IsMounted) == true then return "mounted" end
+  return "ground"
+end
+
+local function t6Note(word)
+  if not t6Death or #t6Death >= 24 then return end
+  t6Death[#t6Death + 1] = word
+end
+
+-- (c) the secure post-hook on the jump key: presses by context; a press from the ground or a mount arms a take-off
+local function t6Press()
+  if not t6 then return end
+  local ctx = t6Ctx()
+  t6Inc(t6.presses, ctx)
+  if ctx == "ground" or ctx == "mounted" then t6Fall.press = W.time() end
+end
+
+-- (c) take-offs and landings from IsFalling, every tick: a take-off within 0.75 s of a press is a jump, else a fall
+local function t6Falling(now, falling, taxi, inCombat)
+  if taxi then if falling then t6Inc(t6.air, "onTaxi") end return end
+  if falling and not t6Fall.on then
+    t6Fall.on, t6Fall.t = true, now
+    t6Fall.withPress = now - t6Fall.press <= 0.75
+    t6Fall.mounted = t6Plain(_G.IsMounted) == true
+    t6Inc(t6.takeoffs, (t6Fall.withPress and "press" or "nopress") .. ":" .. (t6Fall.mounted and "mounted" or "foot"))
+  elseif not falling and t6Fall.on then
+    t6Fall.on = false
+    local dur = now - t6Fall.t
+    local kind = t6Fall.withPress and "jump" or "fall"
+    t6Inc(t6.air, kind .. ":" .. t6AirBucket(dur))
+    t6.airMax[kind] = math.max(t6.airMax[kind] or 0, dur)
+    -- a long fall: which auras were up (Slow Fall, Levitate make it a float)
+    if dur >= 2 and not inCombat then
+      local auras = t6Auras()
+      t6Inc(t6.longFallAuras, auras ~= "" and auras or "none")
+    end
+  end
+end
+
+-- (d) the shapeshift form, once a second: index, form ID and the form's spell, plain or secret, by combat
+local function t6Form(inCombat)
+  local fnF, fnId, fnInfo = _G.GetShapeshiftForm, _G.GetShapeshiftFormID, _G.GetShapeshiftFormInfo
+  if type(fnF) ~= "function" and type(fnId) ~= "function" then t6Inc(t6.forms, "missing"); return nil end
+  local idx, hi = t6Plain(fnF)
+  local id, hid = t6Plain(fnId)
+  local spell = "-"
+  if type(idx) == "number" and idx > 0 and type(fnInfo) == "function" then
+    local ok, _, _, _, sp = pcall(fnInfo, idx)
+    spell = ok and (W.isSecret(sp) and "secret" or tostring(sp)) or "error"
+  end
+  local key = format("idx=%s id=%s spell=%s:%s", idx ~= nil and tostring(idx) or hi, id ~= nil and tostring(id) or hid,
+    spell, inCombat and "in" or "out")
+  t6Inc(t6.forms, key)
+  return id or idx
+end
+
+-- (d) the speeds the game gives (out of combat: secret in it), snapshotted every 4 s by state, with the auras up
+local function t6Speeds(inCombat, form, snapshot)
+  local fn = _G.GetUnitSpeed
+  if type(fn) ~= "function" then t6Inc(t6.speedAnswers, "missing"); return end
+  local ok, cur, run, flight, swim = pcall(fn, "player")
+  if not ok then t6Inc(t6.speedAnswers, "error"); return end
+  if W.isSecret(run) or W.isSecret(cur) then t6Inc(t6.speedAnswers, inCombat and "secretIn" or "secretOut"); return end
+  t6Inc(t6.speedAnswers, inCombat and "plainIn" or "plainOut")
+  if type(run) == "number" then t6Run.v = run end
+  if not snapshot or inCombat or type(run) ~= "number" then return end
+  local state = t6Ctx()
+  if form and form ~= 0 then state = state .. ":form" .. tostring(form) end
+  local function num(v) return (type(v) == "number" and not W.isSecret(v)) and v or -1 end
+  local key = format("%s run=%.2f flight=%.2f swim=%.2f", state, run, num(flight), num(swim))
+  t6Inc(t6.speeds, key)
+  if t6.speeds[key] then t6.speedAuras[key] = t6Auras() end
+end
+
+-- (d) is an aura readable in combat? the first helpful aura by index, and by spell ID (the last ID seen out of combat)
+local t6AuraId
+local function t6AuraProbe(inCombat)
+  local side = inCombat and "in:" or "out:"
+  local get = G("C_UnitAuras.GetAuraDataByIndex")
+  if type(get) == "function" then
+    local ok, a = pcall(get, "player", 1, "HELPFUL")
+    local kind = not ok and "error" or W.isSecret(a) and "secret" or type(a)
+    if ok and type(a) == "table" then
+      if W.isSecret(a.spellId) then kind = "table:secretId"
+      elseif type(a.spellId) == "number" and not inCombat then t6AuraId = a.spellId end
+    end
+    t6Inc(t6.auraIdx, side .. kind)
+  else
+    t6Inc(t6.auraIdx, side .. "missing")
+  end
+  local byId = G("C_UnitAuras.GetPlayerAuraBySpellID")
+  if type(byId) ~= "function" then t6Inc(t6.auraById, side .. "missing"); return end
+  if not t6AuraId then return end
+  local ok, a = pcall(byId, t6AuraId)
+  local kind = not ok and "error" or W.isSecret(a) and "secret" or type(a)
+  if ok and type(a) == "table" and W.isSecret(a.spellId) then kind = "table:secretId" end
+  t6Inc(t6.auraById, side .. kind)
+end
+
+-- §0.3: inside an instance, once a second: what answers, per instance ID (subzone text present or not, rooms by
+-- distinct texts this session, map, map position, area IDs, UnitPosition), and GetUnitSpeed x time as the estimate
+local function t6Instance(now, inCombat)
+  local okI, kind = pcall(W.instanceType)
+  if not okI or kind == nil or kind == "none" then t6InstT = 0; return end
+  local fnI = _G.GetInstanceInfo
+  local id = "?"
+  if type(fnI) == "function" then
+    local ok, _, _, _, _, _, _, _, iid = pcall(fnI)
+    if ok and type(iid) == "number" and not W.isSecret(iid) then id = iid end
+  end
+  local e = t6.inst[id]
+  if not e then
+    if (t6.inst._n or 0) >= 40 then return end
+    t6.inst._n = (t6.inst._n or 0) + 1
+    e = { kind = tostring(kind) }
+    t6.inst[id] = e
+  end
+  local function inc(k) e[k] = (e[k] or 0) + 1 end
+  inc("ticks")
+  if inCombat then inc("fight") end
+  local sub = t6Plain(_G.GetSubZoneText)
+  if type(sub) == "string" and sub ~= "" then
+    inc("named")
+    local set = t6Rooms[id]
+    if not set then set = { n = 0 }; t6Rooms[id] = set end
+    if not set[sub] then set[sub] = true; set.n = set.n + 1 end
+    e.rooms = math.max(e.rooms or 0, set.n)
+  else
+    inc("empty")
+  end
+  if t6LastSub[id] ~= nil and t6LastSub[id] ~= sub then inc("subChanges") end
+  t6LastSub[id] = sub or ""
+  local map = t6Plain(G("C_Map.GetBestMapForUnit"), "player")
+  if type(map) == "number" then
+    inc("map"); e.mapId = map
+    local p = t6Plain(G("C_Map.GetPlayerMapPosition"), map, "player")
+    if p ~= nil then
+      inc("mapPos")
+      local ids = t6Plain(G("C_MapExplorationInfo.GetExploredAreaIDsAtPosition"), map, p)
+      if type(ids) == "table" and #ids > 0 then inc("areaIds") end
+    end
+  end
+  local fnPos = _G.UnitPosition
+  if type(fnPos) == "function" then
+    local ok, x = pcall(fnPos, "player")
+    if ok and x ~= nil then inc(W.isSecret(x) and "posSecret" or "posPlain") end
+  end
+  local fn = _G.GetUnitSpeed
+  if type(fn) == "function" then
+    local ok, cur = pcall(fn, "player")
+    if ok and W.isSecret(cur) then inc(inCombat and "speedSecretIn" or "speedSecretOut")
+    elseif ok and type(cur) == "number" then
+      inc(inCombat and "speedPlainIn" or "speedPlainOut")
+      if cur > 0 then
+        inc("moving")
+        local dt = t6InstT > 0 and math.min(now - t6InstT, 2) or 0
+        e.estYd = (e.estYd or 0) + cur * dt
+      end
+    end
+  end
+  t6InstT = now
+end
+
+-- (a) while a ghost, every second: the corpse position plain, nil or secret; its distance from the player both ways
+-- round (UnitPosition's order against the world position's is unproven), kept in memory for the death's notes
+local function t6Ghost()
+  if t6Plain(_G.UnitIsGhost, "player") ~= true then return end
+  local fn = G("C_DeathInfo.GetCorpseMapPosition")
+  if type(fn) ~= "function" then t6Inc(t6.corpse, "missing"); return end
+  local map = t6Plain(G("C_Map.GetBestMapForUnit"), "player")
+  if type(map) ~= "number" then t6Inc(t6.corpse, "nomap"); return end
+  local ok, p = pcall(fn, map)
+  if not ok then t6Inc(t6.corpse, "error"); return end
+  if W.isSecret(p) then t6Inc(t6.corpse, "secret"); return end
+  if p == nil then t6Inc(t6.corpse, "nil"); return end
+  t6Inc(t6.corpse, "plain")
+  local toWorld = G("C_Map.GetWorldPosFromMapPos")
+  if type(toWorld) ~= "function" then return end
+  local okW, _, wp = pcall(toWorld, map, p)
+  if not okW or type(wp) ~= "table" then t6Inc(t6.corpse, "noworld"); return end
+  local wx, wy = wp.x, wp.y
+  if type(wx) ~= "number" and type(wp.GetXY) == "function" then wx, wy = wp:GetXY() end
+  local okP, px, py = pcall(_G.UnitPosition, "player")
+  if not okP or type(px) ~= "number" or type(wx) ~= "number" or W.isSecret(px) or W.isSecret(wx) then return end
+  local dx, dy, sx, sy = px - wx, py - wy, px - wy, py - wx
+  t6Corpse.d, t6Corpse.dSwap = sqrt(dx * dx + dy * dy), sqrt(sx * sx + sy * sy)
+  if not t6Corpse.first then t6Corpse.first = math.min(t6Corpse.d, t6Corpse.dSwap) end
+end
+
+-- (a) deaths: each event with the ghost flag, in order, for the last five deaths; jumps and loading screens while
+-- dead or a ghost are noted in between (yards bucketed)
+local DEATH_WORDS = { PLAYER_DEAD = "DEAD", PLAYER_ALIVE = "ALIVE", PLAYER_UNGHOST = "UNGHOST", CONFIRM_XP_LOSS = "XPLOSS",
+  AREA_SPIRIT_HEALER_IN_RANGE = "SH_IN", AREA_SPIRIT_HEALER_OUT_OF_RANGE = "SH_OUT", CORPSE_IN_RANGE = "C_IN",
+  CORPSE_OUT_OF_RANGE = "C_OUT", RESURRECT_REQUEST = "RES", LOADING_SCREEN_ENABLED = "LOAD" }
+local function t6DeathEvent(event)
+  if not t6 then return end
+  local word = DEATH_WORDS[event]
+  if not word then return end
+  if word == "LOAD" then t6Note(word); return end
+  local g = t6Plain(_G.UnitIsGhost, "player")
+  local tag = word .. ":g" .. (g == true and "1" or g == false and "0" or "?")
+  if word == "DEAD" then
+    t6Death = { tag }
+    t6Corpse.d, t6Corpse.dSwap, t6Corpse.first = nil, nil, nil
+    return
+  end
+  if not t6Death then t6Inc(t6.deathStray, tag); return end
+  t6Note(tag)
+  if word == "UNGHOST" or (word == "ALIVE" and g == false) then
+    if t6Corpse.d then
+      t6Note("corpse=" .. t6Bucket(t6Corpse.d) .. "/" .. t6Bucket(t6Corpse.dSwap) .. " first=" .. t6Bucket(t6Corpse.first))
+    end
+    local list = t6.deaths
+    list[#list + 1] = table.concat(t6Death, " ")
+    while #list > 5 do table.remove(list, 1) end
+    t6Death = nil
+  end
+end
+
+-- (d) a plain cast: counted by spell ID; half a second later (out of combat) whether it changed the run speed and
+-- left an aura of its ID (the boost and form lists come from these)
+local function t6Cast(spellID, inCombat)
+  if not t6 then return end
+  t6Inc(inCombat and t6.castsIn or t6.casts, spellID)
+  local before = t6Run.v
+  if not W.after then return end
+  W.after(0.5, function()
+    local byId = G("C_UnitAuras.GetPlayerAuraBySpellID")
+    local okC, c = pcall(W.inCombat)
+    local nowIn = okC and c or false
+    if type(byId) == "function" then
+      local ok, a = pcall(byId, spellID)
+      local kind = not ok and "error" or W.isSecret(a) and "secret" or type(a)
+      t6Inc(t6.castAura, (nowIn and "in:" or "out:") .. kind)
+      if kind == "table" then t6Inc(t6.castWithAura, spellID) end
+    end
+    if nowIn then return end
+    local fn = _G.GetUnitSpeed
+    local ok, _, run = pcall(fn, "player")
+    if ok and type(run) == "number" and not W.isSecret(run) and type(before) == "number" and math.abs(run - before) > 0.05 then
+      t6.speedCasts[spellID] = format("%.2f>%.2f", before, run)
+    end
+  end)
+end
+
+local function t6ZoneEvent()
+  if not t6 then return end
+  local okI, kind = pcall(W.instanceType)
+  if okI and kind ~= nil and kind ~= "none" then t6Inc(t6.zoneEventsInside, tostring(kind)) end
+end
+
+local t6Ticks = 0
+local function t6Tick(now, inCombat, falling, taxi)
+  if not t6 then return end
+  t6Ticks = t6Ticks + 1
+  t6Falling(now, falling, taxi, inCombat)
+  if t6Ticks % 4 ~= 0 then return end
+  local form = t6Form(inCombat)
+  t6Speeds(inCombat, form, t6Ticks % 16 == 0)
+  if t6Ticks % 16 == 0 then t6AuraProbe(inCombat) end
+  t6Instance(now, inCombat)
+  t6Ghost()
+end
+
+local function startTr6(p)
+  if type(p.tr6) ~= "table" or p.tr6.v ~= T6_V then p.tr6 = { v = T6_V } end
+  t6 = p.tr6
+  for _, k in ipairs({ "presses", "takeoffs", "air", "airMax", "longFallAuras", "forms", "speedAnswers", "speeds",
+    "speedAuras", "auraIdx", "auraById", "inst", "corpse", "deaths", "deathStray", "casts", "castsIn", "castAura",
+    "castWithAura", "speedCasts", "zoneEventsInside" }) do
+    t6[k] = type(t6[k]) == "table" and t6[k] or {}
+  end
+  t6Fall.on, t6Death, t6InstT = false, nil, 0
+  -- (c) the jump key: does the function exist, and does a secure post-hook take (this load's answer)
+  if type(_G.JumpOrAscendStart) ~= "function" then t6.hook = "missing"
+  elseif type(_G.hooksecurefunc) ~= "function" then t6.hook = "no hooksecurefunc"
+  else
+    local ok, err = pcall(_G.hooksecurefunc, "JumpOrAscendStart", function() pcall(t6Press) end)
+    t6.hook = ok and "ok" or ("error:" .. tostring(err):sub(1, 60))
+  end
+end
+
 -- TR-5: what the player was doing at a jump (flags read only then: jumps are rare)
 local function trJumpCtx(inCombat)
   if inCombat then return "combat" end
@@ -492,8 +849,9 @@ end
 
 -- A jump: counted by kind and by context; the plain spell cast in the 5 s before it, if any (a hearth's cast ends
 -- just before its loading screen; TR-1's 2 s window linked none)
-local function trJump(kind, inCombat)
+local function trJump(kind, inCombat, yd)
   trCount("jump_" .. kind)
+  if t6Death then t6Note("J:" .. kind .. ":" .. (yd and t6Bucket(yd) or "-")) end   -- TR-6: the release jump
   local ctx = kind .. ":" .. trJumpCtx(inCombat)
   trv.jumpCtx[ctx] = (trv.jumpCtx[ctx] or 0) + 1
   if trCast.id and W.time() - trCast.t <= 5 then
@@ -533,6 +891,8 @@ local function travelTick()
   local okF, falling = false, nil
   if type(fnFall) == "function" then okF, falling = pcall(fnFall) end
   falling = okF and not W.isSecret(falling) and falling or false
+  local okT6 = pcall(t6Tick, now, inCombat, falling, taxi)
+  if not okT6 then trCount("t6errors") end
   local fnPos = _G.UnitPosition
   if type(fnPos) ~= "function" then trCount("posMissing"); trLast.ok = false; return end
   local okP, x, y, z, m = pcall(fnPos, "player")
@@ -576,16 +936,16 @@ local function travelTick()
       elseif trLast.gap then
         -- (TR-5 a) same continent across a loading screen: a teleport (hearth, portal) if it moved, with its yards
         if d > 40 then
-          trJump("gap", inCombat)
+          trJump("gap", inCombat, d)
           trv.gapYdMax = math.max(trv.gapYdMax or 0, d)
           trv.gapYdSum = (trv.gapYdSum or 0) + d
         else
           trCount("gapStill")
         end
       elseif d > 40 then
-        trJump("long", inCombat)                    -- (TR-5 b) any gap length: no more "speeds" of 744 yd/s
+        trJump("long", inCombat, d)                  -- (TR-5 b) any gap length: no more "speeds" of 744 yd/s
       elseif dt <= 0.6 and d >= 8 and v > 20 then
-        if carried then trCount("jump_shortCarried") else trJump("short", inCombat) end   -- (TR-5 b) boats aren't blinks
+        if carried then trCount("jump_shortCarried") else trJump("short", inCombat, d) end   -- (TR-5 b) boats aren't blinks
       elseif d > 0 and v > (trv.vmaxOther or 0) then
         trv.vmaxOther = v
       end
@@ -603,7 +963,10 @@ local function travelCast(unit, _, spellID)
   inCombat = okC and inCombat or false
   if W.isSecret(spellID) then trCount(inCombat and "castSecretIn" or "castSecretOut"); return end
   trCount(inCombat and "castPlainIn" or "castPlainOut")
-  if type(spellID) == "number" then trCast.id, trCast.t = spellID, W.time() end
+  if type(spellID) == "number" then
+    trCast.id, trCast.t = spellID, W.time()
+    pcall(t6Cast, spellID, inCombat)
+  end
 end
 -- The player's area ID right now and whether its name is the subzone shown: id (or nil), "match" / "nomatch", and
 -- whether the game shows a subzone at all. Names compared here, never kept.
@@ -680,6 +1043,7 @@ local function travelTaxiMap()
   trv.taxiMap = t
 end
 ns.TravelTick, ns.TravelCast, ns.TravelArea, ns.TravelTaxiMap = travelTick, travelCast, travelArea, travelTaxiMap
+ns.Tr6Press, ns.Tr6DeathEvent = t6Press, t6DeathEvent
 
 -- TR-5 starts the counts afresh: TR-1's jump counts mixed boat ticks in (notes api-surface §2026-11-21 evening)
 local TRAVEL_V = 5
@@ -728,6 +1092,67 @@ FUNCS[#FUNCS + 1] = { "TR-1 movement", function()
     n("vmaxTaxi"), n("vmaxOther"), n("carriedTicks"), n("mapChange"), n("mapChangeAfterCarried"), n("jump_short"),
     n("jump_long"), n("jump_map"), n("castPlainOut"), n("castPlainIn"), n("castSecretOut"), n("castSecretIn"),
     table.concat(spells, " "), table.concat(flags, " ")):sub(1, 2400)
+end }
+
+-- TR-6 rows: summaries of probes.tr6 (the tables themselves are in the saved file, whole)
+local function t6List(t)
+  local out = {}
+  for k, v in pairs(t or {}) do
+    if type(k) ~= "string" or k:sub(1, 1) ~= "_" then
+      out[#out + 1] = tostring(k) .. "=" .. (type(v) == "number" and v % 1 ~= 0 and format("%.1f", v) or tostring(v))
+    end
+  end
+  table.sort(out)
+  if t and t._over then out[#out + 1] = "(+" .. t._over .. " over the cap)" end
+  return table.concat(out, " ")
+end
+
+FUNCS[#FUNCS + 1] = { "TR-6 dungeons", function()
+  if not t6 then return "missing", "not started" end
+  local parts = {}
+  for id, e in pairs(t6.inst) do
+    if id ~= "_n" and type(e) == "table" then
+      local function n(k) return e[k] or 0 end
+      parts[#parts + 1] = format("inst=%s %s ticks=%d fight=%d sub named/empty=%d/%d rooms=%d changes=%d map=%d(%s)"
+        .. " mapPos=%d areaIds=%d pos=%d/%d speed plainOut/secretOut/plainIn/secretIn=%d/%d/%d/%d moving=%d estYd=%.0f",
+        tostring(id), tostring(e.kind), n("ticks"), n("fight"), n("named"), n("empty"), n("rooms"), n("subChanges"),
+        n("map"), tostring(e.mapId or "-"), n("mapPos"), n("areaIds"), n("posPlain"), n("posSecret"), n("speedPlainOut"),
+        n("speedSecretOut"), n("speedPlainIn"), n("speedSecretIn"), n("moving"), n("estYd"))
+    end
+  end
+  table.sort(parts)
+  if #parts == 0 then return "ok", "no instance sampled yet" end
+  return "ok", (table.concat(parts, " | ") .. " | zone events inside: " .. t6List(t6.zoneEventsInside)):sub(1, 1200)
+end }
+
+FUNCS[#FUNCS + 1] = { "TR-6 forms and speeds", function()
+  if not t6 then return "missing", "not started" end
+  local fns = format("GetShapeshiftForm=%s GetShapeshiftFormID=%s GetShapeshiftFormInfo=%s GetPlayerAuraBySpellID=%s",
+    describe(_G.GetShapeshiftForm), describe(_G.GetShapeshiftFormID), describe(_G.GetShapeshiftFormInfo),
+    describe(G("C_UnitAuras.GetPlayerAuraBySpellID")))
+  local speeds = {}
+  for k, v in pairs(t6.speeds) do
+    if k ~= "_n" and k ~= "_over" then speeds[#speeds + 1] = format("%s x%d [%s]", k, v, tostring(t6.speedAuras[k] or "")) end
+  end
+  table.sort(speeds)
+  return "ok", format("%s | forms[%s] speedAnswers[%s] auraIdx[%s] auraById[%s] castAura[%s] speedCasts[%s]"
+    .. " castWithAura[%s] casts=%d castsIn=%d | speeds: %s", fns, t6List(t6.forms), t6List(t6.speedAnswers),
+    t6List(t6.auraIdx), t6List(t6.auraById), t6List(t6.castAura), t6List(t6.speedCasts), t6List(t6.castWithAura),
+    t6.casts._n or 0, t6.castsIn._n or 0, table.concat(speeds, "; ")):sub(1, 2400)
+end }
+
+FUNCS[#FUNCS + 1] = { "TR-6 jumps", function()
+  if not t6 then return "missing", "not started" end
+  return "ok", format("JumpOrAscendStart=%s hook=%s presses[%s] takeoffs[%s] air[%s] airMax[%s] longFallAuras[%s]",
+    describe(_G.JumpOrAscendStart), tostring(t6.hook), t6List(t6.presses), t6List(t6.takeoffs), t6List(t6.air),
+    t6List(t6.airMax), t6List(t6.longFallAuras)):sub(1, 1200)
+end }
+
+FUNCS[#FUNCS + 1] = { "TR-6 deaths", function()
+  if not t6 then return "missing", "not started" end
+  return "ok", format("GetCorpseMapPosition=%s corpse[%s] stray[%s] open=%s deaths: %s",
+    describe(G("C_DeathInfo.GetCorpseMapPosition")), t6List(t6.corpse), t6List(t6.deathStray),
+    t6Death and table.concat(t6Death, " ") or "no", table.concat(t6.deaths, " || ")):sub(1, 1500)
 end }
 
 -- TR-1 (e): subzones as numbers. The area IDs at the player's map position, and whether one of them is named like
@@ -905,6 +1330,10 @@ local EVENTS = {
   -- TR-1 (Traveler): discoveries, summons, subzone changes, taxi start and end (control lost and gained)
   "MAP_EXPLORATION_UPDATED", "TAXI_NODE_STATUS_CHANGED", "CONFIRM_SUMMON", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
   "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED",
+  -- TR-6: deaths (order and counts; the ghost flag at each is in probes.tr6.deaths) and shapeshift forms
+  "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "CONFIRM_XP_LOSS", "AREA_SPIRIT_HEALER_IN_RANGE",
+  "AREA_SPIRIT_HEALER_OUT_OF_RANGE", "CORPSE_IN_RANGE", "CORPSE_OUT_OF_RANGE", "RESURRECT_REQUEST",
+  "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS",
 }
 -- CS-1: unit stat events, for the player only (RegisterUnitEvent where the client has it; UNIT_AURA fires for every
 -- unit around you otherwise)
@@ -1065,6 +1494,8 @@ function ns.StartProbes()
   editMode.reg, editMode.hook = nil, nil
   local okE, errE = pcall(listenEditMode)
   if not okE then B.Log("warn", "Diag", "Edit Mode probe failed: %s", tostring(errE)) end
+  local okT6, errT6 = pcall(startTr6, p)
+  if not okT6 then B.Log("warn", "Diag", "TR-6 probes failed to start: %s", tostring(errT6)) end
   local okT, errT = pcall(startTravel, p)
   if not okT then B.Log("warn", "Diag", "travel sampler failed to start: %s", tostring(errT)) end
   local f = CreateFrame("Frame")
@@ -1082,6 +1513,8 @@ function ns.StartProbes()
     if event == "UNIT_SPELLCAST_SUCCEEDED" then pcall(travelCast, ...) end
     if event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then pcall(travelArea) end
     if event == "TAXIMAP_OPENED" then pcall(travelTaxiMap) end
+    if DEATH_WORDS[event] then pcall(t6DeathEvent, event) end
+    if event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then pcall(t6ZoneEvent) end
     if event == "PLAYER_ENTERING_WORLD" then pcall(hookEditMode) end   -- the manager frame may load late
     -- CS-1: are stat values secret in combat? Run the probes once per login/reload a moment into the first fight.
     if event == "PLAYER_REGEN_DISABLED" and not combatRan then
