@@ -1,11 +1,17 @@
 # Changelog
 
-What changed for players, newest first. Alpha versions may reset saved data; when one does, its entry says so at
-the top. Developer notes (pack API changes) are at the end of an entry.
+What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
+so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.0-beta1 (2026-11-22)
 
-<!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
+The first beta, **still experimental**: things will change, and so may the pack API. Everything from the alpha, plus
+a fifth folder, **Traveler**.
+
+**Saved data:** kept. Your boards, runs and history from 0.1.0-alpha1 carry over. A later beta may still reset saved
+data; if one does, its entry will say so at the top.
+
+**Updating:** quit and restart the game after installing. The new Traveler folder doesn't load with a `/reload`.
 
 ### New
 - **Hard Counters: Traveler**, a new pack (first edition): how far you travel and how. Distance on foot, mounted,

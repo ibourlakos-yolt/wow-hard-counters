@@ -11,7 +11,7 @@ if not HC or (HC.API_VERSION or 0) < 1 or not ns.Motion then return end
 local type, pcall, ipairs, pairs, sqrt, tostring = type, pcall, ipairs, pairs, math.sqrt, tostring
 local GetTime = GetTime
 
-ns.VERSION = "0.1.1-dev"
+ns.VERSION = "0.2.0-beta1"
 local pack = HC:RegisterPack("Traveler", { namespace = "hctravel", version = ns.VERSION, title = "Traveler" })
 ns.pack = pack
 

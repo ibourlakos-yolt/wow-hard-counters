@@ -6,8 +6,9 @@ are there when you want them and never in the way when you don't.
 
 For **World of Warcraft: Forever** (Interface 16001).
 
-> **Experimental (alpha).** This is an early build for friends and curious players. Things will change, and saved
-> data may be reset between alpha versions. Please report what breaks (see [Reporting a problem](#reporting-a-problem)).
+> **Experimental (beta).** An early build for friends and curious players. Things will change, and a new beta may
+> reset saved data (its changelog says so when one does). Please report what breaks (see
+> [Reporting a problem](#reporting-a-problem)).
 
 ## What you get
 
@@ -19,12 +20,13 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 | **Hard Counters: Farmer** | Counts what you farm: a money Ledger by source (loot, vendor, quests, mail, ...), items looted and their vendor value, your best drop, reputation gained, "*item* in bags" and "*faction* standing". |
 | **Hard Counters: Character Stats** | Your character sheet as readings: attributes, melee, ranged, spell and defence stats, weapon skills and Defense. Ready-made Caster, Melee, Hunter and Tank boards. |
 | **Hard Counters: Traveler** | Counts how you travel: distance on foot, mounted, swimming, by flight path and by boat, blinks and teleports (each tile picks which), time moving, average and top speed, speed now (in combat too), jumps, falls, time in the air, corpse runs and flights. Ready-made Trip and Flight log boards. |
-| **Hard Counters: Diagnostics** | A console for finding problems: log, live values, storage use, game API checks. On in alpha builds so reports are useful; turn it off in the AddOns list if you don't want it. |
+| **Hard Counters: Diagnostics** | A console for finding problems: log, live values, storage use, game API checks. On in alpha and beta builds so reports are useful; turn it off in the AddOns list if you don't want it. |
 
 ## Getting started
 
-1. Install through the CurseForge app (set this addon's release type to **Alpha**, or the app won't offer it), or
-   unzip the download into `World of Warcraft\_forever_\Interface\AddOns`.
+1. Install through the CurseForge app (set this addon's release type to **Beta**, or the app won't offer it), or
+   unzip the download into `World of Warcraft\_forever_\Interface\AddOns`. After installing or updating, restart
+   the game: a new addon folder doesn't load with a `/reload`.
 2. Log in. A first board appears on screen.
 3. Open Hard Counters with **`/hc`**, the **minimap button**, or the game's **AddOns menu**.
 
@@ -58,7 +60,7 @@ One download, five addon folders. Turn off any pack you don't want in the game's
   the rest show their last value, marked *in combat*, until the fight ends.
 - **Nothing leaves your computer.** Addons have no network access. `/hc report` only shows text for you to copy.
   It includes no character names or realms, and your addon list only if you ask for it.
-- **Saved data** lives in `HardCountersDB` and `HardCountersSettings` (WTF folder). During the alpha a new version may
+- **Saved data** lives in `HardCountersDB` and `HardCountersSettings` (WTF folder). During the beta a new version may
   reset it; the changelog will say so.
 - **The packs' API is experimental.** Other authors can build packs on Hard Counters, but the API may still change.
 
