@@ -3,6 +3,10 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+<!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
+
 ## 0.2.0-beta1 (2026-11-22)
 
 The first beta, **still experimental**: things will change, and so may the pack API. Everything from the alpha, plus
