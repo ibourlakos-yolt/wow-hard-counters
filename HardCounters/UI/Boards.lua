@@ -29,6 +29,10 @@ local compareCache = {}     -- reading .. zone -> average or false
 local sparkBuf, sparkH = {}, {}
 local SPARK_N, SPARK_W, SPARK_H = 10, 6, 12
 local GAUGE_N, GAUGE_R, GAUGE_DOT = 13, 22, 4   -- the gauge: dots on a half circle, left of its text (HC-33)
+local WHEEL_W, WHEEL_H, WHEEL_GAP, ROLL_S = 14, 20, 2, 0.3   -- the odometer's wheels and how long a digit rolls (HC-63)
+-- the mix's colours, part by part (largest first); "other" is grey
+local MIX_RGB = { { 1, 0.82, 0 }, { 0.25, 0.65, 1 }, { 0.38, 1, 0.38 }, { 1, 0.45, 0.3 }, { 0.75, 0.5, 1 } }
+local MIX_OTHER = { 0.55, 0.55, 0.55 }
 
 local DOT_RUN, DOT_PAUSE, DOT_NONE = { 0.38, 1, 0.38 }, { 1, 0.82, 0 }, { 0.5, 0.5, 0.5 }
 local NAMEBAR_H, ADD_H = 18, 20
@@ -239,6 +243,54 @@ local function buildRow(f, row, y)
       dot:SetColorTexture(1, 1, 1, 0.12)
       w.dots[k] = dot
     end
+  elseif row.kind == "odometer" then
+    -- (HC-63) digit wheels under the title; a digit that changes rolls up into place. Plain squares and the game's
+    -- own font, no art; each wheel clips its two digits (the one leaving and the one coming)
+    w.label = text(w, "GameFontHighlightSmall")
+    w.label:SetPoint("TOPLEFT", 10, -3)
+    w.label:SetPoint("TOPRIGHT", -10, -3)
+    w.value = text(w, "GameFontHighlight")              -- states and values too long for the wheels
+    w.value:SetPoint("BOTTOMLEFT", 10, 5)
+    w.wheels = {}
+    for k = 1, ns.BoardModel.ODO_MAX do
+      local wheel = CreateFrame("Frame", nil, w)
+      wheel:SetSize(WHEEL_W, WHEEL_H)
+      wheel:SetPoint("BOTTOMLEFT", 10 + (k - 1) * (WHEEL_W + WHEEL_GAP), 4)
+      if wheel.SetClipsChildren then wheel:SetClipsChildren(true) end
+      local bg = wheel:CreateTexture(nil, "BACKGROUND")
+      bg:SetAllPoints()
+      bg:SetColorTexture(0, 0, 0, 0.55)
+      wheel.cur = text(wheel, "GameFontHighlightLarge", "CENTER")
+      wheel.cur:SetPoint("CENTER", 0, 0)
+      wheel.nxt = text(wheel, "GameFontHighlightLarge", "CENTER")
+      wheel.nxt:SetPoint("CENTER", 0, -WHEEL_H)
+      wheel.nxt:Hide()
+      wheel:Hide()
+      w.wheels[k] = wheel
+    end
+    w.unit = text(w, "GameFontHighlightSmall")
+  elseif row.kind == "mix" then
+    -- (HC-63) one bar split into a part per member, largest first, the shares written under it
+    w.label = text(w, "GameFontHighlightSmall")
+    w.label:SetPoint("TOPLEFT", 10, -3)
+    w.value = text(w, "GameFontHighlightSmall", "RIGHT")
+    w.value:SetPoint("TOPRIGHT", -10, -3)
+    w.label:SetPoint("RIGHT", w.value, "LEFT", -6, 0)
+    w.track = w:CreateTexture(nil, "BACKGROUND")
+    w.track:SetPoint("TOPLEFT", 10, -18)
+    w.track:SetPoint("TOPRIGHT", -10, -18)
+    w.track:SetHeight(7)
+    w.track:SetColorTexture(1, 1, 1, 0.12)
+    w.parts = {}
+    for k = 1, ns.BoardModel.MIX_PARTS + 1 do
+      local p = w:CreateTexture(nil, "ARTWORK")
+      p:SetHeight(7)
+      p:Hide()
+      w.parts[k] = p
+    end
+    w.legend = text(w, "GameFontDisableSmall")
+    w.legend:SetPoint("TOPLEFT", 10, -28)
+    w.legend:SetPoint("TOPRIGHT", -10, -28)
   elseif row.kind == "grid" then
     w.cells = {}
     for c = 1, 2 do
@@ -328,7 +380,7 @@ local function drawReading(board, i, fsLabel, fsValue)
   -- (CS-9) a stale value the game still gives, as a secret: handed straight to the font string, never touched.
   -- Only a plain number tile of the character's current value: bars, gauges and account sums need arithmetic.
   local live, fmt
-  if st == "stale" and tile.scope == "now" and tile.who ~= "account" and not M.NEEDS_TARGET[M.TileDisplay(tile)] then
+  if st == "stale" and tile.scope == "now" and tile.who ~= "account" and M.TileDisplay(tile) == "number" then
     local r = ns.readings[tile.reading]
     fmt = ns.LiveFormat(r)
     live = fmt and ns.ReadingLive(r, tile.arg)
@@ -349,6 +401,102 @@ local function drawReading(board, i, fsLabel, fsValue)
   end
   return st, v
 end
+
+-- (HC-63) the odometer's roll: every wheel whose digit changed moves its old digit up and the new one in from below
+local function rollStep(self)
+  local now = ns.wow.time()
+  local busy = false
+  for _, wheel in ipairs(self.wheels) do
+    if wheel.t0 then
+      local p = (now - wheel.t0) / ROLL_S
+      if p >= 1 or not wheel:IsShown() then
+        wheel.t0 = nil
+        wheel.cur:SetText(wheel.digit)
+        wheel.cur:SetPoint("CENTER", 0, 0)
+        wheel.nxt:Hide()
+        wheel.nxt:SetPoint("CENTER", 0, -WHEEL_H)
+      else
+        busy = true
+        local off = floor(p * WHEEL_H + 0.5)
+        wheel.cur:SetPoint("CENTER", 0, off)
+        wheel.nxt:SetPoint("CENTER", 0, off - WHEEL_H)
+      end
+    end
+  end
+  if not busy then self:SetScript("OnUpdate", nil) end
+end
+
+local function rollTo(w, wheel, d)
+  if wheel.digit == d then return end
+  local first = wheel.digit == nil
+  wheel.digit = d
+  if first then wheel.cur:SetText(d); return end   -- the first draw sets the wheels without rolling
+  if wheel.t0 then wheel.cur:SetText(wheel.nxt:GetText() or d) end   -- a roll still going: start from its digit
+  wheel.nxt:SetText(d)
+  wheel.nxt:Show()
+  wheel.t0 = ns.wow.time()
+  w:SetScript("OnUpdate", rollStep)
+end
+
+local function drawOdometer(w, board, i)
+  local tile = board.tiles[i]
+  local st, v = drawReading(board, i, w.label, w.value)
+  local digits = (st == nil or st == "stale") and M.OdometerDigits(v)
+  local n = digits and #digits or 0
+  for k, wheel in ipairs(w.wheels) do
+    if k <= n then
+      rollTo(w, wheel, digits:sub(k, k))
+      wheel:Show()
+    else
+      wheel:Hide()
+      wheel.digit, wheel.t0 = nil, nil
+    end
+  end
+  if digits then
+    w.value:SetText("")                                -- the wheels say it; the text stays for states and long values
+    w.unit:ClearAllPoints()
+    w.unit:SetPoint("BOTTOMLEFT", 10 + n * (WHEEL_W + WHEEL_GAP) + 2, 7)
+    w.unit:SetText(M.OdometerUnit(tile) or "")
+  else
+    w.unit:SetText("")
+  end
+end
+
+local function hexColor(c) return format("|cff%02x%02x%02x", floor(c[1] * 255), floor(c[2] * 255), floor(c[3] * 255)) end
+
+local function drawMix(w, board, i)
+  local tile = board.tiles[i]
+  local st = drawReading(board, i, w.label, w.value)
+  local parts = st == nil and M.MixParts(tile, board) or nil
+  local full = (w.GetWidth and w:GetWidth() or 0) - 20
+  local x, legend = 0, {}
+  for k, tex in ipairs(w.parts) do
+    local p = parts and parts[k]
+    if p then
+      local c = p.arg == false and MIX_OTHER or MIX_RGB[k] or MIX_OTHER
+      legend[#legend + 1] = format("%s%s|r %d%%", hexColor(c), p.arg == false and L["other"] or p.label, floor(p.frac * 100 + 0.5))
+      if full > 0 then
+        local wpx = k == #parts and (full - x) or floor(full * p.frac + 0.5)   -- the last part takes the rounding
+        wpx = max(1, wpx)
+        tex:ClearAllPoints()
+        tex:SetPoint("TOPLEFT", w.track, "TOPLEFT", x, 0)
+        tex:SetWidth(wpx)
+        tex:SetColorTexture(c[1], c[2], c[3], 0.9)
+        tex:Show()
+        x = x + wpx
+      else
+        tex:Hide()
+      end
+    else
+      tex:Hide()
+    end
+  end
+  w.track:SetShown(parts ~= nil)
+  if parts then w.legend:SetText(table.concat(legend, "  "))
+  elseif st == nil then w.legend:SetText(L["Nothing counted yet"])
+  else w.legend:SetText("") end
+end
+Boards.DrawMix, Boards.DrawOdometer = drawMix, drawOdometer   -- (tests)
 
 local function drawRow(w, board)
   local row = w.row
@@ -438,6 +586,10 @@ local function drawRow(w, board)
       elseif done then dot:SetColorTexture(0.38, 1, 0.38, 0.9)
       else dot:SetColorTexture(1, 0.82, 0, 0.85) end
     end
+  elseif row.kind == "odometer" then
+    drawOdometer(w, board, i)
+  elseif row.kind == "mix" then
+    drawMix(w, board, i)
   elseif row.kind == "row" then
     drawReading(board, i, w.label, w.value)
   elseif row.kind == "splits" then
@@ -1138,8 +1290,11 @@ local CALC_TIP = { total = "Everything counted over the period.", perHour = "The
   trend = "Your pace now against your average over this period: faster, slower, or on pace (within 10%)." }
 local CALC_WHY = { display = "not on this display", scope = "needs the board's timer or session", account = "this character only",
   zone = "not for one zone" }
-local DISPLAY_NAME = { number = "Number", bar = "Bar", gauge = "Gauge" }
-local DISPLAY_TIP = { number = "The number itself.", bar = "A bar filling toward a target.", gauge = "A half dial of dots filling toward a target." }
+local DISPLAY_NAME = { number = "Number", bar = "Bar", gauge = "Gauge", odometer = "Odometer", mix = "Mix" }
+local DISPLAY_TIP = { number = "The number itself.", bar = "A bar filling toward a target.",
+  gauge = "A half dial of dots filling toward a target.",
+  odometer = "Rolling digits, like a car's odometer. The total only.",
+  mix = "One bar split by kind: each part's share of the total, largest first." }
 local SIZE_NAME = { large = "Big", half = "Half width", line = "Line" }
 local SIZE_TIP = { large = "A big number with the last 10 minutes and how you usually do here.",
   half = "Two side by side.", line = "One line, full width." }
@@ -1232,6 +1387,8 @@ function Boards.TileMenu(anchor, board, i)
         M.SetDisplay(tile, d)
         Boards.Refresh(board.id, true)
       end }
+      -- (HC-63) only the displays that fit the reading (an odometer counts, a mix needs members)
+      if not M.DisplayFits(tile, d) then displays[#displays] = nil end
     end
     items[#items + 1] = { text = L["Display"], sub = displays }
     local sizeList = M.SizeChoices(tile)

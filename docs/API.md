@@ -297,7 +297,7 @@ survives `/reload`), `HC:IsActive()`, `HC:FormatMoney(c)`, `HC:FormatDuration(s)
 **Board presets (packs, 2026-11-19).** `HC:RegisterBoardPreset(key, def)` (check `HC:Supports("boardPresets")`): `key`
 namespaced (`"hcstats:caster"`), `def = { name, mini, tiles = { { reading, scope, calc, display, size, extras, arg },
 ... } }` (HC-51, DESIGN §16.9): `scope` defaults to `"run"`, the board's timer; `calc` to the reading's default;
-`display` (`"number"`, `"bar"`, `"gauge"`) to `"number"`; `size` (`"large"`, `"half"`, `"line"`) to `"line"`; a large
+`display` (`"number"`, `"bar"`, `"gauge"`, `"odometer"` for a count or distance total, `"mix"` for a reading with a small `enum` parameter: HC-63) to `"number"`; `size` (`"large"`, `"half"`, `"line"`) to `"line"`; a large
 number gets `extras = { sparkline = true, vsUsual = true }` unless the tile lists its own (`{ "sparkline" }`). Bars and
 gauges are drawn as lines whatever the size. A tile's `style` of before HC-51 is still read: hero = large number with
 both extras, grid = half number, row = line number, bar = line bar, gauge = line gauge. A tile naming an alias

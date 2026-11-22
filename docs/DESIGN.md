@@ -1378,3 +1378,22 @@ points: §16.7.6.
 - **Not built:** an arrow on the mini strip; the badge on half or line tiles; a separate Extras menu.
 - Specs: `tests/trend_spec.lua` (the value, the band and signs, not before settled, where it fits, the tile and its
   fallback, the badge's rules, the badge drawn on screen through the tile menu).
+
+#### As built (HC-63 a and b, 2026-11-22): the odometer and the mix
+
+Decided for the Traveler pack (its DESIGN §5, §8.7: built at the start of its phase 1). Two more values of a
+tile's `display`, each a full-width row of its own, offered in the Display menu only where they fit:
+
+- **Odometer** (HC-33's leftover): the total as digit wheels under the title, zero-padded to 6, at most 9 (past
+  that, or for a state such as "off", the tile writes its text). A digit that changes rolls up into place over
+  0.3 s (two font strings in a clipping frame per wheel; the row's `OnUpdate` runs only while a wheel rolls). The
+  total only (a per hour tile moves to the total); offered for `number` and `distance` readings ("yd" after the
+  wheels), not money or durations, which have units of their own.
+- **Mix**: one bar split into a part per member of the reading's small `enum` dimension, largest first, five parts
+  and then "other" (grey); under it each part's share in its colour ("run 45%  mounted 30%"). Members: the tile's
+  set for a set reading (HC-60), else the members counted so far; each part is the reading read for that one
+  member over the tile's scope. The total only; not for big dimensions (too many members) or readings without a
+  parameter. `BoardModel.MixParts` returns the parts.
+- A display the reading no longer fits draws as a number. No live pass-through (both need arithmetic).
+- Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
+  screen, the shares written, the Display menu).

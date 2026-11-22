@@ -32,12 +32,32 @@ local M = {}
 ns.BoardModel = M
 
 --- Displays, in menu order, with the sizes each draws and the calcs it accepts (DESIGN §16.9's table).
-M.DISPLAY_ORDER = { "number", "bar", "gauge" }
+M.DISPLAY_ORDER = { "number", "bar", "gauge", "odometer", "mix" }
+-- (HC-63) odometer: rolling digit wheels for a total, for counts and distances; mix: one bar split into a part per
+-- member of the reading's small enum dimension (the tile's set when it has one), with each part's share
+local ODO_FORMATTERS = { number = true, distance = true }
+local function smallEnum(r)
+  if not (r and r.param and r.param.type == "enum") then return false end
+  local c = r.counter and ns.counters[r.counter]
+  for _, d in ipairs(c and c.bigDims or {}) do if d == r.param.dim then return false end end
+  return true
+end
 M.DISPLAYS = {
   number = { sizes = { "large", "half", "line" }, calcs = { total = true, perHour = true, recent = true, trend = true } },
   bar = { sizes = { "line" }, calcs = { total = true, perHour = true }, needsTarget = true },
   gauge = { sizes = { "line" }, calcs = { total = true, perHour = true, recent = true }, needsTarget = true },
+  odometer = { sizes = { "line" }, calcs = { total = true },
+    fits = function(r) return r ~= nil and ODO_FORMATTERS[r.formatter or "number"] == true end },
+  mix = { sizes = { "line" }, calcs = { total = true }, fits = smallEnum },
 }
+
+--- Can the tile's reading be drawn with this display? (HC-63: an odometer counts, a mix needs members.)
+function M.DisplayFits(tile, display)
+  local d = M.DISPLAYS[display]
+  if not d then return false end
+  if not d.fits then return true end
+  return d.fits(ns.readings[tile.reading]) and true or false
+end
 M.SIZE_ORDER = { "large", "half", "line" }
 M.SIZES = { large = true, half = true, line = true }
 --- sparkline: the last minutes; vsUsual: "+18% vs your average here" (past runs in this zone); trend (HC-53): a badge,
@@ -740,7 +760,12 @@ function M.TileCalc(tile)
   return ns.DefaultCalc(ns.readings[tile.reading])
 end
 
-function M.TileDisplay(tile) return M.DISPLAYS[tile.display] and tile.display or "number" end
+function M.TileDisplay(tile)
+  if not M.DISPLAYS[tile.display] then return "number" end
+  -- a display the reading no longer fits (a pack changed it, or a preset said so) draws as a number
+  if M.DISPLAYS[tile.display].fits and not M.DisplayFits(tile, tile.display) then return "number" end
+  return tile.display
+end
 function M.TileSize(tile) return M.SIZES[tile.size] and tile.size or "line" end
 
 --- Calcs the tile can pick: { { calc, ok, why } }, in menu order. Greyed, with why: "display" (a bar takes no
@@ -789,7 +814,7 @@ end
 --- to per hour (a bar takes no recent: M.FitCalc).
 function M.SetDisplay(tile, display)
   local d = M.DISPLAYS[display]
-  if tile.kind ~= "reading" or not d then return false end
+  if tile.kind ~= "reading" or not d or not M.DisplayFits(tile, display) then return false end
   tile.display = display
   local fits = false
   for _, s in ipairs(d.sizes) do if s == M.TileSize(tile) then fits = true end end
@@ -902,7 +927,7 @@ end
 ---------------------------------------------------------------------------
 
 M.HEIGHT = { run = 24, hero = 74, heroCompare = 88, grid = 34, row = 18, bar = 26, gauge = 38, splits = 18, label = 18,
-  strip = 22 }
+  strip = 22, odometer = 44, mix = 40 }
 M.PAD = 6
 
 --- How a reading tile is drawn (the layout row's kind): "hero" (a large number), "grid" (a half number), "row" (a
@@ -910,6 +935,7 @@ M.PAD = 6
 --- and without a target it is a line number (no empty bars or dials, HC-33, statement 17b).
 function M.Footprint(tile)
   local d = M.TileDisplay(tile)
+  if d == "odometer" or d == "mix" then return d end
   if M.NEEDS_TARGET[d] then
     if M.TileTarget(tile) then return d end
     return "row"
@@ -1145,6 +1171,76 @@ function M.TileValue(tile, board, calc)
   local o = optsBuf
   o.arg, o.who, o.calc = tile.arg, tile.who, calc
   return HC:Reading(tile.reading, tile.scope, o)
+end
+
+---------------------------------------------------------------------------
+-- The odometer and the mix (HC-63)
+---------------------------------------------------------------------------
+
+M.ODO_MIN, M.ODO_MAX = 6, 9          -- wheels: at least 6 (zeros in front), at most 9 (past that: the text)
+
+--- The odometer's wheels for a value: a string of digits, zero-padded to M.ODO_MIN; nil when it can't be shown on
+--- wheels (no value, negative, or more than M.ODO_MAX digits).
+function M.OdometerDigits(v)
+  if type(v) ~= "number" or v < 0 or v ~= v then return nil end
+  local s = format("%.0f", floor(v))
+  if #s > M.ODO_MAX then return nil end
+  if #s < M.ODO_MIN then s = string.rep("0", M.ODO_MIN - #s) .. s end
+  return s
+end
+
+--- The unit the odometer writes after its wheels: "yd" for a distance, else none.
+function M.OdometerUnit(tile)
+  local r = ns.readings[tile.reading]
+  return r and r.formatter == "distance" and "yd" or nil
+end
+
+M.MIX_PARTS = 5                      -- the largest parts, then "other"
+local singles = {}                   -- member -> { member }: a one-member set, reused at every redraw
+local mixBuf = {}
+
+--- The mix's parts over the tile's scope, largest first: { { arg, label, v, frac }, ... } (at most M.MIX_PARTS, the
+--- rest summed as one part with arg = false), and the total. Members: the tile's set (a set reading), else the
+--- members counted so far. Parts at 0 are left out; nil when nothing counts yet. The returned table is reused.
+function M.MixParts(tile, board)
+  local r = ns.readings[tile.reading]
+  if not smallEnum(r) then return nil end
+  local members = {}
+  if r.param.multi then
+    members = M.TileSet(tile) or {}
+  else
+    for _, c in ipairs(M.MemberChoices(tile.reading, true)) do members[#members + 1] = c.arg end
+  end
+  local saved, savedCalc = tile.arg, tile.calc
+  tile.calc = nil
+  for i = #mixBuf, 1, -1 do mixBuf[i] = nil end
+  local total = 0
+  for _, m in ipairs(members) do
+    local arg = m
+    if r.param.multi then
+      arg = singles[m]
+      if not arg then arg = { m }; singles[m] = arg end
+    end
+    tile.arg = arg
+    local v = M.TileValue(tile, board, "total")
+    if type(v) == "number" and v > 0 then
+      mixBuf[#mixBuf + 1] = { arg = m, label = ns.MemberLabel(r, m), v = v }
+      total = total + v
+    end
+  end
+  tile.arg, tile.calc = saved, savedCalc
+  if total <= 0 then return nil end
+  table.sort(mixBuf, function(a, b)
+    if a.v ~= b.v then return a.v > b.v end
+    return tostring(a.arg) < tostring(b.arg)
+  end)
+  if #mixBuf > M.MIX_PARTS + 1 then
+    local rest = 0
+    for i = #mixBuf, M.MIX_PARTS + 1, -1 do rest = rest + mixBuf[i].v; mixBuf[i] = nil end
+    mixBuf[#mixBuf + 1] = { arg = false, label = "other", v = rest }
+  end
+  for _, p in ipairs(mixBuf) do p.frac = p.v / total end
+  return mixBuf, total
 end
 
 ---------------------------------------------------------------------------

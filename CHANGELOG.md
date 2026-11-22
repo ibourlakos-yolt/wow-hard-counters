@@ -7,6 +7,10 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
+### New
+- Two more ways to draw a tile (Display, in a tile's menu while editing): **Odometer**, rolling digits for a
+  total, and **Mix**, one bar split by kind with each part's share, for readings that count by kind.
+
 ### Fixes
 - Per-hour numbers, board clocks and gold counts no longer stop when the saved history can't be written: they froze
   for the rest of the session while XP kept counting (gold per hour and time to level read "-"). History missed in
