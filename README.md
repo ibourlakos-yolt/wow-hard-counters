@@ -98,8 +98,8 @@ displays, with a public API for packs.
   version everywhere), `sync-libs.ps1`, `decode-report.ps1`, `draw-icon.py` (the icon and logo, drawn in code; WSL,
   Pillow). Development setup: [docs/DEV_SETUP.md](docs/DEV_SETUP.md)
 - CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)): busted and luacheck on PUC Lua 5.1 for the engine and
-  each pack on every push; a `v*` tag builds the zip and attaches it to a GitHub release (a pre-release for alpha,
-  beta and rc versions).
+  each pack on every push; a `v*` tag builds the zip, attaches it to a GitHub release (a pre-release for alpha,
+  beta and rc versions) and uploads the same zip to CurseForge (`tools/curseforge.ps1`).
 - WoW API we call: [docs/WOW_API.md](docs/WOW_API.md); API verdicts: [docs/api-surface.md](docs/api-surface.md);
   research: [docs/research.md](docs/research.md)
 - Open work and bugs: [GitHub Issues](https://github.com/ibourlakos-yolt/wow-hard-counters/issues). Design notes

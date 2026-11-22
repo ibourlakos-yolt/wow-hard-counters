@@ -1,6 +1,8 @@
 # CI: busted and luacheck on PUC Lua 5.1 for the engine and each pack, on every push and pull request.
 # A tag vX.Y.Z[-alphaN|-betaN|-rcN] also builds the bundle zip (tools/package.ps1) and attaches it to a GitHub
-# release, marked pre-release when the version has a suffix. No CurseForge upload here (yet).
+# release, marked pre-release when the version has a suffix, then uploads the same zip to CurseForge
+# (tools/curseforge.ps1, the CF_API_TOKEN secret). Run by hand (workflow_dispatch), it checks the CurseForge game
+# version and uploads nothing.
 # The test job mirrors the local setup (docs/DEV_SETUP.md: Ubuntu 22.04 in WSL, lua5.1 from apt, busted, luacheck);
 # each .busted says lua = "lua5.1", so busted re-runs itself under that interpreter.
 name: CI
@@ -86,6 +88,13 @@ jobs:
           [IO.File]::WriteAllText("$PWD\release-notes.md", $notes, (New-Object System.Text.UTF8Encoding($false)))
           [IO.File]::AppendAllText($env:GITHUB_ENV, "VERSION=$version`n")
 
+      # Before anything is published: the token works and CurseForge has this game version.
+      - name: CurseForge knows the game version
+        shell: powershell
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: .\tools\curseforge.ps1 -Check
+
       - name: Build the zip
         shell: powershell
         run: .\tools\package.ps1
@@ -117,3 +126,22 @@ jobs:
           if ($env:VERSION -match '-(alpha|beta|rc)\d+$') { $flags += '--prerelease' }
           gh release create $env:TAG "dist\HardCounters-$env:VERSION.zip" --title "Hard Counters $env:VERSION" --notes-file release-notes.md @flags
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed ($LASTEXITCODE)" }
+
+      - name: Upload to CurseForge
+        shell: powershell
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: .\tools\curseforge.ps1 -Version $env:VERSION -Zip "dist\HardCounters-$env:VERSION.zip" -Notes release-notes.md
+
+  curseforge-check:
+    name: CurseForge game version (by hand)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: The token works and CurseForge has this game version
+        shell: powershell
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: .\tools\curseforge.ps1 -Check

@@ -46,7 +46,7 @@
 | In-game inspection | `/dump`, `/fstack`, `/etrace`, `/tinspect`. Not DevTool (archived). |
 | Loading code into the game | Directory junctions (`mklink /J`, no admin needed) from `_forever_\Interface\AddOns\<Addon>` to the repo's addon folder; `/reload` to pick up changes |
 | Getting results back | Claude reads `WTF\Account\<account>\SavedVariables\<Addon>.lua` directly after a logout or `/reload`. **There are two account folders**, so say which one was used. Screenshots for UI. |
-| Packaging | `tools/package.ps1` per repo builds a zip in `dist/` for hand-shipping. No store publishing. |
+| Packaging | `tools/package.ps1` per repo builds a zip in `dist/`. On a tag, CI attaches it to a GitHub release and `tools/curseforge.ps1` uploads the same zip to CurseForge (the `CF_API_TOKEN` Actions secret; `-DryRun` locally shows what would be sent). |
 | API references | warcraft.wiki.gg, Gethe/wow-ui-source **`forever` branch**, Ketho/BlizzardInterfaceResources `forever` branch (slightly stale), `/api` in game (unverified on Forever) |
 
 ## One-time setup
