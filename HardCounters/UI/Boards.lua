@@ -604,6 +604,8 @@ local function drawRow(w, board)
   end
 end
 
+local STRIP_LABEL = "|cffa8a8a8"
+
 --- The strip's text and the state its dot shows (only on the board's timer: the dot pauses nothing else, HC-55).
 local function stripText(board)
   local parts = {}
@@ -613,7 +615,8 @@ local function stripText(board)
   if hi then
     local tile = board.tiles[hi]
     local v, t, _, vst = M.TileValue(tile, board)
-    parts[#parts + 1] = valueText(t, vst)
+    -- the hero's name first, dimmed: a fresh Pocket board read "- 0:09" and nothing said what it counts (2026-11-22)
+    parts[#parts + 1] = STRIP_LABEL .. M.TileLabel(tile, board) .. "|r " .. valueText(t, vst)
     local avg = compareFor(board, hi)
     local _, pct = M.CompareText(v, avg)
     if pct then parts[#parts + 1] = M.PctText(pct) end

@@ -239,6 +239,9 @@ end
 --- A new period from zero, counting.
 function Win.Restart(w)
   local now = W.now()
+  -- the old base goes first: Attach flushes, and a flush folds the recent rate of every window still counting
+  -- (ns.FoldRecent), which would seed it from the old period and read the new base as a loss
+  w.base, w.baseChar = nil, nil
   w.acc, w.max, w.late, w.ew = {}, nil, nil, nil
   w.start, w.stop, w.pausedSeconds, w.pausedAt, w.lastSeen = now, nil, 0, nil, now
   w.state = "running"
@@ -299,11 +302,13 @@ end
 --- stopped one becomes paused at zero.
 function Win.Reset(w)
   local now = W.now()
+  local counting = w.base ~= nil
+  w.base, w.baseChar = nil, nil   -- (as in Restart: the flush in Attach must not fold against the old base)
   w.acc, w.max, w.late, w.ew = {}, nil, nil, nil
   w.start, w.stop, w.pausedSeconds, w.lastSeen = now, nil, 0, now
   if w.state == "running" then
     w.pausedAt = nil
-    if w.base then Win.Attach(w, true) end
+    if counting then Win.Attach(w, true) end
   else
     w.state = "paused"
     w.pausedAt = now
@@ -472,6 +477,13 @@ end
 --- board reads on every write).
 local function fold(t, x, a)
   local d = a - t.a
+  if d < -1e-3 or x < t.x - 1e-6 * (1 + math.abs(t.x)) then   -- (not a rounding at a pause: banking re-adds)
+    -- the window's active time or total went back (a flow never does): the entry was folded against another
+    -- period (a Reset before 0.3.0 saved such entries). Start it again from the window's average.
+    local n = newEntry(x, a, t.n)
+    t.s, t.x, t.a, t.r, t.ra = n.s, n.x, n.a, nil, nil
+    return
+  end
   local half = 1
   if d > 0 then
     local k = exp(-d / TAU)

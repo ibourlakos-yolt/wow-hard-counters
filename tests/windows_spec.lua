@@ -299,7 +299,8 @@ describe("boards on screen", function()
       assert.is_true(f:IsShown())
       assert.are.equal(1.2, f:GetScale())
       assert.is_true(f.strip:IsShown())                 -- mini: the one-line strip
-      assert.truthy(f.strip.text:GetText())             -- the hero (no run open: "-")
+      -- the hero, named (no value yet: "-"): a fresh strip read "- 0:09" with nothing saying what it counts
+      assert.truthy(f.strip.text:GetText():find("Net gold/h|r -", 1, true))
       assert.is_nil(B.Frame(list[2].id) and B.Frame(list[2].id):IsShown() or nil)
       -- /hc panel full: the full board, its height following its tiles
       _G.SlashCmdList.HARDCOUNTERS("panel full")

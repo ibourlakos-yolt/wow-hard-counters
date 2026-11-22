@@ -7,6 +7,15 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
+### Fixed
+- **Recent rates went negative after Reset.** Resetting a board's timer while it ran could leave its recent rates
+  (e.g. "XP/h recent") hugely negative, with a trend like "1087% slower", for hours. Reset now starts them from
+  zero, and boards already showing a negative rate correct themselves on their own.
+
+### Changed
+- **A board in mini mode names what it shows** ("Gold/h 12g 40s/h 0:42"): a fresh Pocket board used to read only
+  "- 0:09".
+
 ## 0.2.0-beta1 (2026-11-22)
 
 The first beta, **still experimental**: things will change, and so may the pack API. Everything from the alpha, plus

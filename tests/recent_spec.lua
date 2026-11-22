@@ -164,6 +164,44 @@ describe("recent on a board (HC-52)", function()
     assert.is_nil((M.TileValue(t, b)))                                                   -- under a minute again
   end)
 
+  -- Leveling board, 2026-11-22: "XP/h recent -213,533/h, 1087% slower" after a Reset while the timer ran. The reset
+  -- cleared the recent rate, then the flush inside Attach folded it again against the old base (the old period's
+  -- totals and active time); the new base then read as a huge loss that never faded.
+  for _, how in ipairs({ "ControlAll", "Control" }) do
+    it("starts over at zero on a Reset while running (" .. how .. ")", function()
+      local env = boot()
+      local HC, M, ns = env.HC, env.M, env.ns
+      local b = M.Create(nil, { name = "Lvl" })
+      local t = M.AddReading(b, "hc:xpgained", { calc = "recent", size = "large" })
+      for _ = 1, 30 do env:advance(60); HC:Emit("hc:xp", 500, "none", 1429); ns.FoldRecent() end
+      assert.are.equal("running", M.BoardWindow(b).state)
+      if how == "ControlAll" then M.ControlAll(b, "reset") else M.Control(M.BoardWindow(b), "reset") end
+      ns.FoldRecent()
+      for _ = 1, 3 do env:advance(60); HC:Emit("hc:xp", 500, "none", 1429); ns.FoldRecent() end
+      local v = M.TileValue(t, b)
+      assert.is_number(v)
+      assert.is_true(v > 0)
+      assert.is_near(30000, v, 3000)                                  -- about the new period's average (1,500 in 3 min)
+      local trend = M.TileValue(t, b, "trend")
+      assert.is_true(trend == nil or trend > -100)
+    end)
+  end
+
+  it("heals a recent rate saved ahead of its window (active time or total went back)", function()
+    local env = boot()
+    local HC, M, ns = env.HC, env.M, env.ns
+    local b = M.Create(nil, { name = "Lvl" })
+    local t = M.AddReading(b, "hc:xpgained", { calc = "recent", size = "large" })
+    for _ = 1, 3 do env:advance(60); HC:Emit("hc:xp", 500, "none", 1429); ns.FoldRecent() end
+    local e = M.BoardWindow(b).ew["hc:xp"]
+    e.a, e.x, e.s = 11689, 40000, 9000                                -- what a 0.2.0 Reset left in saved data
+    env:advance(60); HC:Emit("hc:xp", 500, "none", 1429)
+    local v = M.TileValue(t, b)
+    assert.is_true(v > 0)
+    local per = M.TileValue(t, b, "perHour")
+    assert.is_near(per, v, per * 0.05)                                -- started again from the window's average
+  end)
+
   it("greys recent where it can't be, and falls back to per hour when the tile moves there", function()
     local env = boot()
     local M = env.M
