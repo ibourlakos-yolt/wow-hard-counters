@@ -55,7 +55,24 @@ ns.SCOPES = SCOPES
 -- scopes served by storage: the grain whose open bucket answers them ("thisweek" = the player's week choice)
 local SCOPE_GRAIN = { today = "day", week = "thisweek", month = "month", year = "year", lifetime = "lifetime" }
 ns.SCOPE_GRAIN = SCOPE_GRAIN
-local FORMATTERS = { money = true, duration = true, number = true, percent = true }
+-- distance: yards; speed: yards a second, shown as yd/s, or by speedpct as a percentage of the 100% run speed
+-- (TR-10; the Traveler decisions of 2026-11-22: yards only, speed in both forms)
+local FORMATTERS = { money = true, duration = true, number = true, percent = true, distance = true, speed = true,
+  speedpct = true }
+ns.RUN_SPEED = 7                                   -- yards a second: 100% speed, the character sheet's convention
+
+--- Display text of a value for a formatter (counters, views and readings): "12g 3s 4c", "1:02:03", "5.2%",
+--- "1,234 yd", "7.0 yd/s", "115%" (speedpct: yd/s against 7 yd/s), else a number with thousands separators.
+function ns.FormatValue(f, v)
+  if type(v) ~= "number" then return "-" end
+  if f == "money" then return U.money(v)
+  elseif f == "duration" then return U.duration(v)
+  elseif f == "percent" then return U.number(v, 1) .. "%"
+  elseif f == "distance" then return U.number(v) .. " yd"
+  elseif f == "speed" then return U.number(v, 1) .. " yd/s"
+  elseif f == "speedpct" then return U.number(v * 100 / ns.RUN_SPEED) .. "%" end
+  return U.number(v)
+end
 -- min, max: a stock's lowest and highest level over the scope, or a flow's smallest and largest single value where
 -- something keeps it; avg: a flow's sum / count (HC-27)
 local MEASURES = { sum = true, count = true, last = true, min = true, max = true, avg = true }
@@ -146,7 +163,7 @@ end
 
 --- def = { title, counter | compute, tracker, measure ("sum"|"count"|"last"), minus (a second counter subtracted),
 ---   per = "activeHour", scopes = { ... }, best (the run's best single value, from runLive.max; run scope only),
----   formatter ("money"|"duration"|"number"|"percent"), headline, order, description, inputs = { readingId, ... }
+---   formatter ("money"|"duration"|"number"|"percent"|"distance"|"speed"|"speedpct"), headline, order, description, inputs = { readingId, ... }
 ---   (what a computed reading reads, for the Trackers window), rateTitle (the per-hour title; default title .. "/h"),
 ---   calcs = { "total", "perHour" } (a computed reading's: which calcs it answers; default { "total" }) }.
 --- Or an alias: def = { aliasOf = readingId, calc = "perHour", title?, headline?, order? } (registered after its
@@ -174,7 +191,7 @@ function HC:RegisterReading(id, def)
   if def.minus ~= nil and type(def.minus) ~= "string" then misuse("RegisterReading('%s'): minus must be a counter id", id) end
   if def.measure ~= nil and not MEASURES[def.measure] then misuse("RegisterReading('%s'): measure must be sum, count, last, min, max or avg", id) end
   if def.formatter ~= nil and not FORMATTERS[def.formatter] then
-    misuse("RegisterReading('%s'): formatter must be money, duration, number or percent", id)
+    misuse("RegisterReading('%s'): formatter must be money, duration, number, percent, distance, speed or speedpct", id)
   end
   local per = def.per
   if per ~= nil and per ~= "activeHour" then misuse("RegisterReading('%s'): per must be \"activeHour\"", id) end
@@ -510,9 +527,10 @@ function ns.ReadingLive(r, arg)
 end
 
 -- Same decimals as the formatters out of combat (percent: U.number(v, 1)), so the text doesn't jump at combat edges.
-local LIVE_FORMAT = { percent = "%.1f%%", number = "%.0f", duration = nil, money = nil }
---- The format a display passes a live value through: the reading's `liveFormat`, or one for its formatter (money and
---- durations need arithmetic to format: none, so no pass-through for them).
+local LIVE_FORMAT = { percent = "%.1f%%", number = "%.0f", distance = "%.0f yd", speed = "%.1f yd/s", duration = nil,
+  money = nil, speedpct = nil }
+--- The format a display passes a live value through: the reading's `liveFormat`, or one for its formatter (money,
+--- durations and speedpct need arithmetic to format: none, so no pass-through for them).
 function ns.LiveFormat(r)
   if not r then return nil end
   if r.liveFormat then return r.liveFormat end
@@ -735,12 +753,8 @@ end
 --- perHour and recent, except on a computed reading: its formatter says what it is).
 function ns.FormatReading(r, v, calc)
   if v == nil then return "-" end
-  local text
   if calc == "trend" then return ns.TrendText(v) end
-  if r.formatter == "money" then text = U.money(v)
-  elseif r.formatter == "duration" then text = U.duration(v)
-  elseif r.formatter == "percent" then text = U.number(v, 1) .. "%"
-  else text = U.number(v) end
+  local text = ns.FormatValue(r.formatter, v)
   if RATE_CALC[calc or ns.DefaultCalc(r)] and not r.compute then text = text .. "/h" end
   return text
 end

@@ -1343,6 +1343,7 @@ function M.SetTarget(tile, text)
   if not n or n <= 0 then tile.target = nil; return true end
   local r = ns.readings[tile.reading]
   if r and r.formatter == "money" then n = n * 10000 end
+  if r and r.formatter == "speedpct" then n = n * ns.RUN_SPEED / 100 end   -- typed as a percentage, kept in yd/s
   tile.target = n
   return true
 end

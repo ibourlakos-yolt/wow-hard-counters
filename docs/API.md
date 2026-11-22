@@ -43,7 +43,8 @@ local today = HC:Query({ counter = "mypack:fish", grain = "day" }).total
 | `HC:RegisterDisplay(id, { title, accepts, create(parent, opts) })` | Display plugins; `HC:CreateDisplay(id, parent, opts)`, `HC:Displays()`. |
 | `HC:RegisterWindow(id, def)`, `HC:RegisterSlash(name, fn, help)` | A pack's windows and `/hc` subcommands; see §9. |
 
-**Hard Counters counter fields:** `title`, `category`, `icon`, `formatter` (`"money"`, `"duration"`, `"number"`),
+**Hard Counters counter fields:** `title`, `category`, `icon`, `formatter` (`"money"`, `"duration"`, `"number"`,
+`"distance"`, `"speed"`, `"speedpct"`: as for readings, below),
 `capture = { mode, source }`, `accuracy` (`"exact"|"estimate"|"baseline"`),
 `feasibility = { status = "feasible"|"degraded"|"infeasible"|"unverified", note, ref }`,
 `runBreakdowns = { dim, ... }` (the counter's odometer keeps a total per member of these dimensions, so runs and
@@ -236,7 +237,7 @@ alias's calc when the alias is registered. Basics' `hc:goldph`, `hc:netph`, `hc:
 | `stale` | `function(arg) return isStale, word end` (HC-28): the value is the last one read, not the current one (a stat that is secret in combat). The value is still returned, with state `"stale"` and `word` as a fifth return ("in combat"); tiles show it greyed with the word after the title. Asked only when there is a value. The pack keeps the last value itself (a `compute` returns it); a stock's `now` is its last observation anyway |
 | `live` | `function(arg) return <the game's value> end` (CS-9, check `HC:Supports("livePassThrough")`): for a reading that goes `stale` because the game keeps the value secret, the raw value. Boards hand it straight to a plain tile's font string (`SetFormattedText(format, value)`) while the reading is stale, so the tile stays live in combat with no mark; bars, gauges, account tiles and other scopes keep the stale value. `liveFormat` (default `"%.1f%%"` for `percent`, `"%.0f"` for `number`; none for money and durations: no thousands separators either way). `HC:ReadingLive(id[, arg])` → value, format for a pack's own display: pass both to a widget and do nothing else with the value. `HC:Reading` never returns it |
 | `param` | `{ dim = "faction", type = "enum"\|"zone"\|"item"\|"faction", label = function(member) return text end }`: the reading shows **one member** of that dimension, chosen by whoever asks: `HC:Reading(id, scope, arg)`, or the tile's `arg` (DESIGN §16.4). Put `%s` in `title` for the member's label ("%s rep"). `minus` reads the same member; `per = "activeHour"` divides by all active time, or by the time in that zone when `dim = "zone"`. A `compute` gets the argument as its third parameter. v1: sums only |
-| `formatter` | `"money"`, `"duration"`, `"number"`, `"percent"`; per-hour readings get "/h" |
+| `formatter` | `"money"`, `"duration"`, `"number"`, `"percent"`, `"distance"` (yards: "1,234 yd"), `"speed"` (yards a second: "7.0 yd/s"), `"speedpct"` (a value in yards a second shown as a percentage of the 100% run speed, 7 yd/s, the character sheet's convention: 8.05 reads "115%"; a tile's target is typed as a percentage). For a speed in both forms, register two readings on the same value. Per-hour readings get "/h". Live pass-through formats: `"%.0f yd"` for distance, `"%.1f yd/s"` for speed, none for speedpct (TR-10) |
 | `tracker`, `title`, `description`, `headline`, `order` | `description` is one line shown in tooltips and the Trackers window: say what the number counts |
 
 | Scope | Where the number comes from | Needs history |

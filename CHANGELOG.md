@@ -18,6 +18,10 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 - The Hard Counters window's tabs show their whole name ("Character Stats", "Diagnostics"); longer names were cut
   short with "...".
 
+### Developer notes
+- Readings and counters take three more formatters: `distance` (yards), `speed` (yards a second) and `speedpct`
+  (yards a second shown as a percentage of the 100% run speed, 7 yd/s).
+
 ## 0.1.0-alpha1 (2026-11-21)
 
 The first experimental build: Hard Counters, Farmer, Character Stats and Diagnostics in one download.

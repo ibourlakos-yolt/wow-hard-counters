@@ -63,6 +63,36 @@ describe("readings", function()
     assert.has_error(function() HC:RegisterReading("t:x", { counter = "t:gold", per = "minute" }) end)
     assert.has_error(function() HC:RegisterReading("t:x", { counter = "t:gold", best = true, scopes = { "session" } }) end)
     assert.has_error(function() HC:RegisterReading("bad", { counter = "t:gold" }) end)
+    assert.has_error(function() HC:RegisterReading("t:x", { counter = "t:gold", formatter = "miles" }) end)
+  end)
+
+  -- TR-10 (the Traveler decisions, 2026-11-22): distance in yards only; speed as yd/s or as a percentage of 7 yd/s
+  it("formats distance and speed: yards, yd/s, and percent of the 100% run speed", function()
+    local env = boot()
+    local HC, ns = env.HC, env.ns
+    HC:RegisterReading("t:dist", { title = "Distance", counter = "t:gold", formatter = "distance",
+      scopes = { "session" } })
+    HC:RegisterReading("t:speed", { title = "Speed", counter = "t:gold", formatter = "speed", scopes = { "session" } })
+    HC:RegisterReading("t:speedpct", { title = "Speed %", counter = "t:gold", formatter = "speedpct", scopes = { "session" } })
+    local r = ns.readings
+    assert.are.equal("12,345 yd", ns.FormatReading(r["t:dist"], 12345.4))
+    assert.are.equal("12,345 yd/h", ns.FormatReading(r["t:dist"], 12345.4, "perHour"))
+    assert.are.equal("7.0 yd/s", ns.FormatReading(r["t:speed"], 7))
+    assert.are.equal("100%", ns.FormatReading(r["t:speedpct"], 7))
+    assert.are.equal("115%", ns.FormatReading(r["t:speedpct"], 8.05))     -- the paladin's Pursuit of Justice, rank 2
+    assert.are.equal("-", ns.FormatReading(r["t:speedpct"], nil))
+    -- the value read through the API carries the text
+    env.HC:Emit("t:gold", 250, "loot")
+    local v, text = HC:Reading("t:dist", "session")
+    assert.are.equal(250, v)
+    assert.are.equal("250 yd", text)
+    -- live pass-through formats: yards and yd/s pass straight through; a percentage needs arithmetic, so none
+    assert.are.equal("%.0f yd", ns.LiveFormat(r["t:dist"]))
+    assert.are.equal("%.1f yd/s", ns.LiveFormat(r["t:speed"]))
+    assert.is_nil(ns.LiveFormat(r["t:speedpct"]))
+    -- counters and views use the same texts
+    assert.are.equal("1,234 yd", ns.FormatValue("distance", 1234))
+    assert.are.equal("-", ns.FormatValue("distance", nil))
   end)
 
   it("reads the login scope from memory, through a /reload, and starts over at a new login", function()

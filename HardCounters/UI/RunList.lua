@@ -30,9 +30,7 @@ end
 
 local function fmtValue(counterId, v)
   local c = ns.counters[counterId]
-  local f = c and c.formatter
-  if f == "money" then return U.money(v) elseif f == "duration" then return U.duration(v) end
-  return U.number(v)
+  return ns.FormatValue(c and c.formatter, v)
 end
 
 --- The summary card as text (shown in a window and copyable).

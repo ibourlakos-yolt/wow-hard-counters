@@ -19,8 +19,7 @@ local function formatValue(view, v)
   local def = HC:GetView(view) or {}
   local c = def.counter and ns.counters[def.counter]
   local f = def.formatter or (c and c.formatter)
-  local text
-  if f == "money" then text = U.money(v) elseif f == "duration" then text = U.duration(v) else text = U.number(v) end
+  local text = ns.FormatValue(f, v)
   if def.per == "activeHour" then text = text .. "/h" end
   return text
 end
@@ -59,7 +58,7 @@ local function tooltip(tt, onMinimap)
   if run then
     local active, _, state = HC:GetRunClock()
     tt:AddDoubleLine(run.label or ("#" .. run.id), state, 1, 1, 1, 1, 0.82, 0)
-    tt:AddDoubleLine(L["active"], ns.U.duration(active), 0.8, 0.8, 0.8, 1, 1, 1)
+    tt:AddDoubleLine(L["active"], U.duration(active), 0.8, 0.8, 0.8, 1, 1, 1)
     local hid = Wd.HeadlineId()
     if hid then
       local _, text, settled = HC:RunReading(hid)

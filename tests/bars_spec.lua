@@ -72,6 +72,15 @@ describe("targets and bars", function()
     -- the tile's own beats the reading's
     M.SetTarget(xp, "500")
     assert.are.equal(500, M.TileTarget(xp))
+    -- TR-10: a speed shown as a percentage takes its target as one, kept in yd/s
+    HC:RegisterReading("t:pace", { title = "Pace", scopes = { "now" }, compute = function() return 7 end,
+      formatter = "speedpct" })
+    local pace = M.AddReading(b, "t:pace", "bar")
+    M.SetTarget(pace, "200")
+    assert.are.equal(14, M.TileTarget(pace))
+    frac, text = M.Progress(pace)
+    assert.are.equal(0.5, frac)
+    assert.are.equal("100% / 200%", text)
   end)
 
   it("the bar display is a row of its own height; the leveling preset has the XP bar", function()
