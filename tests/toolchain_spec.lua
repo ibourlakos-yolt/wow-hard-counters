@@ -7,15 +7,17 @@ local ADDONS = {
   "HardCounters_Diagnostics/HardCounters_Diagnostics.toc",
   "packs/Farmer/HardCounters_Farmer/HardCounters_Farmer.toc",
   "packs/CharacterStats/HardCounters_CharacterStats/HardCounters_CharacterStats.toc",
+  "packs/Traveler/HardCounters_Traveler/HardCounters_Traveler.toc",
 }
 local WEBSITE = "https://github.com/ibourlakos-yolt/wow-hard-counters"
--- The one CurseForge project the zip is uploaded to (all four folders ship in it).
+-- The one CurseForge project the zip is uploaded to (all five folders ship in it).
 local CURSE_PROJECT_ID = "1820964"
 -- Lua files that carry the version as a string (tools\bump.ps1 writes them all).
 local VERSION_SOURCES = {
   { "HardCounters/Core/Init.lua", 'HC%.VERSION = "([^"]+)"' },
   { "packs/Farmer/HardCounters_Farmer/Farmer.lua", 'ns%.VERSION = "([^"]+)"' },
   { "packs/CharacterStats/HardCounters_CharacterStats/Stats.lua", 'ns%.VERSION = "([^"]+)"' },
+  { "packs/Traveler/HardCounters_Traveler/Traveler.lua", 'ns%.VERSION = "([^"]+)"' },
 }
 
 describe("toolchain", function()

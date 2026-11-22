@@ -1,0 +1,16 @@
+## Interface: 16001
+## Title: Hard Counters: Traveler
+## Notes: Count how you travel: distance on foot, mounted, swimming, by flight path and boat; blinks, teleports, jumps, falls and corpse runs.
+## Author: Ioannis (John) Bourlakos
+## Version: 0.1.1-dev
+## X-License: MIT
+## X-AI-Assisted: Claude (Anthropic), via Claude Code
+## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters
+## X-Curse-Project-ID: 1820964
+## Group: HardCounters
+## IconTexture: Interface\AddOns\HardCounters\Media\Icon
+## Dependencies: HardCounters
+## X-Category: Data Broker
+
+Motion.lua
+Traveler.lua

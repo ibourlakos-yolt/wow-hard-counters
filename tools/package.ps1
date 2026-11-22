@@ -1,6 +1,7 @@
 # Build the Hard Counters bundle zip in dist\ (no store publishing): one zip, every addon folder that ships.
 #   dist\HardCounters-<version>.zip   HardCounters\ (with Libs\), HardCounters_Diagnostics\, HardCounters_Farmer\,
-#                                     HardCounters_CharacterStats\ (each at the zip root, as WoW's AddOns wants them)
+#                                     HardCounters_CharacterStats\, HardCounters_Traveler\ (each at the zip root, as
+#                                     WoW's AddOns wants them)
 # The version comes from "## Version:" in HardCounters\HardCounters.toc; the build fails if any shipped TOC says
 # otherwise, or if the embedded LibGranaryDB is not an exact copy of ..\LibGranaryDB (when that folder exists).
 # Entries use forward slashes (Windows PowerShell's Compress-Archive writes backslashes, which break other unzippers).
@@ -15,6 +16,7 @@ $folders = [ordered]@{
     'HardCounters_Diagnostics'    = 'HardCounters_Diagnostics'
     'HardCounters_Farmer'         = 'packs\Farmer\HardCounters_Farmer'
     'HardCounters_CharacterStats' = 'packs\CharacterStats\HardCounters_CharacterStats'
+    'HardCounters_Traveler'       = 'packs\Traveler\HardCounters_Traveler'
 }
 
 function Get-TocVersion([string]$name, [string]$src) {

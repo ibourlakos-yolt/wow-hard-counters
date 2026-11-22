@@ -8,6 +8,15 @@ the top. Developer notes (pack API changes) are at the end of an entry.
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
 ### New
+- **Hard Counters: Traveler**, a new pack (first edition): how far you travel and how. Distance on foot, mounted,
+  swimming, in a travel form, by flight path and by boat, plus blinks, hearthstones and teleports, measured from
+  your position 4 times a second, in fights too; a tile picks which ways of travel it adds up (On foot, Under my own
+  power, Everything but teleports, Everything, or tick your own). Time moving, average and top speed (in yards a
+  second or as % of run speed), Speed now, farthest without stopping, spacebar jumps, falls, time in the air,
+  corpse runs, spirit healer visits, the distance to your corpse while a ghost, and flights taken, flown and the
+  longest. Inside dungeons distance is an estimate, out of combat only. Ready-made **Trip** and **Flight log**
+  boards. Its trackers start off: switch on *Distance* and *Flights* in the Trackers tab. A new addon folder:
+  restart the game after updating (a `/reload` doesn't load it).
 - Two more ways to draw a tile (Display, in a tile's menu while editing): **Odometer**, rolling digits for a
   total, and **Mix**, one bar split by kind with each part's share, for readings that count by kind.
 

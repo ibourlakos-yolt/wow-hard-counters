@@ -16,9 +16,11 @@ $sites = [ordered]@{
     'HardCounters_Diagnostics\HardCounters_Diagnostics.toc'                      = '(?m)^(## Version:[ \t]*)\S+'
     'packs\Farmer\HardCounters_Farmer\HardCounters_Farmer.toc'                   = '(?m)^(## Version:[ \t]*)\S+'
     'packs\CharacterStats\HardCounters_CharacterStats\HardCounters_CharacterStats.toc' = '(?m)^(## Version:[ \t]*)\S+'
+    'packs\Traveler\HardCounters_Traveler\HardCounters_Traveler.toc'             = '(?m)^(## Version:[ \t]*)\S+'
     'HardCounters\Core\Init.lua'                                                 = '(HC\.VERSION = ")[^"]+'
     'packs\Farmer\HardCounters_Farmer\Farmer.lua'                                = '(ns\.VERSION = ")[^"]+'
     'packs\CharacterStats\HardCounters_CharacterStats\Stats.lua'                 = '(ns\.VERSION = ")[^"]+'
+    'packs\Traveler\HardCounters_Traveler\Traveler.lua'                          = '(ns\.VERSION = ")[^"]+'
 }
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)

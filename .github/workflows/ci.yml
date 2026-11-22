@@ -26,6 +26,7 @@ jobs:
           - { name: engine, dir: . }
           - { name: Farmer, dir: packs/Farmer }
           - { name: CharacterStats, dir: packs/CharacterStats }
+          - { name: Traveler, dir: packs/Traveler }
     steps:
       - uses: actions/checkout@v5
 
@@ -96,7 +97,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [IO.Compression.ZipFile]::OpenRead("$PWD\dist\HardCounters-$env:VERSION.zip")
           try { $entries = $zip.Entries | ForEach-Object { $_.FullName } } finally { $zip.Dispose() }
-          $expected = 'HardCounters', 'HardCounters_CharacterStats', 'HardCounters_Diagnostics', 'HardCounters_Farmer'
+          $expected = 'HardCounters', 'HardCounters_CharacterStats', 'HardCounters_Diagnostics', 'HardCounters_Farmer', 'HardCounters_Traveler'
           $roots = $entries | ForEach-Object { ($_ -split '/')[0] } | Sort-Object -Unique
           if (Compare-Object $expected $roots) { throw "Top-level folders: $($roots -join ', ')" }
           foreach ($f in $expected) {

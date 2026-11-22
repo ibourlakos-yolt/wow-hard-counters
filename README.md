@@ -11,13 +11,14 @@ For **World of Warcraft: Forever** (Interface 16001).
 
 ## What you get
 
-One download, four addon folders. Turn off any pack you don't want in the game's AddOns list.
+One download, five addon folders. Turn off any pack you don't want in the game's AddOns list.
 
 | Folder | What it does |
 |---|---|
 | **Hard Counters** | The engine and the boards. Comes with the basics: gold earned, gold owned, net gold, gold per hour, XP gained, XP this level, rested XP, time to level. |
 | **Hard Counters: Farmer** | Counts what you farm: a money Ledger by source (loot, vendor, quests, mail, ...), items looted and their vendor value, your best drop, reputation gained, "*item* in bags" and "*faction* standing". |
 | **Hard Counters: Character Stats** | Your character sheet as readings: attributes, melee, ranged, spell and defence stats, weapon skills and Defense. Ready-made Caster, Melee, Hunter and Tank boards. |
+| **Hard Counters: Traveler** | Counts how you travel: distance on foot, mounted, swimming, by flight path and by boat, blinks and teleports (each tile picks which), time moving, average and top speed, speed now (in combat too), jumps, falls, time in the air, corpse runs and flights. Ready-made Trip and Flight log boards. |
 | **Hard Counters: Diagnostics** | A console for finding problems: log, live values, storage use, game API checks. On in alpha builds so reports are useful; turn it off in the AddOns list if you don't want it. |
 
 ## Getting started
@@ -92,7 +93,7 @@ displays, with a public API for packs.
 - Design: [docs/DESIGN.md](docs/DESIGN.md); trackers, history and boards: [docs/TRACKERS_AND_BOARDS.md](docs/TRACKERS_AND_BOARDS.md)
 - Public API for packs (experimental): [docs/API.md](docs/API.md); the pack contract: [docs/PACKS.md](docs/PACKS.md)
 - Layout: `HardCounters/` (engine, Basics, boards, embedded libraries), `HardCounters_Diagnostics/`, and the packs in
-  `packs/Farmer` and `packs/CharacterStats` (each with its own tests, lint and docs).
+  `packs/Farmer`, `packs/CharacterStats` and `packs/Traveler` (each with its own tests, lint and docs).
 - Tools: `tools\test.ps1`, `lint.ps1`, `link.ps1`, `link-sv.ps1`, `package.ps1` (the bundle zip), `bump.ps1` (one
   version everywhere), `sync-libs.ps1`, `decode-report.ps1`, `draw-icon.py` (the icon and logo, drawn in code; WSL,
   Pillow). Development setup: [docs/DEV_SETUP.md](docs/DEV_SETUP.md)

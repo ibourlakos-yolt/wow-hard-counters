@@ -68,9 +68,14 @@ Last updated: 2026-11-20.
 | `C_Map.GetPlayerMapPosition` / `GetBestMapForUnit` | 🟡 present | "AllowedWhenUntainted" |
 | Position inside instances | ⚠️ | Run 2: no usable `GetBestMapForUnit` in The Deadmines (the zone key fell back to the zone text); run 3: nil again in The Hall of Thanes. Position itself not probed |
 | `GetInstanceInfo()` instance ID inside a dungeon | ✅ | Run 3, third session: `type=party id=3065` in The Hall of Thanes; the zone key was `103065` (HC-13) |
-| `GetUnitSpeed` | ✅ out of combat / ⛔ in combat | Secret in combat (CS-1, and the 2026-11-21 travel probes); Azeroth Odometer estimates in combat for that reason. `C_PlayerInfo.GetGlidingInfo` present, unprobed |
+| `GetUnitSpeed` | ✅ out of combat / ⛔ in combat | Secret in combat (CS-1, and the 2026-11-21 travel probes); Azeroth Odometer estimates in combat for that reason. 2026-11-22: 5,920 plain reads out of combat, 1,323 secret in combat; run speed 7.00 and swim 4.72 on a character with no mount. `C_PlayerInfo.GetGlidingInfo` present, unprobed |
 | Does addon code run during loading screens? | ❓ | QuestieTrace's "frame heartbeat" probes exactly this |
-| Jump detection (`hooksecurefunc("JumpOrAscendStart")` or similar) | ❓ | Hooks under the new restrictions are untested |
+| Jump detection (`hooksecurefunc("JumpOrAscendStart")`) | ✅ fires | 2026-11-22: the secure post-hook fired for 131 presses on the ground, 41 in mid-air and 16 in water; 107 take-offs (`IsFalling` turning on) followed a press within 0.75 s, 131 had none (steps, ledges) |
+| `GetShapeshiftForm`, `GetShapeshiftFormInfo` | ✅ plain in combat / ⚠️ paladin auras are forms | 2026-11-22: a paladin read form 1 = Devotion Aura (spell 10291) and form 4 = Shadow Resistance Aura (19876) in and out of combat; `GetShapeshiftFormID` gave nil. A travel form must be known by its spell. No Crusader Aura seen |
+| Auras in combat (`C_UnitAuras.GetAuraDataByIndex`, `GetPlayerAuraBySpellID`) | ✅ out of combat / ⛔ in combat | 2026-11-22: by index errored 330 times of 330 in combat, by spell ID returned nil 330 of 330; 1,479 plain tables out of combat each |
+| Same-continent short jumps with no blink spell | ⚠️ noise | 2026-11-21/22: 12 jumps of 8-40 yards in one read on foot for a character with no blink or charge (knockbacks or corrections); 262 while carried (boats). So a blink needs its spell |
+| Taxi map (`C_TaxiMap.GetAllTaxiNodes(GetTaxiMapID())`) | ✅ | 2026-11-22: at `TAXIMAP_OPENED`, 19 nodes with states: 1 current, 5 reachable, 13 unreachable (map 1464; `NumTaxiNodes` agreed) |
+| `UnitPosition`'s fourth return | ✅ the instance ID | 2026-11-22: across a boat crossing it equalled `GetInstanceInfo`'s ID (1, Kalimdor) |
 
 ## Economy and progression
 
