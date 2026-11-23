@@ -3,6 +3,20 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+**Saved data:** kept. The Overview tab's sections are gone (see below); your tiles and boards don't change.
+
+**Updating:** quit and restart the game after installing (a new texture; `/reload` is not enough).
+
+### Changed
+- **Overview groups your tiles by board.** Each board is a framed panel with its name, its status as in the Boards
+  tab (Shown, Off, Hidden...) and its tiles in the board's order; an empty board shows too. Click a board's header
+  for that board's actions, as in the Boards tab. Tiles on no board come last under **Window only**, with dashed
+  borders. Each card now says its scope (board timer, session, today...) instead of where it is. The sections of
+  0.2.1-beta1 are gone: they were named after a board once and then fell out of step with it. Search finds a tile
+  by its name or its board's.
+
 ## 0.2.1-beta1 (2026-11-23)
 
 The second beta, **still experimental**: the Hard Counters window rebuilt in the spirit of the Auction House, with

@@ -972,7 +972,7 @@ end)
 
 -- HC-67 (DESIGN §17.4): the player's tiles, first tab of the window
 describe("the Overview tab", function()
-  it("shows every tile in its section, on a board or not, and edits, places, moves and deletes them", function()
+  it("shows every tile under its board or Window only, and edits, places, moves and deletes them", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local BM, Bo = ns.BoardModel, ns.Boards
@@ -981,13 +981,42 @@ describe("the Overview tab", function()
       f:SetSize(762, 568)
       ns.RefreshOverview()
       local pocket = BM.Store().list[1]                              -- a fresh install's Pocket board
-      -- one card per tile, in the board's section, each knowing where it is
+      -- (HC-73) one framed panel per board, its cards filled; Window only below, empty but explained
       local all = BM.CollectionTiles()
       assert.are.equal(#pocket.tiles, #all)
-      assert.are.same({ "Pocket" }, BM.Sections())
       assert.are.equal(pocket, all[1].board)
+      local panel = ns.OverviewPanels[1]
+      assert.is_true(panel:IsShown())
+      assert.are.equal(pocket, panel.head.board)
+      assert.are.equal("Pocket", panel.head.text:GetText())
+      assert.truthy(panel.head.note:GetText():find("Shown", 1, true))   -- its status, coloured as in the Boards tab
+      assert.are.equal(#pocket.tiles .. " tiles", panel.head.count:GetText())
+      assert.is_false(panel.empty:IsShown())
+      local shownCards = 0
+      for _, c in ipairs(ns.OverviewCards) do
+        if c:IsShown() then
+          shownCards = shownCards + 1
+          assert.is_false(c.dashed)
+          assert.are.equal("board timer", c.foot:GetText())         -- the scope, not "On HUD"
+        end
+      end
+      assert.are.equal(#pocket.tiles, shownCards)
+      assert.is_true(f.loose:IsShown())
+      assert.is_true(f.loose.empty:IsShown())                        -- a fresh player reads what Window only is
+      -- the board's header: that board's actions, as in the Boards tab
+      local realShow0 = ns.Menu.Show
+      local got
+      ns.Menu.Show = function(_, items) got = items end
+      ns.OverviewBoardMenu(panel.head, pocket)
+      ns.Menu.Show = realShow0
+      local texts = {}
+      for _, it in ipairs(got) do texts[#texts + 1] = it.text end
+      assert.are.equal("Pocket", texts[1])
+      for _, t in ipairs({ "Hide", "Edit on screen", "Rename...", "Delete" }) do
+        assert.truthy(table.concat(texts, "|"):find(t, 1, true), t)
+      end
       local menus = {}
-      local realShow, realConfirm, realAsk = ns.Menu.Show, Bo.Confirm, Bo.AskText
+      local realShow, realConfirm = ns.Menu.Show, Bo.Confirm
       ns.Menu.Show = function(_, items) menus[#menus + 1] = type(items) == "function" and items() or items end
       Bo.Confirm = function(_, fn) fn() end
       local function menuFor(raw)
@@ -999,9 +1028,10 @@ describe("the Overview tab", function()
         for _, it in ipairs(m) do if it.text == text then return it end end
       end
       local gold = all[1].raw
-      -- the card menu: Edit (the board's own settings), Move to board, Take off HUD, Section, Delete tile
+      -- the card menu: Edit (the board's own settings), Move to board, Take off HUD, Delete tile; no Section (HC-73)
       local m = menuFor(gold)
-      for _, t in ipairs({ "Edit", "Move to board", "Take off HUD", "Section", "Delete tile" }) do assert.truthy(pick(m, t), t) end
+      for _, t in ipairs({ "Edit", "Move to board", "Take off HUD", "Delete tile" }) do assert.truthy(pick(m, t), t) end
+      assert.is_nil(pick(m, "Section"))
       local edit = {}
       for _, it in ipairs(pick(m, "Edit").sub) do edit[#edit + 1] = it.text end
       assert.truthy(table.concat(edit, "|"):find("Scope", 1, true))
@@ -1015,21 +1045,27 @@ describe("the Overview tab", function()
       assert.are.equal(n, #BM.CollectionTiles())
       assert.is_nil(pick(m, "Take off HUD"))
       for _, it in ipairs(pick(m, "Edit").sub) do assert.are_not.equal("Size", it.text) end   -- a size is the board's
+      -- off the board, its card is under Window only, dashed, on the session; the panel one card shorter
+      ns.RefreshOverview()
+      assert.are.equal((n - 1) .. " tiles", panel.head.count:GetText())
+      assert.is_false(f.loose.empty:IsShown())
+      local dashed
+      for _, c in ipairs(ns.OverviewCards) do if c:IsShown() and c.entry.raw == gold then dashed = c end end
+      assert.is_true(dashed.dashed)
+      assert.is_true(dashed.dash[1]:IsShown())
+      assert.are.equal("session", dashed.foot:GetText())
       -- show it on the HUD again
       pick(m, "Show on HUD").sub[1].func()                              -- Pocket
       assert.are.equal(n, #pocket.tiles)
       assert.are.equal(pocket, (BM.BoardOf(gold)))
-      -- a new section, then rename it from its title
-      m = menuFor(gold)
-      Bo.AskText = function(_, _, fn) fn("Farming") end
-      local sec = pick(m, "Section").sub
-      sec[#sec].func()                                                 -- New section...
-      assert.are.equal("Farming", gold.section)
-      Bo.AskText = function(_, _, fn) fn("Gold") end
-      ns.OverviewSectionMenu(f, "Farming")
-      pick(menus[#menus], "Rename section...").func()
-      assert.are.equal("Gold", gold.section)
-      Bo.AskText = realAsk
+      -- an empty board shows, saying so
+      local empty = BM.Create(nil, { name = "Spare" })
+      ns.RefreshOverview()
+      assert.are.equal(empty, ns.OverviewPanels[2].head.board)
+      assert.is_true(ns.OverviewPanels[2].empty:IsShown())
+      BM.Delete(empty.id)
+      ns.RefreshOverview()
+      assert.is_false(ns.OverviewPanels[2]:IsShown())
       -- Add tile opens Trackers, whose Add tile then adds to Overview, Window only
       f.add:GetScript("OnClick")(f.add)
       assert.is_true(ns.Windows.IsShown("trackers"))
@@ -1047,7 +1083,7 @@ describe("the Overview tab", function()
       assert.are.equal(onBoard, #pocket.tiles)                         -- not on a board
       local added = BM.CollectionTiles()[n + 1]
       assert.is_nil(added.board)
-      assert.are.equal(BM.DEFAULT_SECTION, added.raw.section)
+      assert.is_nil(added.raw.section)
       ns.ShowOverview(true)
       assert.is_nil(ns.TrackersForOverview)                            -- only until the Trackers tab goes
       -- delete a tile for good
@@ -1062,6 +1098,15 @@ describe("the Overview tab", function()
       f.search:SetText("zzz")
       f.search:GetScript("OnTextChanged")(f.search)
       assert.truthy(f.empty:GetText():find("No tile matches", 1, true))
+      assert.is_false(panel:IsShown())
+      assert.is_false(f.loose:IsShown())
+      -- a board's name finds its whole panel
+      f.search:SetText("pock")
+      f.search:GetScript("OnTextChanged")(f.search)
+      assert.is_true(panel:IsShown())
+      assert.are.equal("", f.empty:GetText())
+      f.search:SetText("")
+      f.search:GetScript("OnTextChanged")(f.search)
       ns.Menu.Show, Bo.Confirm = realShow, realConfirm
       assert.are.same({}, ctx.env.errors)
     end)

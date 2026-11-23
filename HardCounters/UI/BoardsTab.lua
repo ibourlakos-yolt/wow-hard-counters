@@ -54,9 +54,9 @@ local function rows(node, search)
   if node == "boards" then
     for _, b in ipairs(M.Store().list) do
       if matches(search, b.name) then
-        local status, why = Bo().Status(b)
+        local status, why = ns.BoardStatusText(b)
         out[#out + 1] = { key = b.id, board = b, why = why,
-          cells = { name = b.name, status = (STATUS_COLOR[why] or "|cffffd200") .. status .. "|r",
+          cells = { name = b.name, status = status,
             tiles = tostring(#b.tiles), mini = b.mini and L["mini"] or "" } }
       end
     end
@@ -178,23 +178,37 @@ local function actions(row)
   return acts
 end
 
---- Right-click on a board's row: its actions, plus Mini mode and Rename.
-local function rowMenu(row, anchor)
+--- Right-click on a board's row: its actions, plus Mini mode and Rename. after: called once an action ran (the
+--- Overview tab's board header shows the same menu, HC-73).
+local function rowMenu(row, anchor, after)
   local items = {}
-  for _, a in ipairs(actions(row)) do items[#items + 1] = { text = a.text, tip = a.tip, func = function() a.func(anchor) end } end
+  after = after or function() end
+  for _, a in ipairs(actions(row)) do
+    items[#items + 1] = { text = a.text, tip = a.tip, func = function() a.func(anchor); after() end }
+  end
   if row.board then
     local b = row.board
     table.insert(items, 2, { text = L["Mini mode (one line)"], checked = b.mini, func = function()
       b.mini = not b.mini
       Bo().Refresh(b.id, true)
       refresh()
+      after()
     end })
     table.insert(items, #items, { text = L["Rename..."], func = function()
-      askText(L["Board name"], b.name, function(s) Bo().Rename(b, s); refresh() end)
+      askText(L["Board name"], b.name, function(s) Bo().Rename(b, s); refresh(); after() end)
     end })
+    if row.titled then table.insert(items, 1, { text = b.name, title = true }) end
   end
   if #items > 0 then ns.Menu.Show(anchor, items) end
 end
+
+--- A board's status in words, coloured as in the Boards tab, and why (Boards.Status).
+local function statusText(b)
+  local status, why = Bo().Status(b)
+  return (STATUS_COLOR[why] or "|cffffd200") .. status .. "|r", why
+end
+ns.BoardStatusText = statusText
+function ns.BoardMenu(b, anchor, after) rowMenu({ board = b, titled = true }, anchor, after) end
 
 local function hover(row, on)
   if row.board and Bo() then Bo().Highlight(row.board.id, on) end

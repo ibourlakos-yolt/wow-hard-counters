@@ -179,7 +179,7 @@ describe("a tile's calc, display and size (HC-51)", function()
       tiles = tiles } }, nextId = 2, seeded = true, v = 2 } })
     local M = env.M
     local b = M.Store().list[1]
-    assert.are.equal(6, M.Store().v)                   -- (and on to v6, HC-67)
+    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     local t = b.tiles
     assert.are.same({ kind = "reading", reading = "hc:gold", scope = "session", calc = "perHour", display = "number",
       size = "large", extras = { sparkline = true, vsUsual = true } }, (function(x) return { kind = x.kind, reading = x.reading,

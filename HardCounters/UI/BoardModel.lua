@@ -1,11 +1,11 @@
 -- Boards, the model (TRACKERS_AND_BOARDS §6, HC-18): data and decisions only, no frames (UI/Boards.lua draws).
 -- A board is a vertical stack of tiles the player builds; it replaces the run panel and the live number.
 --
---   settings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 6,
---                       tiles = { [tileId] = <reading tile> }, tileOrder = { tileId, ... }, nextTile = n,
---                       sections = { name, ... } }
--- Since v6 (HC-67, DESIGN §17.4) every reading tile lives in the collection (`tiles`) with an `id` and a `section`
--- (the Overview tab's grouping); a board's `tiles` list holds placements, { ref = tileId, size = ... } (order and size
+--   settings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 7,
+--                       tiles = { [tileId] = <reading tile> }, tileOrder = { tileId, ... }, nextTile = n }
+-- Since v6 (HC-67, DESIGN §17.4) every reading tile lives in the collection (`tiles`) with an `id` (v7, HC-73: the
+-- Overview tab groups tiles by their board, so they carry no section any more); a board's `tiles` list holds
+-- placements, { ref = tileId, size = ... } (order and size
 -- are the board's), plus its label and splits rows as before. At run time a placement reads and writes through to its
 -- tile (see "The tile collection" below), so everything here reads `tile.scope` as it always did.
 --   board = { id, name, preset, shown, mini, pos, scale, width, wid = n (its window, HC-41),
@@ -119,26 +119,17 @@ function M.TileOf(t)
   return t
 end
 
-M.DEFAULT_SECTION = "My tiles"
-
 local function placement(id, size) return setmetatable({ ref = id, size = size }, PLACEMENT) end
 
 --- Put a reading tile into the collection (its size stays with the board: returned as its placement).
-local function adopt(B, raw, section)
+local function adopt(B, raw)
   B.nextTile = (B.nextTile or 0) + 1
   local id = "t" .. B.nextTile
   local size = raw.size
   raw.size, raw.id = nil, id
-  raw.section = raw.section or section or M.DEFAULT_SECTION
   B.tiles[id] = raw
   B.tileOrder[#B.tileOrder + 1] = id
   return placement(id, size)
-end
-
-local function knowSection(B, name)
-  if type(name) ~= "string" then return end
-  for _, s in ipairs(B.sections) do if s == name then return end end
-  B.sections[#B.sections + 1] = name
 end
 
 --- Every board's reading tiles in the collection, every saved placement live again (a /reload drops the
@@ -146,7 +137,6 @@ end
 local function normalize(B)
   if type(B.tiles) ~= "table" then B.tiles = {} end
   if type(B.tileOrder) ~= "table" then B.tileOrder = {} end
-  if type(B.sections) ~= "table" then B.sections = {} end
   for _, b in ipairs(B.list) do
     if type(b) == "table" and type(b.tiles) == "table" then
       local i = 1
@@ -159,8 +149,7 @@ local function normalize(B)
           if ref ~= nil then
             if getmetatable(t) ~= PLACEMENT then setmetatable(t, PLACEMENT) end
           elseif t.kind == "reading" then
-            b.tiles[i] = adopt(B, t, b.name)
-            knowSection(B, b.name)
+            b.tiles[i] = adopt(B, t)
           end
           i = i + 1
         end
@@ -228,11 +217,18 @@ function M.Store()
     end
     B.v = 5
   end
-  -- v6 (HC-67, user 2026-11-23): every board's reading tiles move into the collection, each in a section named
-  -- after its board, in board order; the board keeps placements (order and size). Settings only, no storage change;
-  -- the values and the look don't change. normalize() does it, and keeps doing it for tiles added the old way.
+  -- v6 (HC-67, user 2026-11-23): every board's reading tiles move into the collection, in board order; the board
+  -- keeps placements (order and size). Settings only, no storage change; the values and the look don't change.
+  -- normalize() does it, and keeps doing it for tiles added the old way.
   normalize(B)
   if B.v < 6 then B.v = 6 end
+  if B.v < 7 then
+    -- HC-73 (user, 2026-11-23): the Overview tab groups tiles by their board, Window only last; the free sections
+    -- of v6 (a name on each tile, the list of names) go. Nothing on screen changes but the Overview tab.
+    for _, t in pairs(B.tiles) do if type(t) == "table" then t.section = nil end end
+    B.sections = nil
+    B.v = 7
+  end
   return B
 end
 
@@ -757,13 +753,13 @@ function M.Preset(key)
   return M.PRESETS[key] or userPreset(key)
 end
 
---- A board's tiles as preset data: every field of its tiles (copies), the placements' sizes, no ids or sections.
+--- A board's tiles as preset data: every field of its tiles (copies), the placements' sizes, no ids.
 local function tileSpecs(board)
   local out = {}
   for _, t in ipairs(board.tiles) do
     local raw = M.TileOf(t)
     local c = U.deepcopy(raw)
-    c.id, c.section, c.lastSize = nil, nil, nil
+    c.id, c.lastSize = nil, nil
     if getmetatable(t) == PLACEMENT then c.size = rawget(t, "size") end
     out[#out + 1] = c
   end
@@ -838,12 +834,11 @@ function M.Create(presetKey, opts)
         if type(c.arg) == "table" then c.arg = U.copy(c.arg) end
         M.FoldAlias(c)                                -- a pack's preset may name an alias
         if c.kind == "reading" and c.scope == "run" then c.follow = true end   -- (HC-55) all but `now` follow the board
-        -- (HC-67) a reading tile goes into the collection, in a section named after the board
-        if c.kind == "reading" then c = adopt(B, c, b.name) end
+        -- (HC-67) a reading tile goes into the collection
+        if c.kind == "reading" then c = adopt(B, c) end
         b.tiles[#b.tiles + 1] = c
       end
     end
-    knowSection(B, b.name)
   end
   B.list[#B.list + 1] = b
   return b
@@ -890,9 +885,8 @@ function M.Duplicate(board, name)
   local b = { id = newId(), name = M.FreeName(name or board.name), shown = true, mini = board.mini and true or false,
     width = board.width or M.WIDTH, scale = 1, show = U.copy(board.show or defaultShow()), scope = board.scope, tiles = {} }
   for _, s in ipairs(tileSpecs(board)) do
-    if s.kind == "reading" then b.tiles[#b.tiles + 1] = adopt(B, s, b.name) else b.tiles[#b.tiles + 1] = s end
+    if s.kind == "reading" then b.tiles[#b.tiles + 1] = adopt(B, s) else b.tiles[#b.tiles + 1] = s end
   end
-  knowSection(B, b.name)
   B.list[#B.list + 1] = b
   return b
 end
@@ -965,8 +959,7 @@ function M.AddReading(board, readingId, look, scope, arg)
   end
   M.FoldAlias(t)
   local B = M.Store()
-  local p = adopt(B, t, board.name)                 -- (HC-67) into the collection, placed on this board
-  knowSection(B, board.name)
+  local p = adopt(B, t)                             -- (HC-67) into the collection, placed on this board
   board.tiles[#board.tiles + 1] = p
   if ns.ready and M.TileWindow(p, board) then watchTiles(board) end   -- the board's first such tile starts its window
   return p
@@ -1031,7 +1024,7 @@ function M.Tile(id) return M.Store().tiles[id] end
 
 --- A new tile in the collection only (Window only): the reading on the session (or its first scope but the
 --- board's timer, which needs a board), a line number. Returns the tile.
-function M.NewTile(readingId, arg, section)
+function M.NewTile(readingId, arg)
   local r = ns.readings[readingId]
   if not r then return nil end
   local t = { kind = "reading", reading = readingId, arg = arg }
@@ -1041,10 +1034,7 @@ function M.NewTile(readingId, arg, section)
   t.scope = t.scope or r.scopes[1]
   M.ApplyStyle(t, nil)
   M.FoldAlias(t)
-  local B = M.Store()
-  section = section or M.DEFAULT_SECTION
-  local p = adopt(B, t, section)
-  knowSection(B, section)
+  local p = adopt(M.Store(), t)
   return liveTile(p)
 end
 
@@ -1081,37 +1071,24 @@ function M.DeleteTile(id)
   return true
 end
 
---- The sections that hold tiles, in the player's order (sections named on tiles but not listed come last).
-function M.Sections()
-  local B = M.Store()
-  local used = {}
-  for _, t in pairs(B.tiles) do used[t.section or M.DEFAULT_SECTION] = true end
-  for name in pairs(used) do knowSection(B, name) end
-  local out = {}
-  for _, s in ipairs(B.sections) do if used[s] then out[#out + 1] = s end end
-  return out
-end
-
---- Move a tile to a section (a new name makes a new section, last).
-function M.SetSection(tile, name)
-  local t = M.TileOf(tile)
-  if not (t and type(name) == "string" and name ~= "") then return false end
-  t.section = name:sub(1, 32)
-  knowSection(M.Store(), t.section)
-  return true
-end
-
---- Rename a section on every tile in it. False when the new name is empty or taken.
-function M.RenameSection(old, new)
-  if type(new) ~= "string" then return false end
-  new = new:sub(1, 32)
-  local B = M.Store()
-  if new == "" or new == old then return false end
-  for _, s in ipairs(B.sections) do if s:lower() == new:lower() then return false end end
-  for _, t in pairs(B.tiles) do if (t.section or M.DEFAULT_SECTION) == old then t.section = new end end
-  for i, s in ipairs(B.sections) do if s == old then B.sections[i] = new end end
-  knowSection(B, new)
-  return true
+--- The Overview tab's groups (HC-73): every board in list order (the Boards tab's), each with its tiles in the
+--- board's order, an empty board too; then the tiles on no board, in collection order. Entries as CollectionTiles.
+--- Returns groups = { { board, entries = { ... } }, ... }, loose = { ... }.
+function M.TilesByBoard()
+  local all = M.CollectionTiles()
+  local byId = {}
+  for _, e in ipairs(all) do byId[e.id] = e end
+  local groups, loose = {}, {}
+  for _, b in ipairs(M.Store().list) do
+    local g = { board = b, entries = {} }
+    for _, p in ipairs(b.tiles) do
+      local e = byId[rawget(p, "ref") or false]
+      if e and e.board == b then g.entries[#g.entries + 1] = e end
+    end
+    groups[#groups + 1] = g
+  end
+  for _, e in ipairs(all) do if not e.board then loose[#loose + 1] = e end end
+  return groups, loose
 end
 
 function M.MoveTile(board, i, delta)

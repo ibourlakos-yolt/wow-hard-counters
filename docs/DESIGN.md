@@ -408,9 +408,9 @@ Nothing from a deeper layer leaks into a shallower one: no setting has to be tou
 Boards replace the run panel and the live number (user, 2026-11-15). `UI/BoardModel.lua` holds the model and every
 decision (pure, tested); `UI/Boards.lua` draws; `UI/Menu.lua` is a small popup menu of our own (the client's
 dropdown templates differ between clients).
-- **Model:** `settings.boards = { list, nextId, seeded, runBoard, v, tiles, tileOrder, nextTile, sections }`, per
+- **Model:** `settings.boards = { list, nextId, seeded, runBoard, v, tiles, tileOrder, nextTile }`, per
   profile; since v6 (HC-67, §17.9) a board's reading tiles live in the collection (`tiles`) and the board keeps
-  placements (`{ ref, size }`) (`lastEdited` is gone since HC-36;
+  placements (`{ ref, size }`); v7 (HC-73) dropped v6's `sections` (`lastEdited` is gone since HC-36;
   old saved files keep it, unread). A board: name, preset,
   shown, mini, pos, scale, width, visibility rules, tiles. Tile kinds `reading` (styles hero, grid, row, bar, gauge;
   agreed to become calc + display + size, §16.9), `splits`, `label`; the control row is drawn by itself since HC-41 (§16.8; the `run` tile kind is gone).
@@ -1450,9 +1450,11 @@ buttons follow the selection. One shared widget, so every tab behaves the same.
 
 ### 17.4 Each tab
 
-- **Overview: your tiles** (note #9 of the 2026-11-20 playtest). The player's own collection of tiles, laid out as
-  tiles in sections the player names, with a search box. Each tile shows "On HUD: <board>" or "Window only";
-  right-click: edit, show on HUD, remove. "Add tile" goes to Trackers.
+- **Overview: your tiles** (note #9 of the 2026-11-20 playtest). The player's own collection of tiles, with a search
+  box, **grouped by board** (HC-73, the user 2026-11-23, replacing the free sections of HC-67): one framed panel per
+  board with its name and status, its tiles in the board's order; the tiles on no board last, unframed, under
+  "Window only", with dashed cards. Click a tile: edit, show on HUD, remove; click a board's header: the board's
+  actions. "Add tile" goes to Trackers.
 - **Every tile lives in the collection; some are also on HUD boards** (the user's rule). So a tile exists apart from
   boards: a board holds references to collection tiles, and each placement keeps only its order and size. Reading,
   argument, scope, character or account, calc, display, target, name and extras belong to the tile and are shared:
@@ -1610,9 +1612,9 @@ toggles history on a click: that moved into History... (one place for it).
 
 ### 17.9 As built (HC-67, 2026-11-23): the tile collection and the Overview tab
 
-**The collection** (`UI/BoardModel.lua`, `settings.boards.v = 6`):
-- Every **reading** tile lives in `boards.tiles[id]` (ids `t1`, `t2`, ...; `nextTile`), in `tileOrder`, with a
-  `section`; `sections` keeps the player's order of section names. A board's `tiles` list holds **placements**,
+**The collection** (`UI/BoardModel.lua`, `settings.boards.v = 6`; v7 since HC-73, below):
+- Every **reading** tile lives in `boards.tiles[id]` (ids `t1`, `t2`, ...; `nextTile`), in `tileOrder` (with a
+  `section` until HC-73). A board's `tiles` list holds **placements**,
   `{ ref = <tile id>, size = <size> }`: its order and the size are the board's, everything else is the tile's.
   **Labels and splits rows stay on their board** as before: they are layout, not numbers, and have no meaning in
   the Overview tab.
@@ -1635,21 +1637,34 @@ toggles history on a click: that moved into History... (one place for it).
   identical layout and labels.
 - Fixed on the way: two boards made from one preset shared the preset's `extras` (and a set `arg`) table.
 - Calls for the Overview tab: `M.CollectionTiles()` (`{ id, tile = its placement or itself, board, raw }`),
-  `M.Tile`, `M.NewTile(reading, arg, section)`, `M.Place`, `M.DeleteTile`, `M.Sections`, `M.SetSection`,
-  `M.RenameSection` (refused onto a taken name, any case).
+  `M.Tile`, `M.NewTile(reading, arg)`, `M.Place`, `M.DeleteTile`, `M.TilesByBoard()` (HC-73, below).
 
 **The Overview tab** (`UI/Overview.lua`, tab order 1, icon `INV_Misc_Note_01`, `/hc overview`): a search box, a
-hint and **Add tile** on top; the sections, each a gold title with its count (right-click: Rename section...);
-under each, cards about 176 wide (four across), 58 high: the tile's label as on its board, its number now (grey
-while not settled; toward its target for a bar or gauge), and "On HUD: <board>" (green, "(hidden)" when the board
-is) or "Window only". Click or right-click a card: **Edit** (`Boards.TileSettingsItems`, the board's own menu; no
-Size off a board), **Show on HUD** / **Move to board** (the boards, then New board, named after the section),
-**Take off HUD**, **Section** (the sections, New section...), **Delete tile** (confirmed). Cards refresh once a
-second while the tab is shown; the tab is as tall as its cards, so the window scrolls it (`minSize`). **Add tile**
-opens the Trackers tab in a mode (`ns.TrackersForOverview`, until that tab closes) where its Add tile makes a
-Window-only tile in "My tiles"; the Trackers tab's board menu also has "Overview only (no board)". On a board, the
-tile menu's Remove is now **Remove from board** (the tile stays in Overview), and Delete this board says its tiles
-stay in the Overview tab.
+hint and **Add tile** on top; cards about 176 wide (four across), 58 high: the tile's label as on its board, its
+number now (grey while not settled; toward its target for a bar or gauge). Click or right-click a card: **Edit**
+(`Boards.TileSettingsItems`, the board's own menu; no Size off a board), **Show on HUD** / **Move to board** (the
+boards, then New board), **Take off HUD**, **Delete tile** (confirmed). Cards refresh once a second while the tab
+is shown; the tab is as tall as its cards, so the window scrolls it (`minSize`). **Add tile** opens the Trackers tab
+in a mode (`ns.TrackersForOverview`, until that tab closes) where its Add tile makes a Window-only tile; the
+Trackers tab's board menu also has "Overview only (no board)". On a board, the tile menu's Remove is now **Remove
+from board** (the tile stays in Overview), and Delete this board says its tiles stay in the Overview tab. (HC-67
+grouped the cards in free sections, a name on each tile; HC-73 replaced them, below.)
+
+**HC-73 (2026-11-23): grouped by board.** HC-67's sections were named after the board a tile was born on and never
+updated: Move to board, a board's rename or delete and Duplicate left them stale, and a fresh install never saw the
+tab's only explanation (it needed zero tiles; the Pocket board seeds three). Agreed from a mockup:
+- `M.TilesByBoard()` returns every board in list order (the Boards tab's), each with its reading tiles in the
+  board's order (an empty board too), and the tiles on no board in collection order.
+- A board is a **framed panel** (dark fill, solid grey border) headed by the Boards tab's icon, its name, its status
+  coloured as in the Boards tab (`ns.BoardStatusText`) and its tile count; empty, it says "No numbers on this
+  board." Click its header: the board's row menu from the Boards tab (`ns.BoardMenu`), titled with its name.
+- **Window only** comes last, unframed, with the Overview's icon and "tracked here, not on screen"; its cards are
+  faint with a **dashed** border (`Media/Dash.tga`, 8×8, drawn by `tools/draw-dash.py`, tiled along each edge). It
+  shows even when empty ("None yet. Add tile puts a number here..."), so a new player reads what the tab is for.
+- A card's footer is its **scope** (board timer, session, today...); where it is, the group says (and the tooltip).
+- Search matches a tile's label or its board's name (a matching board shows all its tiles).
+- **Migration v7:** `tile.section` and `boards.sections` go; nothing else changes. The Section menu, Rename section,
+  `M.Sections`, `M.SetSection`, `M.RenameSection` and `M.DEFAULT_SECTION` are gone.
 
 ### 17.10 As built (HC-68, 2026-11-23): the Boards tab, the New board dialog, the launcher lined up
 
@@ -1661,7 +1676,7 @@ it until renamed (nothing renamed silently). The board's own menu (Rename) and t
 
 **Duplicate and your presets** (HC-22's player presets): `M.Duplicate(board, name)` copies the look, rules and
 scope with **tiles of its own** (new collection tiles, a fresh timer, at the centre). `M.SaveAsPreset(board, name)`
-keeps every tile's settings with its placement's size (no ids, no sections) plus mini, scope and rules in
+keeps every tile's settings with its placement's size (no ids) plus mini, scope and rules in
 `boards.presets` (keys `user:<n>`); `M.Preset(key)` finds any preset, `M.Create` makes boards from yours too,
 `M.RenamePreset`, `M.DeletePreset` (boards made from it stay). `M.PresetGroups()`: Hard Counters', each pack's
 under its title, then "Your presets". `M.Create` takes a preset's `show` (rules) and scope when it has them.

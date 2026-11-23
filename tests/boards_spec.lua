@@ -365,7 +365,7 @@ describe("the board's timer", function()
     local b = M.Store().list[1]
     assert.are.equal(1, #b.tiles)                      -- the control-row tile went, at the profile's first use
     assert.is_nil(b.tiles[1].wid)                      -- and the tile's own window
-    assert.are.equal(6, M.Store().v)                   -- (and on to v6, HC-67)
+    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     local rows = M.Layout(b)
     assert.are.equal("run", rows[1].kind)
     assert.are.equal(0, #rows[1].tiles)
@@ -448,7 +448,7 @@ describe("the board's timer", function()
       nextId = 2, seeded = true, v = 3 } })
     local M, HC = env.M, env.HC
     local b = M.Store().list[1]
-    assert.are.equal(6, M.Store().v)                   -- (and on to v6, HC-67)
+    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     assert.are.equal("session", b.tiles[1].scope)
     assert.are.equal("today", b.tiles[2].scope)
     assert.are.equal("Gold earned \194\183 session", M.TileLabel(b.tiles[1], b))
@@ -469,7 +469,7 @@ describe("the board's timer", function()
       nextId = 2, seeded = true, v = 4 } })
     local M = env.M
     local b = M.Store().list[1]
-    assert.are.equal(6, M.Store().v)                   -- (and on to v6, HC-67)
+    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     assert.are.equal("run", M.BoardScope(b))
     assert.is_nil(b.scope)
     assert.is_true(b.tiles[1].follow)
@@ -649,8 +649,8 @@ describe("the tile collection", function()
       looks[i] = { rows = rows, h = h, labels = labels }
     end
     local B = M.Store()
-    assert.are.equal(6, B.v)
-    assert.are.same({ "Leveling", "Pocket", "Today" }, M.Sections())
+    assert.are.equal(7, B.v)
+    assert.is_nil(B.sections)                                     -- (HC-73) no sections: the Overview groups by board
     assert.are.equal(7, #M.CollectionTiles())                     -- the seven reading tiles; heading and splits stay
     for i, b in ipairs(B.list) do
       local old = before.boards.list[i]
@@ -666,7 +666,7 @@ describe("the tile collection", function()
           table.sort(keys)
           assert.are.same(o.size and { "ref", "size" } or { "ref" }, keys)
           assert.is_nil(B.tiles[p.ref].size)
-          assert.are.equal(b.name, B.tiles[p.ref].section)
+          assert.is_nil(B.tiles[p.ref].section)
         else
           assert.are.same(o, p)                                   -- a heading or splits row, as it was
         end
@@ -700,7 +700,53 @@ describe("the tile collection", function()
     assert.is_nil(B.tiles[p.ref].size)
   end)
 
-  it("keeps a tile that leaves its board, off the timer; deletes it only when asked; sections group it", function()
+  it("drops the free sections of v6 (HC-73): tiles and boards as they were, no section anywhere", function()
+    local env = boot(beta1())
+    local M = env.M
+    local B = M.Store()
+    -- what 0.2.1-beta1 saved: v6 with a section on every tile and the list of names
+    for _, t in pairs(B.tiles) do t.section = "Farming" end
+    B.sections, B.v = { "Farming", "My tiles" }, 6
+    local before = {}
+    for _, e in ipairs(M.CollectionTiles()) do before[#before + 1] = { e.id, e.board and e.board.id } end
+    M.Store()
+    assert.are.equal(7, B.v)
+    assert.is_nil(B.sections)
+    local after = {}
+    for _, e in ipairs(M.CollectionTiles()) do
+      after[#after + 1] = { e.id, e.board and e.board.id }
+      assert.is_nil(e.raw.section)
+    end
+    assert.are.same(before, after)
+  end)
+
+  it("groups the collection by board for the Overview tab, in the boards' order, loose tiles last (HC-73)", function()
+    local env = boot(beta1())
+    local M = env.M
+    local B = M.Store()
+    local leveling, pocket, today = B.list[1], B.list[2], B.list[3]
+    local gold = M.RemoveTile(leveling, 5)                         -- Window only now
+    M.MoveTile(pocket, 1, 1)                                       -- the board's order, not the collection's
+    local empty = M.Create(nil, { name = "Empty" })
+    local loose1 = M.NewTile("hc:xpgained")
+    local groups, loose = M.TilesByBoard()
+    local names = {}
+    for _, g in ipairs(groups) do names[#names + 1] = g.board.name end
+    assert.are.same({ "Leveling", "Pocket", "Today", "Empty" }, names)  -- every board, an empty one too
+    assert.are.equal(empty, groups[4].board)
+    assert.are.equal(0, #groups[4].entries)
+    assert.are.equal(3, #groups[1].entries)                        -- reading tiles only: no heading, no splits
+    for i, e in ipairs(groups[2].entries) do
+      assert.are.equal(M.TileOf(pocket.tiles[i]), e.raw)
+      assert.are.equal(pocket, e.board)
+    end
+    assert.are.equal(1, #groups[3].entries)
+    assert.are.equal(today, groups[3].entries[1].board)
+    assert.are.same({ gold, loose1 }, { loose[1].raw, loose[2].raw })
+    assert.are.equal(2, #loose)
+  end)
+
+  it("keeps a tile that leaves its board, off the timer; deletes it only when asked", function()
     local env = boot(beta1())
     local M = env.M
     local B = M.Store()
@@ -736,16 +782,10 @@ describe("the tile collection", function()
     -- a tile for the window only, and deleting one for good
     local t = M.NewTile("hc:xpgained")
     assert.are.equal("session", t.scope)
-    assert.are.equal(M.DEFAULT_SECTION, t.section)
+    assert.is_nil(t.section)
     assert.is_true(M.DeleteTile(t.id))
     assert.is_nil(M.Tile(t.id))
     assert.is_false(M.DeleteTile(t.id))
-    -- sections: move a tile, rename one (never onto a taken name)
-    assert.is_true(M.SetSection(gold, "Farming"))
-    assert.truthy(table.concat(M.Sections(), ","):find("Farming", 1, true))
-    assert.is_false(M.RenameSection("Farming", "pocket"))
-    assert.is_true(M.RenameSection("Farming", "Gold"))
-    assert.are.equal("Gold", gold.section)
     -- two boards from one preset share no tables
     local a, b = M.Create("pocket"), M.Create("pocket")
     assert.are_not.equal(a.tiles[1].extras, b.tiles[1].extras)
@@ -795,7 +835,6 @@ describe("boards: names, copies and your presets", function()
       if t.kind == "reading" then
         assert.are_not.equal(o.ref, t.ref)                         -- its own tile, not shared
         assert.are.same({ o.reading, o.scope, o.calc, rawget(o, "size") }, { t.reading, t.scope, t.calc, rawget(t, "size") })
-        assert.are.equal("Leveling 2", M.TileOf(t).section)
       else
         assert.are.same(o, t)
         assert.are_not.equal(o, t)
@@ -808,7 +847,6 @@ describe("boards: names, copies and your presets", function()
     local p = M.Preset(key)
     assert.are.equal("My leveling", p.name)
     assert.is_nil(p.tiles[1].id)
-    assert.is_nil(p.tiles[1].section)
     assert.are.equal("large", p.tiles[1].size)                     -- the placement's size travels with it
     local groups = M.PresetGroups()
     assert.are.equal("Hard Counters", groups[1].title)
