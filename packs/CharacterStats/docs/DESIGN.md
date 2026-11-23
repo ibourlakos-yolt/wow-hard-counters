@@ -272,7 +272,7 @@ stat is one small stock (one tuple per level per bucket), far below the root bud
   school, spell crit, spell hit and miss vs boss, mana regen while casting), *Melee* (attack power, crit, hit and
   miss vs boss, glancing, speed), *Hunter* (ranged equivalents), *Tank* (armour reduction vs boss, defence and crit
   immunity, dodge, parry, block, avoidance vs boss).
-- **A Character Stats window** (a tab of the shared Hard Counters window): the full catalog grouped as §3, values
+- **A Character Stats window** (an icon tab down the right edge of the Hard Counters window, since HC-69): the full catalog grouped as §3, values
   coloured against thresholds (hit cap, crit immunity), with each row's description as its tooltip. Phase 2 can
   anchor it to the Character window like the reference addons; it isn't the selling point.
 - **Display rules:** units shown (%, rating, skill), "≈" on derived values, an arrow for change since login, grey in

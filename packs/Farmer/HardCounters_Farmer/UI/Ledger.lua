@@ -230,7 +230,7 @@ if HC.RegisterCallback then
 end
 
 HC:RegisterWindow(WINDOW, {
-  title = "Ledger",
+  title = "Ledger", icon = "Interface\\Icons\\INV_Misc_Coin_01",   -- (an icon tab on Hard Counters 0.2.1 and later)
   width = MIN_W + 20, height = MIN_H, minWidth = MIN_W, minHeight = MIN_H,
   build = build, onShow = refresh,
 })

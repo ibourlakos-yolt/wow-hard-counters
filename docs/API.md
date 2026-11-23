@@ -327,15 +327,20 @@ no tabs); `/hc help` lists them, with the pack each one comes from.
 Hard Counters owns the window chrome, so every pack window behaves the same: Blizzard's panel frame (border, title,
 close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, raise on click, Escape, BlizzMove
 (Ctrl+mouse wheel scales it when BlizzMove is installed), and its position and scale saved per profile. Every
-window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). The
-shared window is not resizable and is one size for every tab: the largest `minWidth` / `minHeight` (or `minSize()`)
-among its tabs, capped at the screen. Lay your content out to fill whatever room it gets, and keep your minimum
-honest: a large one makes the panel larger for every tab. Only a window with `dockable = false` (a HUD, a popup) gets a
-frame of its own, with a resize grip and a saved size. Check `HC:Supports("windows")`.
+window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). A
+pack's window is an **icon tab down the window's right edge** (since 0.2.1; Hard Counters' own tabs run along the
+bottom): give it an `icon`, and its `title` is the tab's tooltip. A column too long for the window scrolls.
+
+The shared window is not resizable and is one size for every tab: a design size of 780 × 640 (the body inside is
+about 762 × 568), wider only when a tab's `minWidth` needs more, capped at the screen. A tab whose `minHeight` (or
+`minSize()` height) is taller than the body **scrolls vertically**: your content frame gets that height and the
+window adds a scroll bar. Lay your content out to fill whatever room it gets, and keep your minimum honest: a large
+width makes the panel wider for every tab, a large height makes yours scroll. Only a window with `dockable = false`
+(a HUD, a popup) gets a frame of its own, with a resize grip and a saved size. Check `HC:Supports("windows")`.
 
 | Call | Notes |
 |---|---|
-| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (also the tab label), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
+| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's tooltip), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
 | `HC:ShowWindow(id[, show])` | `show` nil toggles. A tab is shown by opening the shared frame on it. |
 | `HC:ToggleWindow(id)`, `HC:IsWindowShown(id)` | Shown = on screen (a tab counts only while it is the selected one). |
 | `HC:RelayoutWindow(id)` | Re-reads `minSize()` / `fixedHeight()` after the content changed shape. |

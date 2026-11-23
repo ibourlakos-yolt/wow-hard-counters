@@ -359,12 +359,12 @@ Nothing from a deeper layer leaks into a shallower one: no setting has to be tou
   title, close, drag, resize grip, Escape, BlizzMove registration, and the saved position, size and scale per
   window (`settings.windows[id]`). Packs only build content. So "every window is resizable and BlizzMove-aware" holds
   by construction, not by each pack remembering to do it. **Except the shared window** (user, 2026-11-23): it is not
-  resizable, and it is **one size for every tab** (one panel, visually consistent): the smallest size every tab
-  fits, i.e. the largest minimum width and height among its tabs (`minWidth` / `minHeight` or `minSize()`), capped
-  at the screen. A tab's own `width` / `height` don't count. With the tabs of 2026-11-23 that is about 640 × 566:
-  Diagnostics' 640 (its button row) and Character Stats' height (every stat row without a scroll bar). A pack whose
-  tab asks for more grows the panel for every tab. A size saved from an old drag is dropped at load, and the "Reset
-  its size" option is gone. Windows of their own and popups keep their grip.
+  resizable, and it is **one size for every tab** (one panel, visually consistent). Since HC-69 that size is a
+  design size, **780 × 640** (§17.2: the browser needs the width; 640 keeps Character Stats unscrolled), wider only
+  when a tab's minimum width needs it (width never scrolls), capped at the screen; a tab whose minimum height is
+  taller than the body scrolls vertically inside it. A tab's own `width` / `height` don't count. A size saved from an
+  old drag is dropped at load, and the "Reset its size" option is gone. Windows of their own and popups keep their
+  grip.
 - **The shared Hard Counters window: every window is a tab of it** (Trackers, Runs, Farmer's Ledger, the
   Diagnostics console, any pack's). **No pop-out** (user, 2026-11-15, replacing the Dock / Pop out choice of
   2026-11-14): in run 3 every tab had been popped out, which left an empty Hard Counters window, and the Dock buttons
@@ -470,6 +470,10 @@ dropdown templates differ between clients).
   user had seen boards working in game; the migration above still reads their settings keys once.
 
 ### 7.3 The Trackers window (built 2026-11-15, v2 M6; TRACKERS_AND_BOARDS §7)
+
+**Rebuilt on the shared browser in HC-66 (§17.4 "As built"):** the per-pack list below became a category tree, a
+list with columns, a detail pane and an action bar; what each part does is unchanged unless §17 says otherwise. The
+2026-11-15 layout, for the record:
 
 `UI/Trackers.lua`, a tab of the shared window (`/hc trackers`; edit mode opens it beside the boards). A virtual
 list (pooled rows, mouse wheel) so no scroll template is needed:
@@ -1404,7 +1408,7 @@ tile's `display`, each a full-width row of its own, offered in the Display menu 
 - Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
   screen, the shares written, the Display menu).
 
-## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23, not built)
+## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65, HC-69, HC-66 built)
 
 The user, 2026-11-23, after three mockups: the Hard Counters window is the one-stop panel, modelled on the Auction
 House (and Auctioneer): predictable tabs, clear categories, quick clicks, and deep search and filtering still there
@@ -1423,7 +1427,7 @@ reading the player placed, with its choices (§16.1); a board is a HUD stack of 
 - **Right-side icon tabs:** every pack's window (Ledger, Character Stats, any later pack) and **Diagnostics**, which
   stays in the main window (the user overrode HC-44(a): one-stop panel). Blizzard's `LargeSideTabButtonTemplate`, as
   on Forever's profession window (`Blizzard_Professions/Camelot/Blizzard_ProfessionsFrame.xml`); the title is the
-  tooltip. They hang off the frame's right edge (no width taken); 8 fit beside today's 566-high panel (55 high,
+  tooltip. They hang off the frame's right edge (no width taken); 10 fit beside the 640-high window (55 high,
   2 apart, the first 60 down: HC-65), then the column scrolls vertically. `RegisterWindow` gains an `icon` field.
 - **Tab labels are an option:** icon only, title only, icon and title (the bottom tabs; side tabs are always
   icons). Icon only shows the title as a tooltip. `PanelTabButtonTemplate` has no icon slot: we add the texture.
@@ -1550,3 +1554,52 @@ Results (the saved file and the user's screenshot; UI scale 0.8, screen 1707 × 
 - What the panel's tabs don't show: they switch nothing (the probe has no pages behind them), so a click only
   changes the selected art.
 
+- The probe panel and `/hc diag ui` were removed with HC-69, which builds on what it measured (git history:
+  `ad24634`).
+
+### 17.8 As built (HC-69 with HC-66, 2026-11-23)
+
+**The tab chrome** (`UI/Windows.lua`):
+- **Which column.** A window registered by Hard Counters itself (`ns.Windows.Register`) is a bottom tab; one
+  registered through `HC:RegisterWindow` (every pack, and Diagnostics) is a side tab. Bottom tabs sort by
+  `def.tabOrder` (Overview 1, Boards 2, Trackers 3, Runs 4; Overview and Boards arrive with HC-67 and HC-68); side
+  tabs keep load order with Diagnostics (`hcdiag:`) always last.
+- **Bottom tabs** are `PanelTabButtonTemplate` with an icon texture, as the probe measured: the icon 16 square,
+  3 left of the label, the label shifted right by half (`selectedTextX` / `deselectedTextX`), resized after
+  Blizzard's own `OnShow` / `OnEvent` resize with room for the icon. The label option is
+  `settings.tabLabels` ("both", "title", "icon"; Options ▸ Windows ▸ Tab labels); icon only centres the icon, which
+  follows the select offsets, and shows the title as a tooltip. A window without an icon always shows its title; the
+  plain fallback (no template) shows titles only. Icons: Trackers `INV_Misc_Gear_01`, Runs `INV_Misc_PocketWatch_01`.
+- **Side tabs** are `LargeSideTabButtonTemplate` (`SetFillToInterior`, `tooltipText` = the title, clicks through
+  `SetCustomOnMouseUpHandler`, `SetChecked` on the selected one), 55 square from 60 down, 2 apart; with no template,
+  40-square icon buttons. 10 fit beside the 640-high window; with more, two arrow buttons under the column and the
+  mouse wheel over it scroll it, and opening a tab scrolls it into view. A pack window without an icon shows Hard
+  Counters' icon. Icons: Ledger `INV_Misc_Coin_01`, Character Stats `INV_Misc_Book_09`, Diagnostics
+  `Trade_Engineering`.
+- **Clamp:** `SetClampRectInsets(0, 55, 0, -30)` (with side tabs; 42 for the fallback), so neither the column nor
+  the bottom tabs leave the screen.
+- **Size and scrolling:** the design size 780 × 640 (body 762 × 568; Character Stats needs 566: 27 stat rows and 5 headings), wider for a tab
+  whose minimum width is larger. Content sits on a canvas inside a `ScrollFrame`; a tab whose minimum height is
+  taller than the body gets a canvas that tall, a slim scroll bar (`Widgets.VScroll`, a plain `Slider`) and the
+  mouse wheel (40 per notch); another tab starts at its top. No tab today needs it.
+
+**The browser** (`UI/Browser.lua`, `ns.Browser.New(content, spec)`): search box (with a "Search" hint) and a
+Filters button over a 150-wide tree; the list to its right with clickable column headers (" ^" / " v" marks the
+sort; a second click reverses), pooled 18-high rows, a slim scroll bar and the mouse wheel; a 160-high detail pane
+under the list (title, wrapped lines, then items each with an optional button, mouse wheel for more); an action bar
+at the bottom right with the footer text at its left. Right-click on a row offers the same actions as a menu. The
+provider owns the data and the filters (spec fields in the file's header); the widget keeps the node, the
+selection (by key, dropped when the row disappears), the sort and the search. The Filters menu is a `Menu.Show`
+builder whose `keepOpen` items toggle in place.
+
+**The Trackers tab** (`UI/Trackers.lua`, minimum 600 × 360): tree "All trackers", then each category in
+registration order (Basics, Farming, Character, Travel), then "Not loaded" (grey) when data on disk has no owner;
+counts beside each. Columns Name (with *New*), On, History ("Off", the preset, "needs daily", or "live only" for a
+tracker without counters), Size. Filters: on, off, only with history on, only used by this character, and per pack
+(shown when more than one). Trackers whose every reading says `applies = false` show grey. Detail: the description,
+a state line (on or off · history · size on disk), then the readings with their scope chips, those this character
+doesn't use last under their heading, each with **Add tile** (HC-36's rules: the only board, or a menu of them,
+or a new one). Actions: **Turn on / Turn off** (the same confirmations), **History...** (the HC-48 menu: Keep
+history, Advanced, Delete history), **Delete data** (all of it, with its confirm). For a "Not loaded" row:
+**Delete**. "Edit boards" stays in the header until the Boards tab takes it (HC-68). The History column no longer
+toggles history on a click: that moved into History... (one place for it).

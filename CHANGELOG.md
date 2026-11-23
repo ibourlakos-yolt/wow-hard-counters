@@ -7,6 +7,8 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
+**Updating:** quit and restart the game after installing (a new file; `/reload` is not enough).
+
 ### Fixed
 - **The run summary card opened behind the Hard Counters window.** Clicking a run in the Runs tab opened its card
   under the window, so it looked as if nothing happened. The card now opens on top, and comes back on top when you
@@ -18,9 +20,24 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 ### Changed
 - **A board in mini mode names what it shows** ("Gold/h 12g 40s/h 0:42"): a fresh Pocket board used to read only
   "- 0:09".
-- **The Hard Counters window is one fixed size.** It no longer resizes, and it stays the same size on every tab:
-  the smallest size every tab fits. A size you dragged before is forgotten, and the "Reset its size" option is
-  gone. Windows of their own and popups still resize.
+- **The Hard Counters window is one fixed size.** It no longer resizes, and it stays the same size on every tab
+  (a little wider than before, for the new Trackers tab). A tab with more than fits scrolls. A size you dragged
+  before is forgotten, and the "Reset its size" option is gone. Windows of their own and popups still resize.
+- **New tabs in the Hard Counters window.** Hard Counters' own tabs (Trackers, Runs) stay along the bottom, now with
+  icons; Options ▸ Windows ▸ **Tab labels** shows icon and title, the title only, or the icon only. The packs'
+  windows (Ledger, Character Stats) and Diagnostics move to **icon tabs down the right edge**, like the profession
+  window's; hover one for its name. The window can no longer be dragged so far that its tabs leave the screen.
+- **The Trackers tab is rebuilt**, in the spirit of the Auction House: categories on the left (Basics, Farming,
+  Travel, Character, and "Not loaded" for data nothing uses), a search box and a **Filters** menu (on, off, with
+  history, used by this character, per pack), a list you can sort by name, on, history or size, and below it the
+  selected tracker's numbers, each with **Add tile**. The buttons at the bottom follow the selection: **Turn on** or
+  **off**, **History...** (keep history, how much and how long, delete it) and **Delete data**. Right-click a
+  tracker for the same. Trackers your character has no use for show grey.
+
+### Developer notes
+- `HC:RegisterWindow` takes an `icon` (a texture path or file id): a pack's window is now an icon tab down the
+  right edge of the Hard Counters window, with its `title` as the tooltip. The window is a design size (780 × 640);
+  a `minHeight` taller than its body makes your tab scroll instead of growing the window. API §9.
 
 ## 0.2.0-beta1 (2026-11-22)
 

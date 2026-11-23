@@ -382,6 +382,9 @@ buckets only (§5.1). Sparklines read the in-memory rate window (`liveRate` coun
 
 ## 7. The Trackers window
 
+> Rebuilt 2026-11-23 on the shared browser (HC-66, DESIGN §17.8): category tree, columns, detail pane, actions.
+> The mock-up below is the first layout (2026-11-15).
+
 A tab of the shared Hard Counters window, `/hc trackers`. The catalog, the on/off switchboard and the storage panel
 in one.
 

@@ -53,6 +53,13 @@ Panel chrome (2026-11-15, all ❓ until seen in game; each guarded, with a plain
 Minimap button: `LibDBIcon-1.0` (minor 57; it lists Interface 16001), which uses `Minimap`, `GetMinimapShape` and the
 addon compartment when present (`AddonCompartmentFrame:RegisterAddon`: the AddOns menu entry, HC-45; the menu
 exists on Forever, user's screenshot 2026-11-18; our entry is ❓). Frame strata `LOW` for boards (HC-43).
+The Hard Counters window's tabs (HC-69; each confirmed by the HC-65 probe below, the window itself ❓ until seen):
+`LargeSideTabButtonTemplate` (`Icon`, `SetChecked`, `SetFillToInterior`, `SetCustomOnMouseUpHandler`,
+`tooltipText`), an icon texture on `PanelTabButtonTemplate` (`selectedTextX` / `deselectedTextX`),
+`SetClampRectInsets`, a `ScrollFrame` with `SetScrollChild` / `SetVerticalScroll`, a plain `Slider`
+(`SetOrientation`, `SetThumbTexture`, `SetMinMaxValues`, `SetValueStep`, `SetObeyStepOnDrag` when present) as the
+scroll bar, the `UI-ScrollBar-Scroll{Up,Down}Button-*` textures, `GameTooltip`. The browser (`UI/Browser.lua`):
+`InputBoxTemplate`, plain frames and font strings.
 
 ## Diagnostics (`HardCounters_Diagnostics/`)
 
@@ -61,8 +68,8 @@ purpose (they test existence): see `Probes.lua` `FUNCS`, `EVENTS`, `STRINGS`. HC
 `EventRegistry:RegisterCallback("EditMode.Enter" / "EditMode.Exit")` and `EditModeManagerFrame:HookScript("OnShow" /
 "OnHide")`, read through `_G` as well.
 
-HC-65, 2026-11-23 (`/hc diag ui`, the window probe before the main-window rebuild, DESIGN §17.7): ✅ in game the
-same day, all of them work; `GetFrameLevel` doesn't reflect a toplevel frame's raise order (both frames read 1):
+HC-65, 2026-11-23 (`/hc diag ui`, the window probe before the main-window rebuild, DESIGN §17.7; removed with
+HC-69): ✅ in game the same day, all of them work; `GetFrameLevel` doesn't reflect a toplevel frame's raise order (both frames read 1):
 `LargeSideTabButtonTemplate` (on Forever a `Frame` with `SidePanelTabButtonMixin`: `SetChecked`,
 `SetFillToInterior`, `SetCustomOnMouseUpHandler`, `tooltipText`), `C_Texture.GetAtlasInfo("common-sidetab")`, an icon
 texture on `PanelTabButtonTemplate` (`selectedTextX` / `deselectedTextX`, read by `PanelTemplates_SelectTab` /

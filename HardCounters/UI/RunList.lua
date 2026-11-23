@@ -184,7 +184,8 @@ local function build(f)
 end
 
 Win.Register(ID, {
-  title = L["Runs"], width = 480, height = 300, minWidth = 380, minHeight = 160,
+  title = L["Runs"], icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", tabOrder = 4,
+  width = 480, height = 300, minWidth = 380, minHeight = 160,
   build = build, onShow = refresh,
   migrate = function(c, s)
     if type(s.runListPos) == "table" and s.runListPos[1] then c.pos = { s.runListPos[1], s.runListPos[2] or 0, s.runListPos[3] or 0 } end

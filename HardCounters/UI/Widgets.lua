@@ -190,6 +190,40 @@ function W.Tip(frame, textFn)
   frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
+--- A slim vertical scroll bar for a pooled list (no scroll template: they differ between clients). Plain Slider.
+--- onScroll(offset) runs when the player drags it; bar:SetRange(maxOffset) and bar:SetOffset(n) never call it.
+--- Hidden while there is nothing to scroll. Read the offset from the callback, never from GetValue.
+function W.VScroll(parent, onScroll)
+  local s = CreateFrame("Slider", nil, parent)
+  s:SetWidth(12)
+  s:SetOrientation("VERTICAL")
+  s:SetValueStep(1)
+  if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+  local track = s:CreateTexture(nil, "BACKGROUND")
+  track:SetAllPoints()
+  track:SetColorTexture(0, 0, 0, 0.35)
+  s:SetThumbTexture("Interface\\Buttons\\UI-ScrollBar-Knob")
+  s.max, s.quiet = 0, false
+  s:SetScript("OnValueChanged", function(self, value)
+    if self.quiet then return end
+    if type(value) == "number" and onScroll then onScroll(floor(value + 0.5)) end
+  end)
+  function s.SetRange(self, maxOffset)
+    self.max = math.max(0, maxOffset or 0)
+    self.quiet = true
+    self:SetMinMaxValues(0, math.max(self.max, 0))
+    self.quiet = false
+    self:SetShown(self.max > 0)
+  end
+  function s.SetOffset(self, n)
+    self.quiet = true
+    self:SetValue(n or 0)
+    self.quiet = false
+  end
+  s:SetRange(0)
+  return s
+end
+
 --- Value of a run reading for a saved run record (same rules as HardCounters:RunReading for the open run).
 --- calc: nil for the reading's default (DESIGN §16.9).
 function W.RecordReading(r, rec, calc)

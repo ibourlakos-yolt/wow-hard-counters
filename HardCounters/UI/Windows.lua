@@ -4,8 +4,10 @@
 -- Hard Counters owns the chrome, so every window gets the same: Blizzard's panel frame (border, title, close,
 -- inset), drag to move, Escape, BlizzMove (Ctrl+mouse wheel scales), raise on click, and its position and scale
 -- saved under settings.windows[id]. The shared frame is not resizable and keeps one size for every tab (user,
--- 2026-11-23): the largest minimum width and height among its tabs, so every tab fits, capped at the screen. A frame
--- of its own keeps a resize grip and its saved size. A HUD window (chrome = "hud") gets a plain dark frame instead.
+-- 2026-11-23): its design size (DESIGN §17.2), wider only for a tab whose minimum width needs it, capped at the
+-- screen; a tab taller than it scrolls. Hard Counters' own windows are tabs along the bottom, a pack's window (and
+-- Diagnostics) an icon tab down the right edge (HC-69). A frame of its own keeps a resize grip and its saved size. A
+-- HUD window (chrome = "hud") gets a plain dark frame instead.
 --
 -- Content never shows or hides itself: the host shows the content frame exactly while the window is on screen and
 -- calls def.onShow / def.onHide on those changes, so a refresh ticker can follow them.
@@ -16,7 +18,16 @@ local floor, max, min = math.floor, math.max, math.min
 
 local MAIN, MAIN_NAME = "_main", "HardCountersMain"
 local MAX_W, MAX_H = 1600, 1200
-local MAIN_MIN_W = 340                 -- portrait, title, header buttons
+-- The shared frame's design size (DESIGN §17.2, settled with the browser layout, HC-69): 780 wide for the browser,
+-- 640 high so Character Stats (a 566-high body: every stat row) fits without scrolling. A tab taller than that scrolls; a wider one widens the panel.
+local MAIN_W, MAIN_H = 780, 640
+-- Side tabs (LargeSideTabButtonTemplate on Forever, measured by the HC-65 probe): 55 square, the first 60 down,
+-- 2 apart, hanging off the right edge. The plain fallback is smaller. Bottom tabs hang 30 under the frame.
+local SIDE_W, SIDE_TOP, SIDE_GAP, SIDE_PLAIN = 55, 60, 2, 40
+local ARROWS_H, TAB_HANG, SB_W = 26, 30, 12
+local TAB_ICON, TAB_GAP = 16, 3
+-- Tab labels (DESIGN §17.2): the player's choice for the bottom tabs; side tabs are always icons
+local LABEL_MODES = { both = true, title = true, icon = true }
 -- The addon's own icon (tools/draw-icon.py; same path as ## IconTexture): minimap button, compartment, Broker, portrait.
 local ICON = "Interface\\AddOns\\HardCounters\\Media\\Icon"
 ns.ICON = ICON
@@ -29,6 +40,7 @@ local INSET_L, INSET_R, INSET_B, PAD = 4, 6, 4, 4
 local FLAT_TITLE, HEADER_H = 26, 26
 
 local defs, order = {}, {}
+local sideIds = {}     -- id -> true: a pack's window (registered through the public API), a side icon tab
 local entries = {}     -- id -> { content, host, body (current parent), visible }
 local main
 local Win = {}
@@ -82,6 +94,32 @@ end
 local function dockedIds()
   local out = {}
   for _, id in ipairs(order) do if isDocked(id) then out[#out + 1] = id end end
+  return out
+end
+
+--- Hard Counters' own tabs along the bottom, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs).
+local function bottomIds()
+  local out = {}
+  for i, id in ipairs(order) do if isDocked(id) and not sideIds[id] then out[#out + 1] = { id = id, i = i } end end
+  table.sort(out, function(a, b)
+    local oa, ob = defs[a.id].tabOrder or 100, defs[b.id].tabOrder or 100
+    if oa ~= ob then return oa < ob end
+    return a.i < b.i
+  end)
+  for i, e in ipairs(out) do out[i] = e.id end
+  return out
+end
+
+--- Packs' windows down the right edge, in load order; Diagnostics (Hard Counters' own companion) always last.
+local function sideList()
+  local out, last = {}, {}
+  for _, id in ipairs(order) do
+    if isDocked(id) and sideIds[id] then
+      local list = id:match("^hcdiag:") and last or out
+      list[#list + 1] = id
+    end
+  end
+  for _, id in ipairs(last) do out[#out + 1] = id end
   return out
 end
 
@@ -295,38 +333,99 @@ local function ensureHost(id)
 end
 
 ---------------------------------------------------------------------------
--- The shared frame: a tab per docked window along the bottom (like the character panel), and a header row with
--- a button per window that asks for one (def.mainButton: the run panel)
+-- The shared frame (DESIGN §17.2): Hard Counters' own windows as tabs along the bottom (Overview, Boards, Trackers,
+-- Runs; labelled as the player chose), every pack's window and Diagnostics as icon tabs down the right edge (they
+-- hang off it and take no width; a column too long for the frame scrolls), a header row with a button per window
+-- that asks for one (def.mainButton), and a body that scrolls a tab taller than the panel.
 ---------------------------------------------------------------------------
 
---- Not resizable, and one size whatever the tab (user, 2026-11-23: one panel, visually consistent): the smallest
---- size every tab fits, i.e. the largest minimum width and height among them, capped at the screen.
+local function labelMode()
+  local m = ns.settings and ns.settings.tabLabels
+  return LABEL_MODES[m] and m or "both"
+end
+
+--- The clamp rect reaches over the side column and under the bottom tabs, so neither leaves the screen (HC-65:
+--- SetClampRectInsets clamps both SetPoint and drags).
+local function setClamp()
+  local side = main.sideList and #main.sideList > 0
+  local w = side and (main.sidePlain and SIDE_PLAIN + 2 or SIDE_W) or 0
+  try(main, "SetClampRectInsets", 0, w, 0, (main.tabCount or 0) > 0 and -TAB_HANG or 0)
+end
+
+local function setScroll(off)
+  off = clamp(floor((off or 0) + 0.5), 0, main.scrollMax or 0)
+  main.scrollOff = off
+  try(main.scroll, "SetVerticalScroll", off)
+  main.scrollBar:SetOffset(off)
+end
+
+--- The selected tab's canvas: the body's size, or taller with a scroll bar when its minimum height needs more.
+local function layoutCanvas()
+  local sel = conf(MAIN).selected
+  local bw, bh = main.bodyW or 0, main.bodyH or 0
+  local mh = 0
+  if sel and defs[sel] and isDocked(sel) then mh = select(2, bodyMin(sel)) end
+  local over = max(0, floor(mh - bh + 0.5))
+  main.scrollMax = over
+  main.scroll:ClearAllPoints()
+  main.scroll:SetPoint("TOPLEFT", main.body, "TOPLEFT", 0, 0)
+  main.scroll:SetPoint("BOTTOMRIGHT", main.body, "BOTTOMRIGHT", over > 0 and -(SB_W + 4) or 0, 0)
+  main.canvas:SetSize(max(bw - (over > 0 and SB_W + 4 or 0), 1), max(bh, mh))
+  main.scrollBar:SetRange(over)
+  try(main.scroll, "EnableMouseWheel", over > 0)
+  setScroll(min(main.scrollOff or 0, over))
+end
+
+--- Not resizable, and one size whatever the tab (user, 2026-11-23: one panel, visually consistent): the design
+--- size, wider only when a tab's minimum width needs it (width never scrolls), capped at the screen. A tab taller
+--- than the body scrolls inside it.
 local function layoutMain()
   if not main then return end
   local sel = conf(MAIN).selected
-  local w, h = MAIN_MIN_W - main.padW, 120
-  for _, id in ipairs(dockedIds()) do
-    local mw, mh = bodyMin(id)
-    w, h = max(w, mw), max(h, mh)
-  end
+  local w, h = MAIN_W - main.padW, MAIN_H - main.padH
+  for _, id in ipairs(dockedIds()) do w = max(w, (bodyMin(id))) end
   local pw, ph = main.padW, main.padH
   w, h = screenMax(main, w, h, 0, 0)
   -- Escape closes the frame unless its tab is a window that stays up
   setEscape(MAIN_NAME, not (sel and defs[sel] and defs[sel].escape == false))
   Wd.SetResizeBounds(main, w + pw, h + ph, w + pw, h + ph)
   main:SetSize(w + pw, h + ph)
+  main.bodyW, main.bodyH = w, h
+  layoutCanvas()
 end
 
 local SELECT, DESELECT, RESIZE = "PanelTemplates_SelectTab", "PanelTemplates_DeselectTab", "PanelTemplates_TabResize"
 local TAB_ROOM = 4
 
+-- room for the icon beside the label (HC-65: the icon sits TAB_GAP left of the label, both centred)
+local function tabPad(b)
+  local pad = TAB_ROOM
+  if b.hcIconOn then pad = pad + TAB_ICON + ((b.hcText or "") ~= "" and TAB_GAP or 0) end
+  return pad
+end
+
 -- Blizzard's PanelTemplates_TabResize (forever branch, 1.60.1) sets the label's width to exactly its
 -- GetStringWidth(): in game a label wider than the side art's minimum lost its last letters to "..." (HC-59:
--- "Character S...", "Diagnost..."). Keep its sizing, add a little room, then leave the label unconstrained (width 0,
--- the template's own default). The tab's OnShow and OnEvent (DISPLAY_SIZE_CHANGED) resize it again, so it is hooked.
+-- "Character S...", "Diagnost..."). Keep its sizing, add a little room (and the icon's), then leave the label
+-- unconstrained (width 0, the template's own default). The tab's OnShow and OnEvent (DISPLAY_SIZE_CHANGED) resize it
+-- again with no padding, so it is hooked.
 local function sizeTab(b)
-  pcall(G(RESIZE), b, TAB_ROOM)
+  pcall(G(RESIZE), b, tabPad(b))
   if type(b.Text) == "table" then b.Text:SetWidth(0) end
+end
+
+-- an icon-only tab's title as its tooltip (the template shows one only for a truncated label)
+local function tabTip(self)
+  if (self.hcText or "") ~= "" or not GameTooltip then return end
+  GameTooltip:SetOwner(self, "ANCHOR_TOP")
+  GameTooltip:SetText(self.hcTitle or "", 1, 1, 1)
+  GameTooltip:Show()
+  self.hcTipShown = true
+end
+
+local function tabTipOff(self)
+  if self.hcTipShown and GameTooltip then GameTooltip:Hide() end
+  self.hcTipShown = nil
 end
 
 local function newTab(i)
@@ -335,8 +434,13 @@ local function newTab(i)
     local ok, t = pcall(CreateFrame, "Button", MAIN_NAME .. "Tab" .. i, main, "PanelTabButtonTemplate")
     if ok and widget(t) then
       b, t.blizzard = t, true
+      b.hcIcon = b:CreateTexture(nil, "ARTWORK")
+      b.hcIcon:SetSize(TAB_ICON, TAB_ICON)
+      b.hcIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
       b:HookScript("OnShow", sizeTab)
       b:HookScript("OnEvent", sizeTab)
+      b:HookScript("OnEnter", tabTip)
+      b:HookScript("OnLeave", tabTipOff)
     end
   end
   if not b then
@@ -346,37 +450,173 @@ local function newTab(i)
   return b
 end
 
+--- A bottom tab labelled as the player chose: icon and title, title only, or icon only (the title as its tooltip).
+--- A window without an icon always shows its title; the plain fallback button shows titles only.
+local function dressTab(b, id, selected)
+  local def = defs[id]
+  local title = def.title or id
+  local mode = labelMode()
+  local iconOn = b.blizzard and def.icon ~= nil and mode ~= "title" or false
+  local text = (iconOn and mode == "icon") and "" or title
+  b.hcTitle, b.hcText, b.hcIconOn = title, text, iconOn
+  b:SetText(text)
+  if not b.blizzard then
+    local fs = b:GetFontString()
+    b:SetWidth(max(floor((fs and fs:GetStringWidth() or 50) + 24), 60))
+    b:SetEnabled(not selected)
+    return
+  end
+  local shift = 0
+  b.hcIcon:SetShown(iconOn)
+  if iconOn then
+    b.hcIcon:SetTexture(def.icon)
+    b.hcIcon:ClearAllPoints()
+    if text ~= "" then
+      -- the label moves right by half the icon so both stay centred; Blizzard's select and deselect read these
+      b.hcIcon:SetPoint("RIGHT", b.Text, "LEFT", -TAB_GAP, 0)
+      shift = (TAB_ICON + TAB_GAP) / 2
+    else
+      b.hcIcon:SetPoint("CENTER", b, "CENTER", 0, selected and -3 or 2)    -- the label's own offsets
+    end
+  end
+  b.selectedTextX, b.deselectedTextX = shift, shift
+  sizeTab(b)
+  pcall(G(selected and SELECT or DESELECT), b)
+end
+
+local layoutSide
+
+local function sideTip(self)
+  if self.blizzard or not GameTooltip then return end     -- the template shows its tooltipText itself
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  GameTooltip:SetText(self.tooltipText or "", 1, 1, 1)
+  GameTooltip:Show()
+end
+
+local function sideWheel(_, delta)
+  main.sideOff = (main.sideOff or 0) - (delta or 0)
+  layoutSide(false)
+end
+
+--- A side tab: Blizzard's LargeSideTabButtonTemplate (a Frame on Forever: clicks come through its mouse-up handler,
+--- SetChecked shows the selected art; HC-65), or a plain icon button where the template is missing.
+local function newSideTab(i)
+  local ok, t = pcall(CreateFrame, "Frame", MAIN_NAME .. "Side" .. i, main, "LargeSideTabButtonTemplate")
+  if ok and widget(t) and widget(t.Icon) and type(t.SetChecked) == "function" then
+    t.blizzard = true
+    try(t, "SetFillToInterior", true)            -- as the profession window's tabs
+    if not t:IsMouseEnabled() then t:EnableMouse(true) end
+    local function onUp(self, button, upInside)
+      if button == "LeftButton" and upInside ~= false and self.hcId then Win.Show(self.hcId, true) end
+    end
+    if type(t.SetCustomOnMouseUpHandler) == "function" then t:SetCustomOnMouseUpHandler(onUp)
+    else t:HookScript("OnMouseUp", onUp) end
+  else
+    if ok and widget(t) then t:Hide() end
+    t = CreateFrame("Button", nil, main)
+    t:SetSize(SIDE_PLAIN, SIDE_PLAIN)
+    local bg = t:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.05, 0.05, 0.07, 0.92)
+    t.Icon = t:CreateTexture(nil, "ARTWORK")
+    t.Icon:SetPoint("TOPLEFT", 4, -4)
+    t.Icon:SetPoint("BOTTOMRIGHT", -4, 4)
+    t.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    t.sel = t:CreateTexture(nil, "OVERLAY")
+    t.sel:SetAllPoints()
+    t.sel:SetColorTexture(1, 0.82, 0, 0.25)
+    local hl = t:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.15)
+    t:SetScript("OnClick", function(self) if self.hcId then Win.Show(self.hcId, true) end end)
+    t:SetScript("OnEnter", sideTip)
+    t:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    main.sidePlain = true
+  end
+  t:EnableMouseWheel(true)
+  t:SetScript("OnMouseWheel", sideWheel)
+  return t
+end
+
+--- Place the side column: as many tabs as fit beside the frame; more than that and two arrows (and the mouse wheel
+--- over the column) scroll it. reveal: scroll the selected tab into view.
+function layoutSide(reveal)
+  local ids = main.sideList or {}
+  local plain = main.sidePlain
+  local step = (plain and SIDE_PLAIN or SIDE_W) + SIDE_GAP
+  local frameH = (main.bodyH or 0) + main.padH
+  local n = #ids
+  local fit = max(1, floor((frameH - SIDE_TOP + SIDE_GAP) / step))
+  local over = n > fit
+  if over then fit = max(1, floor((frameH - SIDE_TOP - ARROWS_H + SIDE_GAP) / step)) end
+  local off = main.sideOff or 0
+  local s = main.sideSelected
+  if reveal and s then
+    if s <= off then off = s - 1 elseif s > off + fit then off = s - fit end
+  end
+  off = clamp(off, 0, max(0, n - fit))
+  main.sideOff, main.sideFit = off, fit
+  for i, t in ipairs(main.sideTabs) do
+    local slot = i - off
+    if i <= n and slot >= 1 and slot <= fit then
+      t:ClearAllPoints()
+      t:SetPoint("TOPLEFT", main, "TOPRIGHT", plain and 2 or 0, -(SIDE_TOP + (slot - 1) * step))
+      t:Show()
+    else
+      t:Hide()
+    end
+  end
+  local a = main.sideArrows
+  a:SetShown(over)
+  if over then
+    a:ClearAllPoints()
+    a:SetPoint("TOPLEFT", main, "TOPRIGHT", 4, -(SIDE_TOP + fit * step))
+    a.up:SetEnabled(off > 0)
+    a.down:SetEnabled(off < n - fit)
+  end
+end
+
 local function refreshTabs()
   if not main then return end
   local ids = dockedIds()
   local c = conf(MAIN)
+  local bottom, side = bottomIds(), sideList()
   local found = false
   for _, id in ipairs(ids) do if id == c.selected then found = true end end
-  if not found then c.selected = ids[1] end
+  if not found then c.selected = bottom[1] or side[1] end
   local prev
-  for i, id in ipairs(ids) do
+  for i, id in ipairs(bottom) do
     local b = main.tabs[i]
     if not b then
       b = newTab(i)
       main.tabs[i] = b
     end
-    b:SetText(defs[id].title or id)
+    dressTab(b, id, id == c.selected)
     b:ClearAllPoints()
     if prev then b:SetPoint("LEFT", prev, "RIGHT", b.blizzard and 3 or 2, 0)
     else b:SetPoint("TOPLEFT", main, "BOTTOMLEFT", b.blizzard and 11 or 8, b.blizzard and 2 or 0) end
-    if b.blizzard then
-      sizeTab(b)
-      pcall(G(id == c.selected and SELECT or DESELECT), b)
-    else
-      local fs = b:GetFontString()
-      b:SetWidth(max(floor((fs and fs:GetStringWidth() or 50) + 24), 60))
-      b:SetEnabled(id ~= c.selected)
-    end
     b:SetScript("OnClick", function() Win.Show(id, true) end)
     b:Show()
     prev = b
   end
-  for i = #ids + 1, #main.tabs do main.tabs[i]:Hide() end
+  for i = #bottom + 1, #main.tabs do main.tabs[i]:Hide() end
+  main.tabCount = #bottom
+  main.sideList, main.sideSelected = side, nil
+  for i, id in ipairs(side) do
+    local t = main.sideTabs[i]
+    if not t then
+      t = newSideTab(i)
+      main.sideTabs[i] = t
+    end
+    local def = defs[id]
+    t.hcId = id
+    t.tooltipText = def.title or id
+    t.Icon:SetTexture(def.icon or ICON)
+    if t.blizzard then t:SetChecked(id == c.selected) else t.sel:SetShown(id == c.selected) end
+    if id == c.selected then main.sideSelected = i end
+  end
+  layoutSide(true)
+  setClamp()
   main.empty:SetShown(#ids == 0)
 end
 
@@ -408,12 +648,40 @@ local function buildHeader()
   refreshHeader()
 end
 
+local function arrowButton(parent, dir, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(24, 24)
+  local path = "Interface\\Buttons\\UI-ScrollBar-Scroll" .. dir .. "Button-"
+  b:SetNormalTexture(path .. "Up")
+  b:SetPushedTexture(path .. "Down")
+  b:SetDisabledTexture(path .. "Disabled")
+  b:SetHighlightTexture(path .. "Highlight", "ADD")
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
 local function ensureMain()
   if main then return main end
   main = newHost(MAIN_NAME, MAIN, {
     title = L["Hard Counters"], portrait = true, header = true, fixedSize = true,
   })
-  main.tabs = {}
+  main.tabs, main.sideTabs = {}, {}
+  -- content sits on a canvas in a scroll frame: a tab taller than the body scrolls (DESIGN §17.2)
+  main.scroll = CreateFrame("ScrollFrame", nil, main.body)
+  main.canvas = CreateFrame("Frame", nil, main.scroll)
+  main.canvas:SetSize(1, 1)
+  main.scroll:SetScrollChild(main.canvas)
+  main.scroll:SetScript("OnMouseWheel", function(_, delta) setScroll((main.scrollOff or 0) - (delta or 0) * 40) end)
+  main.scrollBar = Wd.VScroll(main.body, function(off) setScroll(off) end)
+  main.scrollBar:SetPoint("TOPRIGHT", main.body, "TOPRIGHT", 0, 0)
+  main.scrollBar:SetPoint("BOTTOMRIGHT", main.body, "BOTTOMRIGHT", 0, 0)
+  main.sideArrows = CreateFrame("Frame", nil, main)
+  main.sideArrows:SetSize(50, 24)
+  main.sideArrows.up = arrowButton(main.sideArrows, "Up", function() sideWheel(nil, 1) end)
+  main.sideArrows.up:SetPoint("LEFT", 0, 0)
+  main.sideArrows.down = arrowButton(main.sideArrows, "Down", function() sideWheel(nil, -1) end)
+  main.sideArrows.down:SetPoint("LEFT", main.sideArrows.up, "RIGHT", 2, 0)
+  main.sideArrows:Hide()
   main.empty = Wd.Text(main.body, "GameFontDisable", "TOPLEFT", 12, -12, 280)
   main.empty:SetText(L["No windows yet."])
   main.close:SetScript("OnClick", function()
@@ -422,8 +690,8 @@ local function ensureMain()
     main:Hide()
   end)
   buildHeader()
-  refreshTabs()
   layoutMain()
+  refreshTabs()
   return main
 end
 
@@ -434,7 +702,7 @@ end
 local function ensureContent(id)
   local e = entries[id]
   if e.content then return e.content end
-  local body = isDocked(id) and ensureMain().body or ensureHost(id).body
+  local body = isDocked(id) and ensureMain().canvas or ensureHost(id).body
   local f = CreateFrame("Frame", nil, body)
   f:SetAllPoints(body)
   f:Hide()
@@ -446,7 +714,7 @@ end
 function attach(id)
   local e = entries[id]
   local content = ensureContent(id)
-  local body = isDocked(id) and ensureMain().body or ensureHost(id).body
+  local body = isDocked(id) and ensureMain().canvas or ensureHost(id).body
   if e.body ~= body then
     content:SetParent(body)
     content:ClearAllPoints()
@@ -461,14 +729,19 @@ end
 
 --- def = { title, build(content), onShow(content), onHide(content), onClose(), width, height, minWidth, minHeight,
 ---   minSize() -> w, h, fixedHeight() -> h|nil, maxWidth, maxHeight, dockable (false: a frame of its own, never a tab), mainButton, remember, escape,
----   chrome ("panel" | "hud"), strata, frameName, migrate(conf, settings) }. Sizes are the content's (the host
----   adds its chrome).
-function Win.Register(id, def)
+---   chrome ("panel" | "hud"), strata, frameName, migrate(conf, settings), icon (texture path or file id: the tab's
+---   icon), tabOrder (Hard Counters' own: the bottom tabs' order) }. Sizes are the content's (the host adds its
+---   chrome). side: a pack's window (HC:RegisterWindow), an icon tab down the right edge instead of a bottom tab.
+function Win.Register(id, def, side)
   if defs[id] then return false, "window already registered: " .. tostring(id) end
   if type(def) ~= "table" or type(def.build) ~= "function" then return false, "def.build(content) is required" end
+  if def.icon ~= nil and type(def.icon) ~= "string" and type(def.icon) ~= "number" then
+    return false, "def.icon must be a texture path or a file id"
+  end
   defs[id] = def
   order[#order + 1] = id
   entries[id] = {}
+  sideIds[id] = side and true or nil
   if main then
     if def.mainButton then
       for _, b in pairs(main.header) do b:Hide() end
@@ -492,6 +765,7 @@ function Win.Show(id, show)
   if show then
     attach(id)
     if isDocked(id) then
+      if conf(MAIN).selected ~= id then main.scrollOff = 0 end     -- another tab starts at its top
       conf(MAIN).selected = id
       refreshTabs()
       layoutMain()
@@ -599,7 +873,7 @@ function HC:RegisterWindow(id, def)
   if type(id) ~= "string" or not id:match("^[%w_]+:[%w_.%-]+$") then
     return false, "window id must be namespaced, e.g. \"mypack:main\""
   end
-  return Win.Register(id, def)
+  return Win.Register(id, def, true)          -- a pack's window: an icon tab down the right edge
 end
 function HC:ShowWindow(id, show) return Win.Show(id, show) end
 function HC:ToggleWindow(id) return Win.Show(id, nil) end
@@ -607,11 +881,16 @@ function HC:IsWindowShown(id) return Win.IsShown(id) end
 function HC:RelayoutWindow(id) return Win.Relayout(id) end
 
 ---------------------------------------------------------------------------
--- Options: the shared frame's scale (its size is fixed by its tabs)
+-- Options: the shared frame's scale (its size is fixed) and how its bottom tabs are labelled
 ---------------------------------------------------------------------------
 
 ns.AddOptions("windows", function()
   local args = {}
+  args.tabLabels = { type = "select", order = 80, name = L["Tab labels"],
+    desc = L["The tabs along the bottom of the Hard Counters window. With icons only, hover a tab for its name."],
+    values = { both = L["Icon and title"], title = L["Title only"], icon = L["Icon only"] },
+    get = function() return labelMode() end,
+    set = function(_, v) ns.settings.tabLabels = v; refreshTabs() end }
   args.scale = { type = "range", order = 90, name = L["Scale of the Hard Counters window"], min = 0.5, max = 2, step = 0.05,
     get = function() return (main and main:GetScale()) or conf(MAIN).scale or 1 end,
     set = function(_, v) conf(MAIN).scale = v; if main then main:SetScale(v); layoutMain() end end }

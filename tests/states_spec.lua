@@ -125,21 +125,20 @@ describe("reading states on screen (HC-28)", function()
       assert.are.equal("Not used by this character", stats[3].text)
       assert.are.equal("Parry", stats[3].sub[1].text)
 
-      -- the Trackers window: the same order, under a heading
+      -- the Trackers tab: the same order in the selected tracker's detail pane, under a heading
       ns.ShowTrackers(true)
       local tf = ns.Windows.Content("trackers")
-      tf.list:SetHeight(900)
-      ns.RefreshTrackers()
-      local function rowIndex(pattern)
-        for i, r in ipairs(tf.rows) do
-          if r:IsShown() and (r.title:GetText() or ""):find(pattern) then return i, r end
+      tf:SetSize(762, 568)
+      ns.TrackersBrowser:Select("ts:stats", "all")
+      local d = ns.TrackersBrowser.detail
+      local function itemIndex(pattern)
+        for i, r in ipairs(d.items) do
+          if r:IsShown() and (r.text:GetText() or ""):find(pattern) then return i, r end
         end
       end
-      local _, tracker = rowIndex("^[%+%-]  Stats")       -- (not the "Character Stats" pack heading)
-      tracker._scripts.OnClick()
-      local iDodge = rowIndex("^Dodge$")
-      local iHead = rowIndex("^Not used by this character$")
-      local iParry = rowIndex("^Parry$")
+      local iDodge = itemIndex("^Dodge ")
+      local iHead = itemIndex("^Not used by this character$")
+      local iParry = itemIndex("^Parry ")
       assert.truthy(iDodge and iHead and iParry)
       assert.is_true(iDodge < iHead and iHead < iParry)
       assert.are.same({}, ctx.env.errors)

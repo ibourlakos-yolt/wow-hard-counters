@@ -56,6 +56,9 @@ local frameMethods = {
   SetToplevel = function(self, v) self._toplevel = v and true or false end,
   IsToplevel = function(self) return self._toplevel or false end,
   Raise = function(self) self._raised = (self._raised or 0) + 1 end,
+  -- the shared window's canvas scrolls (HC-69); the clamp reaches over its tabs
+  SetVerticalScroll = function(self, v) self._vscroll = v end,
+  SetClampRectInsets = function(self, ...) self._clamp = { ... } end,
   IsMouseEnabled = function(self) return self._mouse or false end,
   GetStringWidth = function() return 50 end,
   GetEffectiveScale = function() return 1 end,
@@ -93,6 +96,14 @@ function C.install(env, opts)
     if templates and template == "PanelTabButtonTemplate" then
       f.Text, f.Left, f.Right = C.frame(client), C.frame(client), C.frame(client)
       f.Left._w, f.Right._w = 20, 20                    -- the side art, the tab's minimum width
+    end
+    -- Forever's side tab (HC-65): a Frame with an icon, SetChecked and a mouse-up handler, 55 square
+    if templates and template == "LargeSideTabButtonTemplate" then
+      f.Icon, f.SelectedTexture = C.frame(client), C.frame(client)
+      f._w, f._h, f._mouse = 55, 55, true
+      f.SetChecked = function(self, v) self._checked = v and true or false end
+      f.SetCustomOnMouseUpHandler = function(self, fn) self._onUp = fn end
+      f.SetFillToInterior = function(self, v) self._fill = v end
     end
     if name then G[name] = f end
     return f

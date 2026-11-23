@@ -49,6 +49,7 @@ UI\Windows.lua
 UI\Menu.lua
 UI\BoardModel.lua
 UI\Boards.lua
+UI\Browser.lua
 UI\Trackers.lua
 UI\RunList.lua
 UI\Broker.lua

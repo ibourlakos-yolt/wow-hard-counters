@@ -1,25 +1,19 @@
--- The Trackers window (TRACKERS_AND_BOARDS §7, HC-19): the catalog, the on/off switchboard and the storage panel in
--- one. A tab of the shared Hard Counters window; /hc trackers. Per pack: each tracker with on/off, its history
--- (one switch, HC-48: "History on/off"; right-click: Advanced = Lifetime / Daily with days / Detailed, and Delete)
--- and its size on disk; expanded, its readings with their scopes and
--- a [+] that puts one on a board (the only one, or the one picked: HC-36). At the bottom, "Not loaded": data on disk that nothing registered
--- this session, with Delete. The one-time "New" behaviour: a pack's new trackers are marked New, and the window
--- opens once by itself when a new pack's trackers appear.
--- Rows are a virtual list (a pool of row frames, the mouse wheel moves the offset): no scroll template needed.
+-- The Trackers tab (TRACKERS_AND_BOARDS §7, HC-19; rebuilt on the shared browser, HC-66, DESIGN §17.4): the
+-- catalog, the on/off switchboard and the storage panel in one. A bottom tab of the Hard Counters window;
+-- /hc trackers. Tree: the trackers' categories, then "Not loaded" (data on disk that nothing registered this
+-- session, with Delete). List: Name, On, History, Size. Detail: the selected tracker's readings with their scopes
+-- and Add tile (the only board, or the one picked: HC-36). Actions: Turn on or off, History... (Keep history,
+-- Advanced = Lifetime / Daily with days / Detailed, Delete history: HC-48), Delete data. The one-time "New"
+-- behaviour: a pack's new trackers are marked New, and the window opens once by itself when a new pack's trackers
+-- appear.
 local ADDON, ns = ...
 
-local HC, L, Wd = ns.HC, ns.L, ns.Widgets
-local format, floor, max, min = string.format, math.floor, math.max, math.min
+local HC, L = ns.HC, ns.L
+local format, floor = string.format, math.floor
 
 local ID = "trackers"
-local ROW_H, TOP_Y, FOOT_H = 20, -34, 22
-local SIZE_W = 110                     -- the size column: "12 KB (3 KB frozen)"
-local content
-local expanded = {}         -- tracker id -> true
-local scroll = 0
-local entries = {}          -- the list's rows, rebuilt on refresh
+local content, browser
 local sizes, sizeTotal = {}, nil
-local filter = ""
 
 local TIP_LIVE = "No history: these numbers cover this session and your runs, and reset when you log out. Turn on "
   .. "history to keep daily totals, see today and this week, and compare with earlier days. About 20 KB a month."
@@ -51,12 +45,6 @@ function ns.TrackerSizeText(bytes, frozen)
   return format("%s (%s %s)", kb(bytes), kb(frozen), L["frozen"])
 end
 
---- The history button's words (HC-48: one switch, "History on" / "History off"; the preset is in its tooltip).
-local function historyLabel(t)
-  if not t.on and t.needsHistory then return format(L["needs %s history"], t.needsHistory) end
-  if t.history == "off" then return L["History off"] end
-  return L["History on"]
-end
 
 --- The preset a tracker keeps, in words ("Daily, 14 days").
 local function presetText(t)
@@ -230,12 +218,17 @@ local function addTip()
 end
 
 ---------------------------------------------------------------------------
--- The list
+-- The tab: the shared browser (DESIGN §17.3, §17.4; HC-66). The tree is the trackers' categories (Basics, Farming,
+-- Travel, Character, ...) plus "Not loaded"; the list's columns are Name, On, History, Size; the detail pane lists
+-- the selected tracker's readings, each with Add tile; the action bar: Turn on or off, History..., Delete data.
+-- Trackers this character has no use for show grey. Right-click on a row: the same actions as a menu.
 ---------------------------------------------------------------------------
 
-local function matches(text)
-  return filter == "" or (text and text:lower():find(filter, 1, true) ~= nil)
-end
+local F = { on = true, off = true, history = false, here = false, packs = {} }   -- the Filters menu; packs: hidden
+
+local function packOf(t) return t.packTitle or "Hard Counters" end
+local function categoryOf(t) return t.category or packOf(t) end
+local function liveOnly(t) return #(t.counters or {}) == 0 end
 
 local function scopeChips(r)
   local parts = {}
@@ -251,281 +244,222 @@ local function scopeChips(r)
   return table.concat(parts, "  ")
 end
 
-local function rebuild()
-  entries = {}
-  local trackers = HC:Trackers()
-  local byPack, packs = {}, {}
-  for _, t in ipairs(trackers) do
-    local key = t.packTitle or "Hard Counters"
-    if not byPack[key] then byPack[key] = {}; packs[#packs + 1] = key end
-    local list = byPack[key]
-    list[#list + 1] = t
-  end
-  for _, key in ipairs(packs) do
-    local list = byPack[key]
-    local anyNew = false
-    for _, t in ipairs(list) do if t.new then anyNew = true end end
-    local shown = {}
-    for _, t in ipairs(list) do
-      local readings = HC:Readings({ tracker = t.id })
-      local hit = matches(t.title)
-      for _, r in ipairs(readings) do if matches(listTitle(r)) then hit = true end end
-      if hit then shown[#shown + 1] = { t = t, readings = readings } end
+--- A tracker this character has no use for: every reading it offers says so (HC-28's `applies`).
+local function usable(readings)
+  if #readings == 0 then return true end
+  for _, r in ipairs(readings) do if r.applies ~= false then return true end end
+  return false
+end
+
+local function passes(t, readings)
+  if t.on and not F.on then return false end
+  if not t.on and not F.off then return false end
+  if F.history and t.history == "off" then return false end
+  if F.here and not usable(readings) then return false end
+  if F.packs[packOf(t)] then return false end
+  return true
+end
+
+local function searchHit(search, t, readings)
+  if search == "" then return true end
+  local function has(s) return type(s) == "string" and s:lower():find(search, 1, true) ~= nil end
+  if has(t.title) or has(t.description) then return true end
+  for _, r in ipairs(readings) do if has(listTitle(r)) then return true end end
+  return false
+end
+
+--- Every tracker with its readings (the tree, the rows and the detail all read this).
+local function catalog()
+  local out = {}
+  for _, t in ipairs(HC:Trackers()) do out[#out + 1] = { t = t, readings = HC:Readings({ tracker = t.id }) } end
+  return out
+end
+
+local function nodes()
+  local byCat, cats, total = {}, {}, 0
+  for _, e in ipairs(catalog()) do
+    if passes(e.t, e.readings) then
+      local c = categoryOf(e.t)
+      if not byCat[c] then byCat[c] = 0; cats[#cats + 1] = c end
+      byCat[c] = byCat[c] + 1
+      total = total + 1
     end
-    if #shown > 0 then
-      entries[#entries + 1] = { kind = "pack", text = key, new = anyNew }
-      for _, s in ipairs(shown) do
-        entries[#entries + 1] = { kind = "tracker", t = s.t }
-        if expanded[s.t.id] or filter ~= "" then
-          -- (HC-28) readings this character doesn't use come last, under a heading of their own
-          local unusedHead = false
-          for pass = 1, 2 do
-            for _, r in ipairs(s.readings) do
-              if (r.applies ~= false) == (pass == 1)
-                  and (filter == "" or matches(listTitle(r)) or matches(s.t.title)) then
-                if pass == 2 and not unusedHead then
-                  entries[#entries + 1] = { kind = "subhead", text = L["Not used by this character"] }
-                  unusedHead = true
-                end
-                entries[#entries + 1] = { kind = "reading", r = r }
-              end
-            end
-          end
+  end
+  local out = { { key = "all", text = L["All trackers"], count = total } }
+  for _, c in ipairs(cats) do out[#out + 1] = { key = "cat:" .. c, text = L[c], count = byCat[c], indent = 1 } end
+  local unloaded = HC:UnloadedCounters()
+  if #unloaded > 0 then out[#out + 1] = { key = "unloaded", text = L["Not loaded"], count = #unloaded, grey = true } end
+  return out
+end
+
+local function historyCell(t)
+  if liveOnly(t) then return "|cff808080" .. L["live only"] .. "|r" end
+  if not t.on and t.needsHistory then return format(L["needs %s"], t.needsHistory) end
+  if t.history == "off" then return L["Off"] end
+  return presetText(t)
+end
+
+local function rows(node, search)
+  local out = {}
+  if node == "unloaded" then
+    for _, u in ipairs(HC:UnloadedCounters()) do
+      -- (HC-48) never the raw id: "Farmer: Money out (no longer used)"
+      local name = format("%s: %s", u.pack, u.title)
+      if search == "" or name:lower():find(search, 1, true) then
+        out[#out + 1] = { key = "u:" .. u.id, unloaded = u, name = name, bytes = u.bytes, grey = true,
+          cells = { name = name, on = "", history = L[u.why], size = kb(u.bytes) } }
+      end
+    end
+    return out
+  end
+  for _, e in ipairs(catalog()) do
+    local t = e.t
+    if (node == "all" or node == "cat:" .. categoryOf(t)) and passes(t, e.readings) and searchHit(search, t, e.readings) then
+      local bytes, frozen = HC:TrackerSize(t.id, sizes)
+      out[#out + 1] = { key = t.id, t = t, readings = e.readings, bytes = bytes or 0, grey = not usable(e.readings),
+        cells = {
+          name = t.title .. (t.new and ("  |cff60ff60" .. L["New"] .. "|r") or ""),
+          on = t.on and ("|cff60ff60" .. L["on"] .. "|r") or L["off"],
+          history = historyCell(t),
+          size = liveOnly(t) and "" or ns.TrackerSizeText(bytes, frozen),
+        } }
+    end
+  end
+  return out
+end
+
+local function detail(row)
+  if row.unloaded then
+    local u = row.unloaded
+    return { title = row.name, lines = {
+      u.why == "pack not loaded"
+        and L["Saved data of an addon that isn't loaded this session. Enable the addon again and it carries on; Delete removes it."]
+        or L["Saved data the addon no longer uses (an older version's). Nothing will read it again; Delete removes it."],
+      format(L["%s on disk."], kb(u.bytes)) } }
+  end
+  local t = row.t
+  local lines = {}
+  if t.description then lines[#lines + 1] = t.description end
+  local state = { t.on and L["On"] or L["Off"] }
+  if liveOnly(t) then
+    state[#state + 1] = L["live numbers only: nothing kept on disk"]
+  else
+    state[#state + 1] = format(L["history: %s"], t.history == "off" and L["off (this session and your runs)"] or presetText(t))
+    state[#state + 1] = format(L["%s on disk"], ns.TrackerSizeText(HC:TrackerSize(t.id, sizes)))
+  end
+  lines[#lines + 1] = table.concat(state, "  \194\183  ")
+  if not usable(row.readings) then lines[#lines + 1] = "|cff808080" .. L["Not used by this character."] .. "|r" end
+  -- its readings, the ones this character doesn't use last under a heading of their own (HC-28)
+  local items, unusedHead = {}, false
+  for pass = 1, 2 do
+    for _, r in ipairs(row.readings) do
+      if (r.applies ~= false) == (pass == 1) then
+        if pass == 2 and not unusedHead then
+          items[#items + 1] = { text = L["Not used by this character"], grey = true }
+          unusedHead = true
         end
+        items[#items + 1] = { text = listTitle(r) .. "     " .. scopeChips(r), grey = pass == 2, reading = r.id,
+          tip = (r.description and (r.description .. "\n") or "") .. L["Grey scopes need history (History...)."],
+          button = { text = L["Add tile"], func = function(btn) addToBoard(r.id, btn) end, tip = addTip } }
       end
     end
   end
-  local unloaded = HC:UnloadedCounters()
-  if #unloaded > 0 and filter == "" then
-    entries[#entries + 1] = { kind = "pack", text = L["Not loaded"], note = L["data on disk that no addon uses this session"] }
-    for _, u in ipairs(unloaded) do
-      -- (HC-48) never the raw id: "Farmer: Money out (no longer used)"
-      entries[#entries + 1] = { kind = "unloaded", id = u.id, bytes = u.bytes,
-        name = format("%s: %s", u.pack, u.title), why = L[u.why] }
-    end
-  end
+  if #items == 0 then items[1] = { text = L["No numbers to show."], grey = true } end
+  return { title = t.title .. "   |cff808080" .. packOf(t) .. "|r", lines = lines, items = items }
 end
 
-local function rowFrame(i)
-  local rows = content.rows
-  local b = rows[i]
-  if b then return b end
-  b = CreateFrame("Button", nil, content.list)
-  b:SetHeight(ROW_H)
-  b:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-  b:SetPoint("TOPRIGHT", 0, -(i - 1) * ROW_H)
-  b.hl = b:CreateTexture(nil, "HIGHLIGHT")
-  b.hl:SetAllPoints()
-  b.hl:SetColorTexture(1, 1, 1, 0.06)
-  b.title = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  b.title:SetJustifyH("LEFT")
-  b.title:SetWordWrap(false)
-  b.badge = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  b.size = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  b.size:SetJustifyH("RIGHT")
-  b.size:SetPoint("RIGHT", -6, 0)
-  b.size:SetWidth(SIZE_W)          -- a fixed column, so the buttons line up and never sit on the size text
-  b.size:SetWordWrap(false)
-  b.onBtn = Wd.Button(b, "", 44, nil)
-  b.onBtn:SetHeight(18)
-  b.histBtn = Wd.Button(b, "", 96, nil)
-  b.histBtn:SetHeight(18)
-  b.histBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  b.plus = Wd.Button(b, "+", 24, nil)
-  b.plus:SetHeight(18)
-  b.plus:SetPoint("RIGHT", -6, 0)
-  b.del = Wd.Button(b, L["Delete"], 60, nil)
-  b.del:SetHeight(18)
-  b.del:SetPoint("RIGHT", -70, 0)
-  b.scopes = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  b.scopes:SetJustifyH("LEFT")
-  b.scopes:SetWordWrap(false)
-  b:EnableMouseWheel(true)
-  b:SetScript("OnMouseWheel", function(_, delta) content:GetScript("OnMouseWheel")(content, delta) end)
-  rows[i] = b
-  return b
-end
-
-local function hideParts(b)
-  b.onBtn:Hide(); b.histBtn:Hide(); b.plus:Hide(); b.del:Hide(); b.scopes:Hide(); b.badge:SetText(""); b.size:SetText("")
-  b:SetScript("OnClick", nil)
-  b:SetScript("OnEnter", nil)
-  b:SetScript("OnLeave", nil)
-end
-
-local function drawEntry(b, e)
-  hideParts(b)
-  b.title:ClearAllPoints()
-  if e.kind == "pack" then
-    b.title:SetPoint("LEFT", 4, 0)
-    b.title:SetWidth(0)
-    b.title:SetFontObject("GameFontNormal")
-    b.title:SetText(e.text)
-    b.badge:ClearAllPoints()
-    b.badge:SetPoint("LEFT", b.title, "RIGHT", 8, 0)
-    b.badge:SetText(e.new and ("|cff60ff60" .. L["New"] .. "|r") or (e.note and ("|cff808080" .. e.note .. "|r") or ""))
-  elseif e.kind == "subhead" then
-    b.title:SetPoint("LEFT", 34, 0)
-    b.title:SetWidth(0)
-    b.title:SetFontObject("GameFontDisableSmall")
-    b.title:SetText(e.text)
-  elseif e.kind == "tracker" then
-    local t = e.t
-    b.title:SetFontObject("GameFontHighlight")
-    b.title:SetPoint("LEFT", 14, 0)
-    b.title:SetWidth(0)
-    b.title:SetText((expanded[t.id] and "-  " or "+  ") .. t.title .. (t.new and ("  |cff60ff60" .. L["New"] .. "|r") or ""))
-    b:SetScript("OnClick", function() expanded[t.id] = not expanded[t.id]; refresh() end)
-    b:SetScript("OnEnter", function(self)
-      if not t.description then return end
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(t.title, 1, 1, 1)
-      GameTooltip:AddLine(t.description, 0.8, 0.8, 0.8, true)
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    b.histBtn:ClearAllPoints()
-    b.histBtn:SetPoint("RIGHT", -(SIZE_W + 12), 0)
-    b.histBtn:SetText(historyLabel(t))
-    Wd.FitWidth(b.histBtn, 96, 20)   -- "needs daily history" overflowed a fixed 96 (run 3 screenshot)
-    -- (HC-48) a click switches history on or off; right-click: Advanced (how much, how long) and Delete
-    b.histBtn:SetScript("OnClick", function(self, button)
-      if button == "RightButton" then historyMenu(self, t) elseif not t.on and t.needsHistory then switch(t, true)
-      else toggleHistory(t) end
-    end)
-    Wd.Tip(b.histBtn, function()
-      if not t.on and t.needsHistory then return format(L["Click to turn %s on: it keeps %s history."], t.title, t.needsHistory) end
-      local hint = "\n|cff808080" .. L["Click: history on or off. Right-click: how much and how long (Advanced), Delete."] .. "|r"
-      if t.history == "off" then return L[TIP_LIVE] .. hint end
-      return format(L["Keeping history: %s. %s"], presetText(t), L[HISTORY_TIP[t.history] or ""]) .. hint
-    end)
-    -- a tracker of live readings only (no counters) keeps nothing: no history button
-    local live = #(t.counters or {}) == 0
-    b.histBtn:SetShown(not live)
-    -- the switch sits left of the history button, the title left of the switch
-    b.onBtn:ClearAllPoints()
-    if live then b.onBtn:SetPoint("RIGHT", -(SIZE_W + 12), 0) else b.onBtn:SetPoint("RIGHT", b.histBtn, "LEFT", -4, 0) end
-    b.onBtn:SetText(t.on and L["on"] or L["off"])
-    b.onBtn:SetScript("OnClick", function() switch(t, not t.on) end)
-    b.onBtn:Show()
-    b.title:SetPoint("RIGHT", b.onBtn, "LEFT", -8, 0)
-    local bytes, frozen = HC:TrackerSize(t.id, sizes)
-    b.size:SetText(ns.TrackerSizeText(bytes, frozen))
-  elseif e.kind == "reading" then
-    local r = e.r
-    b.title:SetFontObject("GameFontHighlightSmall")
-    b.title:SetPoint("LEFT", 34, 0)
-    b.title:SetWidth(120)
-    b.title:SetText(listTitle(r))
-    b.scopes:ClearAllPoints()
-    b.scopes:SetPoint("LEFT", b.title, "RIGHT", 8, 0)
-    b.scopes:SetPoint("RIGHT", b, "RIGHT", -36, 0)
-    b.scopes:SetText(scopeChips(r))
-    b.scopes:Show()
-    b:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(listTitle(r), 1, 1, 1)
-      if r.description then GameTooltip:AddLine(r.description, 0.8, 0.8, 0.8, true) end
-      GameTooltip:AddLine(L["Grey scopes need history (the tracker's History button)."], 0.5, 0.5, 0.5, true)
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    b.plus:SetScript("OnClick", function() addToBoard(r.id, b.plus) end)
-    Wd.Tip(b.plus, addTip)
-    b.plus:Show()
-  elseif e.kind == "unloaded" then
-    b.title:SetFontObject("GameFontHighlightSmall")
-    b.title:SetPoint("LEFT", 14, 0)
-    b.title:SetWidth(0)
-    b.title:SetText(e.name .. "  |cff808080(" .. e.why .. ")|r")
-    b.title:SetPoint("RIGHT", b.del, "LEFT", -8, 0)
-    b.size:SetText(kb(e.bytes))
-    b:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(e.name, 1, 1, 1)
-      GameTooltip:AddLine(e.why == L["pack not loaded"]
-        and L["Saved data of an addon that isn't loaded this session. Enable the addon again and it carries on; Delete removes it."]
-        or L["Saved data the addon no longer uses (an older version's). Nothing will read it again; Delete removes it."],
-        0.8, 0.8, 0.8, true)
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    b.del:SetScript("OnClick", function()
-      confirm(format(L["Delete %s of %s? No addon uses it this session. This can't be undone."], kb(e.bytes), e.name), function()
-        local freed = HC:DeleteCounterData(e.id)
+local function actions(row)
+  if not row then return {} end
+  if row.unloaded then
+    local u = row.unloaded
+    return { { text = L["Delete"], tip = L["Delete this data: no addon uses it this session."], func = function()
+      confirm(format(L["Delete %s of %s? No addon uses it this session. This can't be undone."], kb(u.bytes), row.name), function()
+        local freed = HC:DeleteCounterData(u.id)
         if ns.Print then ns.Print(L["Deleted %s."], kb(freed)) end
         refresh()
       end)
-    end)
-    b.del:Show()
+    end } }
   end
+  local t = row.t
+  local acts = { { text = t.on and L["Turn off"] or L["Turn on"], func = function() switch(t, not t.on) end,
+    tip = (not t.on and t.needsHistory) and format(L["Click to turn %s on: it keeps %s history."], t.title, t.needsHistory) or nil } }
+  if not liveOnly(t) then
+    acts[#acts + 1] = { text = L["History..."], func = function(btn) historyMenu(btn, t) end,
+      tip = (t.history == "off" and L[TIP_LIVE] or format(L["Keeping history: %s. %s"], presetText(t), L[HISTORY_TIP[t.history] or ""]))
+        .. "\n|cff808080" .. L["Keep history or not, how much and how long (Advanced), Delete history."] .. "|r" }
+    acts[#acts + 1] = { text = L["Delete data"], disabled = (row.bytes or 0) <= 0, func = function() deleteHistory(t, nil) end,
+      tip = L["Delete everything this tracker has kept on disk."] }
+  end
+  return acts
 end
 
-local function visibleRows()
-  local h = content.list:GetHeight() or 200
-  return max(1, floor(h / ROW_H))
-end
-
-function refresh()
-  if not (content and content:IsShown()) then return end
-  sizes, sizeTotal = ns.CounterSizes()
-  rebuild()
-  local n = visibleRows()
-  scroll = max(0, min(scroll, #entries - n))
-  for i = 1, n do
-    local e = entries[scroll + i]
-    local b = rowFrame(i)
-    if e then
-      local ok, err = pcall(drawEntry, b, e)
-      if not ok then ns.Error(err) end
-      b:Show()
-    else
-      b:Hide()
+local function filterItems()
+  local items = {
+    { text = L["Show trackers that are"], title = true },
+    { text = L["On"], checked = F.on, keepOpen = true, func = function() F.on = not F.on; refresh() end },
+    { text = L["Off"], checked = F.off, keepOpen = true, func = function() F.off = not F.off; refresh() end },
+    { text = L["Only"], title = true },
+    { text = L["With history on"], checked = F.history, keepOpen = true, func = function() F.history = not F.history; refresh() end },
+    { text = L["Used by this character"], checked = F.here, keepOpen = true, func = function() F.here = not F.here; refresh() end },
+  }
+  local packs, seen = {}, {}
+  for _, t in ipairs(HC:Trackers()) do
+    local p = packOf(t)
+    if not seen[p] then seen[p] = true; packs[#packs + 1] = p end
+  end
+  if #packs > 1 then
+    items[#items + 1] = { text = L["From"], title = true }
+    for _, p in ipairs(packs) do
+      items[#items + 1] = { text = p, checked = not F.packs[p], keepOpen = true,
+        func = function() F.packs[p] = (not F.packs[p]) or nil; refresh() end }
     end
   end
-  for i = n + 1, #content.rows do content.rows[i]:Hide() end
-  -- footer: "History on for 2 of 9 trackers · 180 KB on disk" (§3.4)
+  items[#items + 1] = { text = L["Show everything"], keepOpen = true,
+    func = function() F.on, F.off, F.history, F.here, F.packs = true, true, false, false, {}; refresh() end }
+  return items
+end
+
+local function filtersActive()
+  return not F.on or not F.off or F.history or F.here or next(F.packs) ~= nil
+end
+
+-- "History on for 2 of 9 trackers · 180 KB on disk" (§3.4)
+local function footer()
   local on, total = 0, 0
   for _, t in ipairs(HC:Trackers()) do
     total = total + 1
     if t.on and t.history ~= "off" then on = on + 1 end
   end
-  content.foot:SetText(format(L["History on for %d of %d trackers \194\183 %s on disk"], on, total,
-    kb(sizeTotal and sizeTotal.bytes or 0)) .. (#entries > n and ("   " .. L["(mouse wheel: more)"]) or ""))
+  return format(L["History on for %d of %d trackers \194\183 %s on disk"], on, total, kb(sizeTotal and sizeTotal.bytes or 0))
+end
+
+function refresh()
+  if not (content and content:IsShown() and browser) then return end
+  sizes, sizeTotal = ns.CounterSizes()
+  browser:Refresh()
 end
 ns.RefreshTrackers = refresh
 
 local function build(f)
   content = f
-  f.rows = {}
-  f.search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-  f.search:SetSize(160, 20)
-  f.search:SetPoint("TOPLEFT", 12, -6)
-  f.search:SetAutoFocus(false)
-  f.search:SetScript("OnTextChanged", function(self)
-    filter = (self:GetText() or ""):lower()
-    scroll = 0
-    refresh()
-  end)
-  f.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  f.searchHint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  f.searchHint:SetPoint("LEFT", f.search, "RIGHT", 6, 0)
-  f.searchHint:SetText(L["search"])
-  f.edit = Wd.Button(f, L["Edit boards"], 100, function() if ns.Boards then ns.Boards.SetEditing(true) end end)
-  f.edit:SetPoint("TOPRIGHT", -8, -6)
-  f.list = CreateFrame("Frame", nil, f)
-  f.list:SetPoint("TOPLEFT", 6, TOP_Y)
-  f.list:SetPoint("BOTTOMRIGHT", -6, FOOT_H + 4)
-  f.foot = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  f.foot:SetPoint("BOTTOMLEFT", 10, 8)
-  f.foot:SetPoint("BOTTOMRIGHT", -10, 8)
-  f.foot:SetJustifyH("LEFT")
-  f:EnableMouseWheel(true)
-  f:SetScript("OnMouseWheel", function(_, delta)
-    scroll = max(0, scroll - delta * 3)
-    refresh()
-  end)
-  f:SetScript("OnSizeChanged", function() refresh() end)
+  browser = ns.Browser.New(f, {
+    columns = {
+      { key = "name", title = L["Name"], sort = function(r) return (r.t and r.t.title or r.name or ""):lower() end },
+      { key = "on", title = L["On"], width = 36, sort = function(r) return r.t and (r.t.on and 1 or 0) or -1 end },
+      { key = "history", title = L["History"], width = 110,
+        sort = function(r) return r.t and (ns.HISTORY_PRESETS[r.t.history] or 0) or -1 end },
+      { key = "size", title = L["Size"], width = 110, align = "RIGHT", sort = function(r) return r.bytes or 0 end },
+    },
+    nodes = nodes, rows = rows, filters = filterItems, filtersActive = filtersActive,
+    detail = detail, actions = actions, footer = footer,
+    header = { { text = L["Edit boards"], width = 100, tip = L["Move, size and arrange your boards on screen."],
+      func = function() if ns.Boards then ns.Boards.SetEditing(true) end end } },
+    empty = function(_, search)
+      return search ~= "" and L["No tracker matches the search."] or L["No trackers here (see Filters)."]
+    end,
+    noSelection = L["Click a tracker to see the numbers it offers, and add one as a tile on a board."],
+  })
+  ns.TrackersBrowser = browser
 end
 
 --- The window shown with New trackers marks them seen when it closes (the badge has done its job).
@@ -535,7 +469,8 @@ local function onHide()
 end
 
 ns.Windows.Register(ID, {
-  title = L["Trackers"], width = 560, height = 420, minWidth = 480, minHeight = 240,
+  title = L["Trackers"], icon = "Interface\\Icons\\INV_Misc_Gear_01", tabOrder = 3,
+  width = 720, height = 440, minWidth = 600, minHeight = 360,
   build = build, onShow = function() refresh() end, onHide = onHide,
 })
 

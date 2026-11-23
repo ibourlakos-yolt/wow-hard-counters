@@ -50,7 +50,7 @@ files["HardCounters/UI/Slash.lua"] = {
 files["HardCounters/UI/Options.lua"] = { read_globals = AL }
 files["HardCounters/UI/RunCommands.lua"] = { read_globals = { "StaticPopup_Show" }, globals = { "StaticPopupDialogs" } }
 files["HardCounters/UI/Widgets.lua"] = { read_globals = { "CreateFrame", "UIParent", "GameTooltip" } }
-files["HardCounters/UI/Windows.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert" } }
+files["HardCounters/UI/Windows.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip" } }
 files["HardCounters/UI/RunList.lua"] = {
   read_globals = { "CreateFrame", "C_Item", "GetItemInfo", "GameFontHighlightSmall", "GameFontNormalSmall", "UISpecialFrames", "tinsert" },
 }
@@ -61,6 +61,7 @@ files["HardCounters/UI/Broker.lua"] = {
 files["HardCounters/UI/BoardModel.lua"] = { read_globals = {} }
 files["HardCounters/UI/Menu.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip" } }
 files["HardCounters/UI/Trackers.lua"] = { read_globals = { "CreateFrame", "GameTooltip" } }
+files["HardCounters/UI/Browser.lua"] = { read_globals = { "CreateFrame", "GameTooltip" } }
 files["HardCounters/UI/Boards.lua"] = {
   read_globals = { "CreateFrame", "UIParent", "C_Timer", "UISpecialFrames", "tinsert", "StaticPopup_Show", "YES", "NO", "OKAY",
     "CANCEL", "GetCursorPosition" },

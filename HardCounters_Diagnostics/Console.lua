@@ -1,7 +1,6 @@
 -- Console: the dev console window. Tabs: Log, Live, Storage, Probes. Buttons: Refresh, Snapshot, Copy, Marker,
 -- Run probes, Level. The text area is a read-only edit box, so the Copy button is just "select all".
--- /hc diag toggles it (/hcdiag is an alias); /hc diag mark drops a marker; /hc diag snap snapshots the current tab;
--- /hc diag ui opens the HC-65 window probe (Probes.lua).
+-- /hc diag toggles it (/hcdiag is an alias); /hc diag mark drops a marker; /hc diag snap snapshots the current tab.
 local ADDON, ns = ...
 
 local B = ns.B
@@ -162,7 +161,8 @@ local WINDOW = "hcdiag:console"
 local hasWindows = HardCounters.Supports and HardCounters:Supports("windows")
 if hasWindows then
   HardCounters:RegisterWindow(WINDOW, {
-    title = "Diagnostics",                              -- a tab of the Hard Counters window, like every window
+    title = "Diagnostics",                              -- a side tab of the Hard Counters window, always last
+    icon = "Interface\\Icons\\Trade_Engineering",
     width = 760, height = 450, minWidth = 640, minHeight = 240,   -- 640: the row of bottom buttons
     build = build, onShow = onShow, onHide = onHide,
   })
@@ -180,12 +180,11 @@ local function command(msg)
   if msg == "mark" then ns.Marker()
   elseif msg == "snap" then ns.Snapshot(current, textFor(current))
   elseif msg == "probes" then ns.RunProbes()
-  elseif msg == "ui" then ns.ProbeUI()                   -- HC-65: the window probe panel
   elseif hasWindows then HardCounters:ToggleWindow(WINDOW) end
 end
 
 if HardCounters.RegisterSlash then
-  HardCounters:RegisterSlash("diag", command, "diagnostics console; mark | snap | probes | ui", "Diagnostics")
+  HardCounters:RegisterSlash("diag", command, "diagnostics console; mark | snap | probes", "Diagnostics")
 end
 -- the older command, kept as an alias of /hc diag
 SLASH_HCDIAG1 = "/hcdiag"

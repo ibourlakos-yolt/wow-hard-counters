@@ -119,7 +119,7 @@ local function build(f)
 end
 
 HC:RegisterWindow(WINDOW, {
-  title = "Character Stats",
+  title = "Character Stats", icon = "Interface\\Icons\\INV_Misc_Book_09",   -- (an icon tab on Hard Counters 0.2.1+)
   width = WIDTH, height = HEIGHT, minWidth = WIDTH, minHeight = floor(HEIGHT),
   build = build,
   onShow = function(f) f:SetScript("OnUpdate", f.tick); refresh() end,

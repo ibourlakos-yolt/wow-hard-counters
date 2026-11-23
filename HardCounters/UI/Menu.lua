@@ -96,6 +96,15 @@ local function fill(level, anchor, items, side)
     b:SetScript("OnClick", function()
       if item.title or item.sub then return end
       if item.disabled and not item.onDisabled then return end
+      -- a checkbox in a list of them (the Filters menu): the menu stays up and redraws from its builder
+      if item.keepOpen and level == 1 then
+        if item.func then
+          local ok, err = pcall(item.func)
+          if not ok and ns.Error then ns.Error(err) end
+        end
+        if Menu.builder then fill(1, anchor, Menu.builder()) end
+        return
+      end
       Menu.Hide()
       local fn = item.disabled and item.onDisabled or item.func
       if fn then
@@ -115,9 +124,12 @@ local function fill(level, anchor, items, side)
 end
 show = fill
 
---- Show a menu under `anchor` (a frame). items: { text, func, disabled, onDisabled, checked, title, tip, sub }.
+--- Show a menu under `anchor` (a frame). items: { text, func, disabled, onDisabled, checked, title, tip, sub,
+--- keepOpen }, or a function returning them: then a keepOpen item's click runs it and the menu redraws in place.
 function Menu.Show(anchor, items)
   Menu.Hide()
+  Menu.builder = type(items) == "function" and items or nil
+  if Menu.builder then items = Menu.builder() end
   if type(items) ~= "table" or #items == 0 then return end
   if not catcher then
     catcher = CreateFrame("Button", nil, UIParent)
