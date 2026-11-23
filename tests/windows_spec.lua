@@ -340,14 +340,14 @@ describe("windows", function()
         for _, t in ipairs(main.sideTabs) do if t:IsShown() then out[#out + 1] = t.hcId end end
         return out
       end
-      assert.are.same({ "Trackers", "Runs" }, bottomTitles())
+      assert.are.same({ "Overview", "Trackers", "Runs" }, bottomTitles())   -- (Overview since HC-67)
       local side = sideIds()
       assert.are.equal("hcdiag:console", side[#side])                -- Diagnostics always last
       if ctx.farmer then assert.truthy(table.concat(side, " "):find("hcfarm:ledger", 1, true)) end
-      -- a window of ours with an earlier tabOrder goes first; a pack's window joins the side column
-      Win.Register("overview", counting({ title = "Overview", tabOrder = 1, icon = "Interface\\Icons\\INV_Misc_Note_01" }))
+      -- a window of ours sorts by its tabOrder; a pack's window joins the side column
+      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
-      assert.are.same({ "Overview", "Trackers", "Runs" }, bottomTitles())
+      assert.are.same({ "Overview", "Ours", "Trackers", "Runs" }, bottomTitles())
       side = sideIds()
       assert.are.equal("hcdiag:console", side[#side])
       assert.are.equal("t:pack", side[#side - 1])
@@ -366,7 +366,8 @@ describe("windows", function()
       -- the clamp reaches over the side column and under the bottom tabs (HC-65)
       assert.are.same({ 0, 55, 0, -30 }, main._clamp)
       -- labels: icon and title by default; icon only leaves the title to the tooltip; title only hides the icon
-      local trackers = main.tabs[2]
+      local trackers
+      for _, b in ipairs(main.tabs) do if b.hcTitle == "Trackers" then trackers = b end end
       assert.are.equal("Trackers", trackers:GetText())
       assert.is_true(trackers.hcIcon:IsShown())
       assert.are.equal((16 + 3) / 2, trackers.selectedTextX)
@@ -966,6 +967,104 @@ describe("the Trackers tab", function()
       assert.are.equal("3 KB", text(3072, 0))
       assert.are.equal("3 KB frozen", text(3072, 3072))
       assert.are.equal("5 KB (3 KB frozen)", text(5120, 3072))
+    end)
+  end)
+end)
+
+-- HC-67 (DESIGN §17.4): the player's tiles, first tab of the window
+describe("the Overview tab", function()
+  it("shows every tile in its section, on a board or not, and edits, places, moves and deletes them", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local BM, Bo = ns.BoardModel, ns.Boards
+      ns.ShowOverview(true)      -- (a new player lands on it; here the Trackers tab opened once for the packs' New trackers)
+      local f = ns.Windows.Content("overview")
+      f:SetSize(762, 568)
+      ns.RefreshOverview()
+      local pocket = BM.Store().list[1]                              -- a fresh install's Pocket board
+      -- one card per tile, in the board's section, each knowing where it is
+      local all = BM.CollectionTiles()
+      assert.are.equal(#pocket.tiles, #all)
+      assert.are.same({ "Pocket" }, BM.Sections())
+      assert.are.equal(pocket, all[1].board)
+      local menus = {}
+      local realShow, realConfirm, realAsk = ns.Menu.Show, Bo.Confirm, Bo.AskText
+      ns.Menu.Show = function(_, items) menus[#menus + 1] = type(items) == "function" and items() or items end
+      Bo.Confirm = function(_, fn) fn() end
+      local function menuFor(raw)
+        for _, e in ipairs(BM.CollectionTiles()) do
+          if e.raw == raw then ns.OverviewCardMenu(f, e); return menus[#menus], e end
+        end
+      end
+      local function pick(m, text)
+        for _, it in ipairs(m) do if it.text == text then return it end end
+      end
+      local gold = all[1].raw
+      -- the card menu: Edit (the board's own settings), Move to board, Take off HUD, Section, Delete tile
+      local m = menuFor(gold)
+      for _, t in ipairs({ "Edit", "Move to board", "Take off HUD", "Section", "Delete tile" }) do assert.truthy(pick(m, t), t) end
+      local edit = {}
+      for _, it in ipairs(pick(m, "Edit").sub) do edit[#edit + 1] = it.text end
+      assert.truthy(table.concat(edit, "|"):find("Scope", 1, true))
+      -- take it off the HUD: Window only, the board one tile shorter, still in the collection
+      local n = #pocket.tiles
+      pick(m, "Take off HUD").func()
+      assert.are.equal(n - 1, #pocket.tiles)
+      local e
+      m, e = menuFor(gold)
+      assert.is_nil(e.board)
+      assert.are.equal(n, #BM.CollectionTiles())
+      assert.is_nil(pick(m, "Take off HUD"))
+      for _, it in ipairs(pick(m, "Edit").sub) do assert.are_not.equal("Size", it.text) end   -- a size is the board's
+      -- show it on the HUD again
+      pick(m, "Show on HUD").sub[1].func()                              -- Pocket
+      assert.are.equal(n, #pocket.tiles)
+      assert.are.equal(pocket, (BM.BoardOf(gold)))
+      -- a new section, then rename it from its title
+      m = menuFor(gold)
+      Bo.AskText = function(_, _, fn) fn("Farming") end
+      local sec = pick(m, "Section").sub
+      sec[#sec].func()                                                 -- New section...
+      assert.are.equal("Farming", gold.section)
+      Bo.AskText = function(_, _, fn) fn("Gold") end
+      ns.OverviewSectionMenu(f, "Farming")
+      pick(menus[#menus], "Rename section...").func()
+      assert.are.equal("Gold", gold.section)
+      Bo.AskText = realAsk
+      -- Add tile opens Trackers, whose Add tile then adds to Overview, Window only
+      f.add:GetScript("OnClick")(f.add)
+      assert.is_true(ns.Windows.IsShown("trackers"))
+      assert.is_true(ns.TrackersForOverview)
+      ns.Windows.Content("trackers"):SetSize(762, 568)
+      local br = ns.TrackersBrowser
+      br:Select("hc:xpph", "all")
+      local item
+      for _, it in ipairs(br.detail.items) do if it:IsShown() and it.btn:IsShown() then item = it; break end end
+      assert.truthy(item)
+      n = #BM.CollectionTiles()
+      local onBoard = #pocket.tiles
+      item.btn:GetScript("OnClick")(item.btn)
+      assert.are.equal(n + 1, #BM.CollectionTiles())
+      assert.are.equal(onBoard, #pocket.tiles)                         -- not on a board
+      local added = BM.CollectionTiles()[n + 1]
+      assert.is_nil(added.board)
+      assert.are.equal(BM.DEFAULT_SECTION, added.raw.section)
+      ns.ShowOverview(true)
+      assert.is_nil(ns.TrackersForOverview)                            -- only until the Trackers tab goes
+      -- delete a tile for good
+      m = menuFor(added.raw)
+      pick(m, "Delete tile").func()
+      assert.are.equal(n, #BM.CollectionTiles())
+      -- many tiles: the tab grows and the window scrolls it (HC-69)
+      for _ = 1, 40 do BM.NewTile("hc:gold") end
+      ns.RefreshOverview()
+      assert.is_true(ns.Windows.Host("_main").scrollMax > 0)
+      -- the search narrows the cards
+      f.search:SetText("zzz")
+      f.search:GetScript("OnTextChanged")(f.search)
+      assert.truthy(f.empty:GetText():find("No tile matches", 1, true))
+      ns.Menu.Show, Bo.Confirm = realShow, realConfirm
+      assert.are.same({}, ctx.env.errors)
     end)
   end)
 end)

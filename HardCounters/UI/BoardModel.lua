@@ -1,7 +1,13 @@
 -- Boards, the model (TRACKERS_AND_BOARDS §6, HC-18): data and decisions only, no frames (UI/Boards.lua draws).
 -- A board is a vertical stack of tiles the player builds; it replaces the run panel and the live number.
 --
---   settings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 5 }
+--   settings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 6,
+--                       tiles = { [tileId] = <reading tile> }, tileOrder = { tileId, ... }, nextTile = n,
+--                       sections = { name, ... } }
+-- Since v6 (HC-67, DESIGN §17.4) every reading tile lives in the collection (`tiles`) with an `id` and a `section`
+-- (the Overview tab's grouping); a board's `tiles` list holds placements, { ref = tileId, size = ... } (order and size
+-- are the board's), plus its label and splits rows as before. At run time a placement reads and writes through to its
+-- tile (see "The tile collection" below), so everything here reads `tile.scope` as it always did.
 --   board = { id, name, preset, shown, mini, pos, scale, width, wid = n (its window, HC-41),
 --             scope = nil (the board's timer) | "session" | "today" | ... (HC-55), held = true (its timer paused
 --             because the board left it),
@@ -79,6 +85,91 @@ M.WIDTH = 260
 M.MIN_WIDTH, M.MAX_WIDTH = 160, 600
 
 ---------------------------------------------------------------------------
+-- The tile collection (DESIGN §17.4, HC-67). Every reading tile lives in settings.boards.tiles; a board holds
+-- placements, { ref = <tile id>, size = <size> }. The user's rule (2026-11-23): "all of the tiles will be present
+-- there and some of them will also be in the HUD": a tile is shared, never copied (copies drift apart), so edited
+-- anywhere it shows the same on its board. A tile is on one board at most ("On HUD: <board>"); on none it is
+-- "Window only". A placement reads every field but `size` from its tile and writes them there (a metatable, attached
+-- at load and never saved). Labels and splits rows are layout, not numbers: they stay on their board as before.
+---------------------------------------------------------------------------
+
+local PLACEMENT = {}
+local function liveTile(p)
+  local B = ns.settings and ns.settings.boards
+  local tiles = type(B) == "table" and B.tiles
+  return type(tiles) == "table" and tiles[rawget(p, "ref")] or nil
+end
+PLACEMENT.__index = function(p, k)
+  local t = liveTile(p)
+  if t then return t[k] end
+  return nil
+end
+PLACEMENT.__newindex = function(p, k, v)
+  if k == "size" or k == "ref" then rawset(p, k, v); return end
+  local t = liveTile(p)
+  if t then t[k] = v else rawset(p, k, v) end
+end
+
+--- Is t a board's placement of a collection tile?
+function M.IsPlacement(t) return getmetatable(t) == PLACEMENT end
+
+--- The collection tile behind a placement, or t itself (a collection tile, a label, a splits row).
+function M.TileOf(t)
+  if getmetatable(t) == PLACEMENT then return liveTile(t) end
+  return t
+end
+
+M.DEFAULT_SECTION = "My tiles"
+
+local function placement(id, size) return setmetatable({ ref = id, size = size }, PLACEMENT) end
+
+--- Put a reading tile into the collection (its size stays with the board: returned as its placement).
+local function adopt(B, raw, section)
+  B.nextTile = (B.nextTile or 0) + 1
+  local id = "t" .. B.nextTile
+  local size = raw.size
+  raw.size, raw.id = nil, id
+  raw.section = raw.section or section or M.DEFAULT_SECTION
+  B.tiles[id] = raw
+  B.tileOrder[#B.tileOrder + 1] = id
+  return placement(id, size)
+end
+
+local function knowSection(B, name)
+  if type(name) ~= "string" then return end
+  for _, s in ipairs(B.sections) do if s == name then return end end
+  B.sections[#B.sections + 1] = name
+end
+
+--- Every board's reading tiles in the collection, every saved placement live again (a /reload drops the
+--- metatables), placements of deleted tiles gone. Runs at each Store(): a pass over the tiles, cheap.
+local function normalize(B)
+  if type(B.tiles) ~= "table" then B.tiles = {} end
+  if type(B.tileOrder) ~= "table" then B.tileOrder = {} end
+  if type(B.sections) ~= "table" then B.sections = {} end
+  for _, b in ipairs(B.list) do
+    if type(b) == "table" and type(b.tiles) == "table" then
+      local i = 1
+      while i <= #b.tiles do
+        local t = b.tiles[i]
+        local ref = type(t) == "table" and rawget(t, "ref") or nil
+        if type(t) ~= "table" or (ref ~= nil and B.tiles[ref] == nil) then
+          table.remove(b.tiles, i)                    -- its tile was deleted
+        else
+          if ref ~= nil then
+            if getmetatable(t) ~= PLACEMENT then setmetatable(t, PLACEMENT) end
+          elseif t.kind == "reading" then
+            b.tiles[i] = adopt(B, t, b.name)
+            knowSection(B, b.name)
+          end
+          i = i + 1
+        end
+      end
+    end
+  end
+end
+
+---------------------------------------------------------------------------
 -- Settings
 ---------------------------------------------------------------------------
 
@@ -137,6 +228,11 @@ function M.Store()
     end
     B.v = 5
   end
+  -- v6 (HC-67, user 2026-11-23): every board's reading tiles move into the collection, each in a section named
+  -- after its board, in board order; the board keeps placements (order and size). Settings only, no storage change;
+  -- the values and the look don't change. normalize() does it, and keeps doing it for tiles added the old way.
+  normalize(B)
+  if B.v < 6 then B.v = 6 end
   return B
 end
 
@@ -172,10 +268,8 @@ end
 --- hcfarm:vendorph). Cheap: a pass over the tiles.
 function M.FoldAliases()
   local n = 0
-  for _, b in ipairs(M.Store().list) do
-    for _, t in ipairs(type(b.tiles) == "table" and b.tiles or {}) do
-      if M.FoldAlias(t) then n = n + 1 end
-    end
+  for _, t in pairs(M.Store().tiles) do           -- (v6: every reading tile is in the collection)
+    if M.FoldAlias(t) then n = n + 1 end
   end
   return n
 end
@@ -203,10 +297,14 @@ function M.UsesTimer(board)
   return false
 end
 
---- The board a tile is on (a scan: callers that know it pass it).
+--- The board a tile is on, and its index there (a scan: callers that know it pass it). tile: a placement, a label or
+--- splits row, or a collection tile (then the board that places it, if any).
 function M.BoardOf(tile)
+  local id = type(tile) == "table" and getmetatable(tile) ~= PLACEMENT and tile.kind == "reading" and rawget(tile, "id")
   for _, b in ipairs(M.Store().list) do
-    for _, t in ipairs(b.tiles) do if t == tile then return b end end
+    for i, t in ipairs(b.tiles) do
+      if t == tile or (id and rawget(t, "ref") == id) then return b, i end
+    end
   end
   return nil
 end
@@ -592,27 +690,54 @@ function M.Create(presetKey, opts)
   opts = opts or {}
   local b = { id = newId(), name = opts.name or (p and p.name) or "Board", preset = presetKey, shown = true,
     mini = p and p.mini or false, width = M.WIDTH, scale = 1, show = defaultShow(), tiles = {} }
+  local B = M.Store()
   if p then
     for _, t in ipairs(p.tiles) do
       if t.kind ~= "reading" or ns.readings[t.reading] then
         local c = U.copy(t)
+        -- (the preset's own tables stay its own: two boards made from it must not share them)
+        if type(c.extras) == "table" then c.extras = U.copy(c.extras) end
+        if type(c.arg) == "table" then c.arg = U.copy(c.arg) end
         M.FoldAlias(c)                                -- a pack's preset may name an alias
         if c.kind == "reading" and c.scope == "run" then c.follow = true end   -- (HC-55) all but `now` follow the board
+        -- (HC-67) a reading tile goes into the collection, in a section named after the board
+        if c.kind == "reading" then c = adopt(B, c, b.name) end
         b.tiles[#b.tiles + 1] = c
       end
     end
+    knowSection(B, b.name)
   end
-  local list = M.Store().list
-  list[#list + 1] = b
+  B.list[#B.list + 1] = b
   return b
 end
 
-function M.Delete(id)
-  local list = M.Store().list
-  for i, b in ipairs(list) do
+--- A tile that leaves its board keeps its settings, but not the board's timer (no board, no timer): it reads the
+--- session instead (or the reading's first other scope), and it follows nothing.
+local function offBoard(tile, size)
+  if not tile then return end
+  tile.lastSize = size                             -- (its size, should it go on a board again)
+  tile.follow = nil
+  local r = ns.readings[tile.reading]
+  if tile.scope == "run" and r then
+    local s = r.scopeSet.session and "session" or nil
+    if not s then for _, x in ipairs(r.scopes) do if x ~= "run" then s = x; break end end end
+    if s then tile.scope = s; M.FitCalc(tile) end
+  end
+end
+
+--- Delete a board. Its reading tiles stay in the collection, Window only (the Overview tab), unless withTiles
+--- (/hc board reset: everything from the start again).
+function M.Delete(id, withTiles)
+  local B = M.Store()
+  for i, b in ipairs(B.list) do
     if b.id == id then
       if b.wid then ns.SavedWindows.Drop(winKey(b.wid)) end   -- its windows, on every character
-      table.remove(list, i)
+      table.remove(B.list, i)
+      for _, p in ipairs(b.tiles) do
+        if getmetatable(p) == PLACEMENT then
+          if withTiles then M.DeleteTile(rawget(p, "ref")) else offBoard(liveTile(p), rawget(p, "size")) end
+        end
+      end
       return true
     end
   end
@@ -686,9 +811,12 @@ function M.AddReading(board, readingId, look, scope, arg)
     M.ApplyStyle(t, look)
   end
   M.FoldAlias(t)
-  board.tiles[#board.tiles + 1] = t
-  if ns.ready and M.TileWindow(t, board) then watchTiles(board) end   -- the board's first such tile starts its window
-  return t
+  local B = M.Store()
+  local p = adopt(B, t, board.name)                 -- (HC-67) into the collection, placed on this board
+  knowSection(B, board.name)
+  board.tiles[#board.tiles + 1] = p
+  if ns.ready and M.TileWindow(p, board) then watchTiles(board) end   -- the board's first such tile starts its window
+  return p
 end
 
 function M.AddTile(board, kind, extra)
@@ -699,9 +827,138 @@ function M.AddTile(board, kind, extra)
   return t
 end
 
+--- Take tile i off the board. A reading tile stays in the collection, Window only (HC-67); a label or splits row
+--- goes. Returns the tile (the collection's, for a reading tile).
 function M.RemoveTile(board, i)
-  if not board.tiles[i] then return nil end
-  return table.remove(board.tiles, i)
+  local p = board.tiles[i]
+  if not p then return nil end
+  table.remove(board.tiles, i)
+  if getmetatable(p) ~= PLACEMENT then return p end
+  local t = liveTile(p)
+  offBoard(t, rawget(p, "size"))
+  return t
+end
+
+---------------------------------------------------------------------------
+-- The collection's own calls (the Overview tab, HC-67)
+---------------------------------------------------------------------------
+
+--- Every collection tile, in order: { { id, tile (its placement when it is on a board, else the tile), board,
+--- raw (the collection tile) } }.
+function M.CollectionTiles()
+  local B = M.Store()
+  local placed = {}
+  for _, b in ipairs(B.list) do
+    for _, p in ipairs(b.tiles) do
+      local ref = rawget(p, "ref")
+      if ref then placed[ref] = { b = b, p = p } end
+    end
+  end
+  local out, seen = {}, {}
+  local function add(id)
+    local t = B.tiles[id]
+    if not t or seen[id] then return end
+    seen[id] = true
+    local pl = placed[id]
+    out[#out + 1] = { id = id, tile = pl and pl.p or t, board = pl and pl.b or nil, raw = t }
+  end
+  for _, id in ipairs(B.tileOrder) do add(id) end
+  local strays = {}
+  for id in pairs(B.tiles) do if not seen[id] then strays[#strays + 1] = id end end
+  table.sort(strays)
+  for _, id in ipairs(strays) do
+    B.tileOrder[#B.tileOrder + 1] = id
+    add(id)
+  end
+  return out
+end
+
+--- The collection tile by id.
+function M.Tile(id) return M.Store().tiles[id] end
+
+--- A new tile in the collection only (Window only): the reading on the session (or its first scope but the
+--- board's timer, which needs a board), a line number. Returns the tile.
+function M.NewTile(readingId, arg, section)
+  local r = ns.readings[readingId]
+  if not r then return nil end
+  local t = { kind = "reading", reading = readingId, arg = arg }
+  offBoard(t)
+  t.scope = r.scopeSet.session and "session" or nil
+  if not t.scope then for _, s in ipairs(r.scopes) do if s ~= "run" then t.scope = s; break end end end
+  t.scope = t.scope or r.scopes[1]
+  M.ApplyStyle(t, nil)
+  M.FoldAlias(t)
+  local B = M.Store()
+  section = section or M.DEFAULT_SECTION
+  local p = adopt(B, t, section)
+  knowSection(B, section)
+  return liveTile(p)
+end
+
+--- Put a collection tile on a board (at the end), or move it there from the board it is on: a tile is on one board
+--- at most. It takes the board's scope when it has the same one. Returns its placement.
+function M.Place(tile, board)
+  local t = M.TileOf(tile)
+  local id = t and rawget(t, "id")
+  if not (id and board) then return nil end
+  local from, i = M.BoardOf(t)
+  if from == board then return board.tiles[i] end
+  if from then
+    local p = M.MoveTo(from, i, board)
+    return p
+  end
+  local p = placement(id, t.lastSize)
+  t.lastSize = nil
+  board.tiles[#board.tiles + 1] = p
+  if t.scope == M.BoardScope(board) then t.follow = true end
+  if ns.ready and M.TileWindow(p, board) then watchTiles(board) end
+  return p
+end
+
+--- Delete a tile for good: off its board and out of the collection. Returns true when it was there.
+function M.DeleteTile(id)
+  if type(id) == "table" then id = rawget(M.TileOf(id) or {}, "id") end
+  local B = M.Store()
+  if not (id and B.tiles[id]) then return false end
+  for _, b in ipairs(B.list) do
+    for i = #b.tiles, 1, -1 do if rawget(b.tiles[i], "ref") == id then table.remove(b.tiles, i) end end
+  end
+  B.tiles[id] = nil
+  for i = #B.tileOrder, 1, -1 do if B.tileOrder[i] == id then table.remove(B.tileOrder, i) end end
+  return true
+end
+
+--- The sections that hold tiles, in the player's order (sections named on tiles but not listed come last).
+function M.Sections()
+  local B = M.Store()
+  local used = {}
+  for _, t in pairs(B.tiles) do used[t.section or M.DEFAULT_SECTION] = true end
+  for name in pairs(used) do knowSection(B, name) end
+  local out = {}
+  for _, s in ipairs(B.sections) do if used[s] then out[#out + 1] = s end end
+  return out
+end
+
+--- Move a tile to a section (a new name makes a new section, last).
+function M.SetSection(tile, name)
+  local t = M.TileOf(tile)
+  if not (t and type(name) == "string" and name ~= "") then return false end
+  t.section = name:sub(1, 32)
+  knowSection(M.Store(), t.section)
+  return true
+end
+
+--- Rename a section on every tile in it. False when the new name is empty or taken.
+function M.RenameSection(old, new)
+  if type(new) ~= "string" then return false end
+  new = new:sub(1, 32)
+  local B = M.Store()
+  if new == "" or new == old then return false end
+  for _, s in ipairs(B.sections) do if s:lower() == new:lower() then return false end end
+  for _, t in pairs(B.tiles) do if (t.section or M.DEFAULT_SECTION) == old then t.section = new end end
+  for i, s in ipairs(B.sections) do if s == old then B.sections[i] = new end end
+  knowSection(B, new)
+  return true
 end
 
 function M.MoveTile(board, i, delta)
@@ -875,14 +1132,20 @@ end
 
 --- Scopes a tile can pick: { { scope, ok, why, board } } in order. Greyed ones need history (§3.4) or aren't
 --- offered. With its board (HC-55): `board = true` marks the board's own scope (picking it makes the tile follow
---- the board), and off the board's timer the timer isn't offered (it would have no Pause).
+--- the board), and off the board's timer the timer isn't offered (it would have no Pause). A collection tile that is
+--- on no board (Window only, HC-67) has no timer to offer either.
 function M.ScopeChoices(tile, board)
   local r = ns.readings[tile.reading]
   local out = {}
   if not r then return out end
+  local windowOnly = false
+  if not board and getmetatable(tile) ~= PLACEMENT and rawget(tile, "id") then
+    board = M.BoardOf(tile)
+    windowOnly = board == nil
+  end
   local bs = board and M.BoardScope(board)
   for _, s in ipairs(r.scopes) do
-    if not (s == "run" and bs and bs ~= "run") then
+    if not (s == "run" and (windowOnly or (bs and bs ~= "run"))) then
       local ok, why = true, nil
       if needsHistory(r, s) then ok, why = false, "needs history" end
       out[#out + 1] = { scope = s, ok = ok, why = why, board = (bs == s) or nil }

@@ -408,7 +408,9 @@ Nothing from a deeper layer leaks into a shallower one: no setting has to be tou
 Boards replace the run panel and the live number (user, 2026-11-15). `UI/BoardModel.lua` holds the model and every
 decision (pure, tested); `UI/Boards.lua` draws; `UI/Menu.lua` is a small popup menu of our own (the client's
 dropdown templates differ between clients).
-- **Model:** `settings.boards = { list, nextId, seeded, runBoard }`, per profile (`lastEdited` is gone since HC-36;
+- **Model:** `settings.boards = { list, nextId, seeded, runBoard, v, tiles, tileOrder, nextTile, sections }`, per
+  profile; since v6 (HC-67, §17.9) a board's reading tiles live in the collection (`tiles`) and the board keeps
+  placements (`{ ref, size }`) (`lastEdited` is gone since HC-36;
   old saved files keep it, unread). A board: name, preset,
   shown, mini, pos, scale, width, visibility rules, tiles. Tile kinds `reading` (styles hero, grid, row, bar, gauge;
   agreed to become calc + display + size, §16.9), `splits`, `label`; the control row is drawn by itself since HC-41 (§16.8; the `run` tile kind is gone).
@@ -1408,7 +1410,7 @@ tile's `display`, each a full-width row of its own, offered in the Display menu 
 - Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
   screen, the shares written, the Display menu).
 
-## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65, HC-69, HC-66 built)
+## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65, HC-69, HC-66, HC-67 built)
 
 The user, 2026-11-23, after three mockups: the Hard Counters window is the one-stop panel, modelled on the Auction
 House (and Auctioneer): predictable tabs, clear categories, quick clicks, and deep search and filtering still there
@@ -1603,3 +1605,46 @@ or a new one). Actions: **Turn on / Turn off** (the same confirmations), **Histo
 history, Advanced, Delete history), **Delete data** (all of it, with its confirm). For a "Not loaded" row:
 **Delete**. "Edit boards" stays in the header until the Boards tab takes it (HC-68). The History column no longer
 toggles history on a click: that moved into History... (one place for it).
+
+### 17.9 As built (HC-67, 2026-11-23): the tile collection and the Overview tab
+
+**The collection** (`UI/BoardModel.lua`, `settings.boards.v = 6`):
+- Every **reading** tile lives in `boards.tiles[id]` (ids `t1`, `t2`, ...; `nextTile`), in `tileOrder`, with a
+  `section`; `sections` keeps the player's order of section names. A board's `tiles` list holds **placements**,
+  `{ ref = <tile id>, size = <size> }`: its order and the size are the board's, everything else is the tile's.
+  **Labels and splits rows stay on their board** as before: they are layout, not numbers, and have no meaning in
+  the Overview tab.
+- **No board code changed shape.** At run time a placement reads every field but `size` from its tile and writes
+  them there (a metatable, attached by `M.Store()` and never saved; a `/reload` drops it and the next `Store()`
+  puts it back), so `tile.scope`, `follow`, the menus and the drawing read and write as before, and an edit on the
+  board is the tile's edit. `M.TileOf(p)` gives the collection tile, `M.IsPlacement(t)` tells them apart.
+- **One board at most.** A tile is on one board ("On HUD: <board>") or none ("Window only"); `M.Place` moves it
+  when it is already on another. That keeps the board-relative parts unambiguous: "the board's timer", `follow`,
+  the account window.
+- **Leaving a board** (Remove from board, Take off HUD, a deleted board) keeps the tile in the collection, its size
+  kept for its next board (`lastSize`), but **off the board's timer** (no board, no timer): it reads the session
+  instead (or the reading's first other scope) and follows nothing. `M.ScopeChoices` offers no timer for it.
+  `/hc board reset` deletes the boards' tiles with them (`M.Delete(id, true)`): it means "start again".
+- **Migration v6** is `normalize()` in `M.Store()`: every board's reading tiles move into the collection, each in a
+  section named after its board, in board order; saved placements get their metatable back; placements of a deleted
+  tile go. It also adopts a reading tile added the old way (a raw table) at the next `Store()`. Settings only, no
+  storage change. Tested on boards as 0.2.0-beta1 saved them (layout, labels and values the same, also after a
+  simulated `/reload`), and run once, outside the repo, on a copy of the user's settings file: 5 boards, 23 tiles,
+  identical layout and labels.
+- Fixed on the way: two boards made from one preset shared the preset's `extras` (and a set `arg`) table.
+- Calls for the Overview tab: `M.CollectionTiles()` (`{ id, tile = its placement or itself, board, raw }`),
+  `M.Tile`, `M.NewTile(reading, arg, section)`, `M.Place`, `M.DeleteTile`, `M.Sections`, `M.SetSection`,
+  `M.RenameSection` (refused onto a taken name, any case).
+
+**The Overview tab** (`UI/Overview.lua`, tab order 1, icon `INV_Misc_Note_01`, `/hc overview`): a search box, a
+hint and **Add tile** on top; the sections, each a gold title with its count (right-click: Rename section...);
+under each, cards about 176 wide (four across), 58 high: the tile's label as on its board, its number now (grey
+while not settled; toward its target for a bar or gauge), and "On HUD: <board>" (green, "(hidden)" when the board
+is) or "Window only". Click or right-click a card: **Edit** (`Boards.TileSettingsItems`, the board's own menu; no
+Size off a board), **Show on HUD** / **Move to board** (the boards, then New board, named after the section),
+**Take off HUD**, **Section** (the sections, New section...), **Delete tile** (confirmed). Cards refresh once a
+second while the tab is shown; the tab is as tall as its cards, so the window scrolls it (`minSize`). **Add tile**
+opens the Trackers tab in a mode (`ns.TrackersForOverview`, until that tab closes) where its Add tile makes a
+Window-only tile in "My tiles"; the Trackers tab's board menu also has "Overview only (no board)". On a board, the
+tile menu's Remove is now **Remove from board** (the tile stays in Overview), and Delete this board says its tiles
+stay in the Overview tab.

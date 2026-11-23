@@ -191,7 +191,8 @@ describe("what Character Stats' phase 1 needs from the engine (2026-11-19)", fun
     assert.are.equal(1, #b.tiles)
     -- (a pack's `style` is still read, HC-51: hero is a large number with its extras)
     assert.are.same({ kind = "reading", reading = "tp:ap", scope = "now", display = "number", size = "large",
-      extras = { sparkline = true, vsUsual = true } }, b.tiles[1])
+      extras = { sparkline = true, vsUsual = true } }, (function(t) return { kind = t.kind, reading = t.reading, scope = t.scope,
+        display = t.display, size = t.size, extras = t.extras } end)(b.tiles[1]))    -- (HC-67: a placement reads through)
   end)
 end)
 

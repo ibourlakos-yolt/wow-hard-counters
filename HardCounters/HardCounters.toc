@@ -51,6 +51,7 @@ UI\BoardModel.lua
 UI\Boards.lua
 UI\Browser.lua
 UI\Trackers.lua
+UI\Overview.lua
 UI\RunList.lua
 UI\Broker.lua
 UI\Minimap.lua

@@ -1077,6 +1077,7 @@ local function askText(prompt, current, fn)
   d.EditBoxOnEnterPressed = function(eb) local p = eb:GetParent(); d.OnAccept(p); p:Hide() end
   StaticPopup_Show("HARDCOUNTERS_TEXT", tostring(prompt or ""))
 end
+Boards.AskText = askText
 
 --- A board just added to from elsewhere (the Trackers window, HC-36): shown if it was hidden, and the new tile
 --- flashes once (on a mini board, its strip). Nothing flashes when the board's own rules hide it (combat, ...).
@@ -1113,6 +1114,7 @@ local function addReading(board, rid, look, arg, onAdded)
   local function add()
     local tile = M.AddReading(board, rid, look, nil, arg)
     Boards.Refresh(board.id, true)
+    if ns.RefreshOverview then ns.RefreshOverview() end   -- (HC-67) a new tile is in the collection too
     if onAdded and tile then onAdded(tile) end
   end
   local t = r.tracker and HC:GetTracker(r.tracker)
@@ -1302,18 +1304,23 @@ local SIZE_NAME = { large = "Big", half = "Half width", line = "Line" }
 local SIZE_TIP = { large = "A big number with the last 10 minutes and how you usually do here.",
   half = "Two side by side.", line = "One line, full width." }
 
-function Boards.TileMenu(anchor, board, i)
-  local tile = board.tiles[i]
-  if not tile then return end
+--- A reading tile's settings (what it counts, its scope, calc, display, size, target, name) as menu items: the
+--- board's tile menu and the Overview tab's Edit (HC-67) share them. board: the tile's board, or nil for a tile that
+--- is Window only (then no Size: a size is the board's). A choice redraws the board and the Overview tab.
+function Boards.TileSettingsItems(tile, board, anchor)
   local items = {}
+  local function done()
+    if board then Boards.Refresh(board.id, true) end
+    if ns.RefreshOverview then ns.RefreshOverview() end
+  end
   if tile.kind == "reading" then
     items[#items + 1] = { text = L["Counts"], sub = {
       { text = L["this character"], checked = tile.who ~= "account",
-        func = function() M.SetWho(tile, nil, board); Boards.Refresh(board.id, true) end },
+        func = function() M.SetWho(tile, nil, board); done() end },
       { text = L["the whole account"], checked = tile.who == "account",
         tip = L["Every character of this account. The board's timer counts whoever is logged in; periods need history "
           .. "on each character; amounts you own are the sum of what each last had."],
-        func = function() M.SetWho(tile, "account", board); Boards.Refresh(board.id, true) end },
+        func = function() M.SetWho(tile, "account", board); done() end },
     } }
     local rdef = ns.readings[tile.reading]
     if rdef and rdef.param and rdef.param.multi then
@@ -1323,7 +1330,7 @@ function Boards.TileMenu(anchor, board, i)
       for _, m in ipairs(cur or {}) do inSet[m] = true end
       for _, ps in ipairs(rdef.param.presets or {}) do
         sub[#sub + 1] = { text = ps.name, checked = ns.SameSet(ps.members, cur), func = function()
-          M.SetArg(tile, ps.members, board); Boards.Refresh(board.id, true)
+          M.SetArg(tile, ps.members, board); done()
         end }
       end
       local choices = M.SetChoices(tile.reading)
@@ -1331,14 +1338,14 @@ function Boards.TileMenu(anchor, board, i)
       for _, c in ipairs(choices) do
         sub[#sub + 1] = { text = c.label, checked = inSet[c.arg] or false, func = function()
           if not M.ToggleMember(tile, c.arg, board) then ns.Print(L["A filter keeps at least one kind."]) end
-          Boards.Refresh(board.id, true)
+          done()
         end }
       end
       if #sub == 0 then sub[1] = { text = L["Nothing counted yet"], disabled = true } end
       items[#items + 1] = { text = format(L["Includes: %s"], ns.MemberLabel(rdef, tile.arg)), sub = sub }
     elseif rdef and rdef.param then
       items[#items + 1] = { text = format(L["Showing: %s (change)"], ns.MemberLabel(rdef, tile.arg)), func = function()
-        Boards.MemberMenu(anchor, tile.reading, function(arg) M.SetArg(tile, arg, board); Boards.Refresh(board.id, true) end, tile.arg)
+        Boards.MemberMenu(anchor, tile.reading, function(arg) M.SetArg(tile, arg, board); done() end, tile.arg)
       end }
     end
     local scopes = {}
@@ -1347,7 +1354,7 @@ function Boards.TileMenu(anchor, board, i)
       -- (HC-55) the board's own scope: picking it makes the tile follow the board
       if c.board and c.scope ~= "run" then word = word .. "  (" .. L["the board's"] .. ")" end
       local item = { text = word .. (c.ok and "" or ("  (" .. L["needs history"] .. ")")), checked = tile.scope == c.scope,
-        func = function() M.SetScope(tile, c.scope, board); Boards.Refresh(board.id, true) end, disabled = not c.ok }
+        func = function() M.SetScope(tile, c.scope, board); done() end, disabled = not c.ok }
       if not c.ok then
         local r = ns.readings[tile.reading]
         local tr = r and r.tracker and HC:GetTracker(r.tracker)
@@ -1356,7 +1363,7 @@ function Boards.TileMenu(anchor, board, i)
             tr.title), function()
             HC:SetTrackerHistory(tr.id, "daily")
             M.SetScope(tile, c.scope, board)
-            Boards.Refresh(board.id, true)
+            done()
           end)
         end or nil
       end
@@ -1369,7 +1376,7 @@ function Boards.TileMenu(anchor, board, i)
     for _, c in ipairs(M.CalcChoices(tile)) do
       calcs[#calcs + 1] = { text = L[CALC_NAME[c.calc] or c.calc] .. (c.ok and "" or ("  (" .. L[CALC_WHY[c.why] or "not here"] .. ")")),
         tip = L[CALC_TIP[c.calc] or ""], checked = curCalc == c.calc, disabled = not c.ok,
-        func = function() M.SetCalc(tile, c.calc); Boards.Refresh(board.id, true) end }
+        func = function() M.SetCalc(tile, c.calc); done() end }
     end
     if #calcs > 1 then items[#items + 1] = { text = L["Show as"], sub = calcs } end
     local displays = {}
@@ -1383,31 +1390,31 @@ function Boards.TileMenu(anchor, board, i)
           askText(format(ask, L[DISPLAY_NAME[d]]), "", function(typed)
             M.SetTarget(tile, typed)
             if M.TileTarget(tile) then M.SetDisplay(tile, d) end
-            Boards.Refresh(board.id, true)
+            done()
           end)
           return
         end
         M.SetDisplay(tile, d)
-        Boards.Refresh(board.id, true)
+        done()
       end }
       -- (HC-63) only the displays that fit the reading (an odometer counts, a mix needs members)
       if not M.DisplayFits(tile, d) then displays[#displays] = nil end
     end
     items[#items + 1] = { text = L["Display"], sub = displays }
     local sizeList = M.SizeChoices(tile)
-    if #sizeList > 1 then
+    if board and #sizeList > 1 then
       local sizes = {}
       local curSize = M.TileSize(tile)
       for _, s in ipairs(sizeList) do
         sizes[#sizes + 1] = { text = L[SIZE_NAME[s]], tip = L[SIZE_TIP[s]], checked = curSize == s,
-          func = function() M.SetSize(tile, s); Boards.Refresh(board.id, true) end }
+          func = function() M.SetSize(tile, s); done() end }
       end
       items[#items + 1] = { text = L["Size"], sub = sizes }
     end
     if M.TrendBadgeFits(tile) then
       items[#items + 1] = { text = L["Trend badge"], checked = M.HasExtra(tile, "trend"),
         tip = L["Beside the big number: your pace now against this period's average (green up, red down)."],
-        func = function() M.SetExtra(tile, "trend", not M.HasExtra(tile, "trend")); Boards.Refresh(board.id, true) end }
+        func = function() M.SetExtra(tile, "trend", not M.HasExtra(tile, "trend")); done() end }
     end
     local tgt = M.TileTarget(tile)
     local tdef = ns.readings[tile.reading]
@@ -1416,16 +1423,24 @@ function Boards.TileMenu(anchor, board, i)
         local money = tdef and tdef.formatter == "money"
         askText(money and L["Target in gold (empty: none)"] or L["Target (empty: none)"], "", function(s)
           M.SetTarget(tile, s)
-          Boards.Refresh(board.id, true)
+          done()
         end)
       end }
     items[#items + 1] = { text = L["Rename"], func = function()
       askText(L["Tile name (empty: the reading's)"], tile.name or "", function(s)
         tile.name = s ~= "" and s:sub(1, 40) or nil
-        Boards.Refresh(board.id, true)
+        done()
       end)
     end }
-  elseif tile.kind == "label" then
+  end
+  return items
+end
+
+function Boards.TileMenu(anchor, board, i)
+  local tile = board.tiles[i]
+  if not tile then return end
+  local items = Boards.TileSettingsItems(tile, board, anchor)
+  if tile.kind == "label" then
     items[#items + 1] = { text = L["Rename"], func = function()
       askText(L["Heading text"], tile.text or "", function(s) tile.text = s:sub(1, 40); Boards.Refresh(board.id, true) end)
     end }
@@ -1434,7 +1449,15 @@ function Boards.TileMenu(anchor, board, i)
   items[#items + 1] = { text = L["Move down"], disabled = i == #board.tiles,
     func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move to"], sub = moveItems(board, i) }
-  items[#items + 1] = { text = L["Remove"], func = function() M.RemoveTile(board, i); Boards.Refresh(board.id, true) end }
+  -- (HC-67) a reading tile leaves the board but stays in the collection (the Overview tab); a heading just goes
+  local reading = tile.kind == "reading"
+  items[#items + 1] = { text = reading and L["Remove from board"] or L["Remove"],
+    tip = reading and L["It stays in the Overview tab (Window only), from where you can put it back."] or nil,
+    func = function()
+      M.RemoveTile(board, i)
+      Boards.Refresh(board.id, true)
+      if ns.RefreshOverview then ns.RefreshOverview() end
+    end }
   ns.Menu.Show(anchor, items)
 end
 
@@ -1527,7 +1550,7 @@ function Boards.BoardMenu(anchor, board)
     end },
     { text = L["Hide this board"], func = function() board.shown = false; Boards.Refresh(board.id) end },
     { text = L["Delete this board"], func = function()
-      confirm(format(L["Delete the board %s? Its tiles go; your counts don't."], board.name), function()
+      confirm(format(L["Delete the board %s? Its tiles stay in the Overview tab; your counts don't change."], board.name), function()
         M.Delete(board.id)
         Boards.RefreshAll()
       end)
@@ -1633,7 +1656,7 @@ ns.AddSlash("board", function(rest)
   elseif cmd == "reset" then
     confirm(L["Delete every board and start again from the Pocket board?"], function()
       local B = M.Store()
-      while B.list[1] do M.Delete(B.list[1].id) end      -- their windows go with them
+      while B.list[1] do M.Delete(B.list[1].id, true) end   -- their windows and their tiles go with them
       B.list, B.seeded, B.runBoard, B.lastEdited = {}, nil, nil, nil   -- lastEdited: an old field (HC-36)
       M.Seed()
       Boards.RefreshAll(true)

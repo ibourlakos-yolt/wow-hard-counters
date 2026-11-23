@@ -7,7 +7,17 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
-**Updating:** quit and restart the game after installing (a new file; `/reload` is not enough).
+**Saved data:** kept. The first time you log in, your boards' tiles move into your tile collection (the new
+Overview tab); the boards look and count exactly as before.
+
+**Updating:** quit and restart the game after installing (new files; `/reload` is not enough).
+
+### New
+- **Overview**, the first tab of the Hard Counters window: all your tiles in one place, as cards with their number
+  now, grouped in sections (one per board to start with; rename them, make your own) and searchable. Each says
+  where it is: "On HUD: Leveling" or "Window only". Click one to edit it (the same choices as on a board), put it on
+  a board or move it to another, take it off the HUD, change its section or delete it. **Add tile** picks a number
+  from the Trackers tab and adds it here.
 
 ### Fixed
 - **The run summary card opened behind the Hard Counters window.** Clicking a run in the Runs tab opened its card
@@ -33,6 +43,12 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
   selected tracker's numbers, each with **Add tile**. The buttons at the bottom follow the selection: **Turn on** or
   **off**, **History...** (keep history, how much and how long, delete it) and **Delete data**. Right-click a
   tracker for the same. Trackers your character has no use for show grey.
+- **A tile you take off a board is no longer lost.** A board's tile menu says **Remove from board**: the tile stays
+  in the Overview tab (Window only), from where you can put it on a board again, its size kept. Deleting a board
+  keeps its tiles there too. Off a board a tile can't use the board's timer, so it counts the session instead.
+  `/hc board reset` still starts from nothing.
+- **Two boards made from the same preset in one session** no longer share their tiles' extras (until a `/reload`,
+  a trend badge switched on one board also showed on the other).
 
 ### Developer notes
 - `HC:RegisterWindow` takes an `icon` (a texture path or file id): a pack's window is now an icon tab down the

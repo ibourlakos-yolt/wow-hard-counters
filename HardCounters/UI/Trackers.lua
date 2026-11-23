@@ -176,11 +176,37 @@ end
 --- A reading's title for lists: one with a parameter reads "... rep" until a member is picked.
 local function listTitle(r) return (r.title:gsub("%%s", "...")) end
 
---- The [+] beside a reading (HC-36): with one board it adds there; with several a menu lists them, the ones on
---- screen first, then "New board"; with none it makes one. A hidden board is shown and the new tile flashes once.
---- getBoard is called only when the tile is really added (a cancelled pick leaves no empty board behind).
+--- A tile for the Overview tab only (HC-67: on no board, Window only). Adding a reading whose tracker is off asks
+--- first, as on a board (§7: "never silently").
+local function addToOverview(readingId, anchor)
+  local BM = ns.BoardModel
+  local r = ns.readings[readingId]
+  local function make(arg)
+    local function go()
+      local t = BM.NewTile(readingId, arg)
+      if t and ns.Print then ns.Print(L["%s added to the Overview tab."], BM.TileTitle(t)) end
+      if ns.RefreshOverview then ns.RefreshOverview() end
+    end
+    local tr = r and r.tracker and HC:GetTracker(r.tracker)
+    if tr and not tr.on then
+      confirm(format(L["Turn on %s? %s"], tr.title, tr.description or ""), function()
+        HC:SetTrackerOn(r.tracker, true)
+        go()
+      end)
+    else
+      go()
+    end
+  end
+  if ns.NeedsArg(r) and anchor then ns.Boards.MemberMenu(anchor, readingId, make) else make() end
+end
+
+--- Add tile beside a reading (HC-36): with one board it adds there; with several a menu lists them, the ones on
+--- screen first, then "New board" and "Overview only"; with none it makes one. A hidden board is shown and the new
+--- tile flashes once. getBoard is called only when the tile is really added (a cancelled pick leaves no empty board
+--- behind). Opened from the Overview tab's Add tile (HC-67), it adds there instead.
 local function addToBoard(readingId, anchor)
   if not (ns.BoardModel and ns.Boards) then return end
+  if ns.TrackersForOverview then return addToOverview(readingId, anchor) end
   local BM = ns.BoardModel
   local r = ns.readings[readingId]
   local function newBoard() return BM.Create(nil, { name = L["Board"] }) end
@@ -206,11 +232,13 @@ local function addToBoard(readingId, anchor)
       func = function() addTo(function() return b end) end }
   end
   items[#items + 1] = { text = L["New board"], func = function() addTo(newBoard) end }
+  items[#items + 1] = { text = L["Overview only (no board)"], func = function() addToOverview(readingId, anchor) end }
   ns.Menu.Show(anchor, items)
 end
 
 --- The [+]'s tooltip names where it adds (HC-36), never "the board you last edited".
 local function addTip()
+  if ns.TrackersForOverview then return L["Add to the Overview tab"] end
   local targets = ns.BoardModel and ns.BoardModel.AddTargets() or {}
   if #targets == 0 then return L["Add to a new board"] end
   if #targets == 1 then return format(L["Add to %s"], targets[1].name) end
@@ -466,6 +494,7 @@ end
 local function onHide()
   for _, t in ipairs(HC:Trackers()) do if t.new then HC:MarkTrackerSeen(t.id) end end
   if ns.Menu then ns.Menu.Hide() end
+  ns.TrackersForOverview = nil              -- (opened from Overview's Add tile: only until the tab goes)
 end
 
 ns.Windows.Register(ID, {

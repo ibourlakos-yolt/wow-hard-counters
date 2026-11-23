@@ -272,6 +272,9 @@ offers it.)
 
 ### 6.1 Model
 
+> Since HC-67 (2026-11-23, DESIGN §17.9) a reading tile lives in a collection apart from the boards; a board holds
+> its placements (order and size). The sketch below is the first model.
+
 ```lua
 settings.boards = {
   { id = "b1", name = "Run", pos = {...}, scale = 1, width = 260, mini = false,
