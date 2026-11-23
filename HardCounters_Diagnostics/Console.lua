@@ -99,7 +99,7 @@ local function button(parent, text, w, onClick)
 end
 
 -- A Hard Counters window ("hcdiag:console"): on its own by default, or a tab of the Hard Counters window.
--- Hard Counters owns the frame (title, close, resize grip, BlizzMove, saved size); this builds the content.
+-- Hard Counters owns the frame (title, close, BlizzMove; a tab of the shared window, at 760 x 450); this builds the content.
 local function build(f)
   win = f
   f.tabs = {}

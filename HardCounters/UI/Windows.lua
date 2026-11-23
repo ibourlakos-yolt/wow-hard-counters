@@ -2,9 +2,10 @@
 -- shared "Hard Counters" frame, always: there is no pop-out (user, 2026-11-15, after popping every tab out left an
 -- empty frame with no way back). Only a window that says dockable = false (a HUD, a popup) gets a frame of its own.
 -- Hard Counters owns the chrome, so every window gets the same: Blizzard's panel frame (border, title, close,
--- inset), drag to move, resize grip, Escape, BlizzMove (Ctrl+mouse wheel scales), raise on click, and its
--- position, size and scale saved under settings.windows[id]. A HUD window (chrome = "hud") gets a plain dark frame
--- instead.
+-- inset), drag to move, Escape, BlizzMove (Ctrl+mouse wheel scales), raise on click, and its position and scale
+-- saved under settings.windows[id]. The shared frame is not resizable and keeps one size for every tab (user,
+-- 2026-11-23): the largest minimum width and height among its tabs, so every tab fits, capped at the screen. A frame
+-- of its own keeps a resize grip and its saved size. A HUD window (chrome = "hud") gets a plain dark frame instead.
 --
 -- Content never shows or hides itself: the host shows the content frame exactly while the window is on screen and
 -- calls def.onShow / def.onHide on those changes, so a refresh ticker can follow them.
@@ -154,7 +155,7 @@ local function setPortrait(f, show)
   return false
 end
 
---- opts = { title, portrait, hud, header, strata, onSized(host) }
+--- opts = { title, portrait, hud, header, strata, fixedSize (no grip: layout alone sizes it), onSized(host) }
 local function newHost(name, key, opts)
   local f = not opts.hud and panelFrame(name)
   local top
@@ -216,8 +217,12 @@ local function newHost(name, key, opts)
     lvl = max(lvl, f.close:GetFrameLevel(), border + 1)
   end
   f.close:SetFrameLevel(lvl)
-  Wd.Grip(f, function() return not conf(key).locked end, opts.onSized, f.panel and 6 or 2)
-  f.grip:SetFrameLevel(lvl)
+  if opts.fixedSize then
+    try(f, "SetResizable", false)
+  else
+    Wd.Grip(f, function() return not conf(key).locked end, opts.onSized, f.panel and 6 or 2)
+    f.grip:SetFrameLevel(lvl)
+  end
   Wd.PlaceAt(f, conf(key).pos)
   f:SetScale(conf(key).scale or 1)
   f:SetScript("OnShow", function(self)
@@ -294,20 +299,21 @@ end
 -- a button per window that asks for one (def.mainButton: the run panel)
 ---------------------------------------------------------------------------
 
+--- Not resizable, and one size whatever the tab (user, 2026-11-23: one panel, visually consistent): the smallest
+--- size every tab fits, i.e. the largest minimum width and height among them, capped at the screen.
 local function layoutMain()
   if not main then return end
-  local c, sel = conf(MAIN), conf(MAIN).selected
-  local mw, mh = 300, 120
-  if sel and defs[sel] then mw, mh = bodyMin(sel) end
-  mw = max(mw, MAIN_MIN_W - main.padW)
+  local sel = conf(MAIN).selected
+  local w, h = MAIN_MIN_W - main.padW, 120
+  for _, id in ipairs(dockedIds()) do
+    local mw, mh = bodyMin(id)
+    w, h = max(w, mw), max(h, mh)
+  end
   local pw, ph = main.padW, main.padH
-  local maxW, maxH = screenMax(main, MAX_W, MAX_H, mw, mh)
-  Wd.SetResizeBounds(main, mw + pw, mh + ph, maxW + pw, maxH + ph)
+  w, h = screenMax(main, w, h, 0, 0)
   -- Escape closes the frame unless its tab is a window that stays up
   setEscape(MAIN_NAME, not (sel and defs[sel] and defs[sel].escape == false))
-  if main.sizing then return end
-  local w = clamp(c.width or (sel and defs[sel].width) or mw, mw, maxW)
-  local h = clamp(c.height or (sel and defs[sel].height) or mh, mh, maxH)
+  Wd.SetResizeBounds(main, w + pw, h + ph, w + pw, h + ph)
   main:SetSize(w + pw, h + ph)
 end
 
@@ -405,8 +411,7 @@ end
 local function ensureMain()
   if main then return main end
   main = newHost(MAIN_NAME, MAIN, {
-    title = L["Hard Counters"], portrait = true, header = true,
-    onSized = savedSize(MAIN),
+    title = L["Hard Counters"], portrait = true, header = true, fixedSize = true,
   })
   main.tabs = {}
   main.empty = Wd.Text(main.body, "GameFontDisable", "TOPLEFT", 12, -12, 280)
@@ -470,6 +475,7 @@ function Win.Register(id, def)
       buildHeader()
     end
     refreshTabs()
+    layoutMain()                         -- a new tab may need a bigger panel
   end
   -- registered after login (a load-on-demand pack): restore it now
   if ns.ready and def.remember and conf(id).shown then Win.Show(id, true) end
@@ -571,6 +577,8 @@ ns.OnReady(function()
   local w = ns.settings and ns.settings.windows
   if type(w) == "table" then
     for _, c in pairs(w) do if type(c) == "table" then c.docked = nil end end
+    -- nor does a size dragged before the shared frame stopped resizing (2026-11-23)
+    if type(w[MAIN]) == "table" then w[MAIN].width, w[MAIN].height = nil, nil end
   end
   for _, id in ipairs(order) do
     if defs[id].remember and conf(id).shown then Win.Show(id, true) end
@@ -599,16 +607,14 @@ function HC:IsWindowShown(id) return Win.IsShown(id) end
 function HC:RelayoutWindow(id) return Win.Relayout(id) end
 
 ---------------------------------------------------------------------------
--- Options: the shared frame's scale and size
+-- Options: the shared frame's scale (its size is fixed by its tabs)
 ---------------------------------------------------------------------------
 
 ns.AddOptions("windows", function()
   local args = {}
   args.scale = { type = "range", order = 90, name = L["Scale of the Hard Counters window"], min = 0.5, max = 2, step = 0.05,
     get = function() return (main and main:GetScale()) or conf(MAIN).scale or 1 end,
-    set = function(_, v) conf(MAIN).scale = v; if main then main:SetScale(v) end end }
-  args.reset = { type = "execute", order = 91, name = L["Reset its size"],
-    func = function() local c = conf(MAIN); c.width, c.height = nil, nil; layoutMain() end }
+    set = function(_, v) conf(MAIN).scale = v; if main then main:SetScale(v); layoutMain() end end }
   return { type = "group", name = L["Windows"], inline = true, args = args }
 end)
 

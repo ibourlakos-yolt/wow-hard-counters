@@ -325,10 +325,13 @@ no tabs); `/hc help` lists them, with the pack each one comes from.
 ## 9. Windows and subcommands (packs)
 
 Hard Counters owns the window chrome, so every pack window behaves the same: Blizzard's panel frame (border, title,
-close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, resize grip, raise on click, Escape, BlizzMove
-(Ctrl+mouse wheel scales it when BlizzMove is installed), and its position, size and scale saved per profile. Every
-window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). Only a
-window with `dockable = false` (a HUD, a popup) gets a frame of its own. Check `HC:Supports("windows")`.
+close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, raise on click, Escape, BlizzMove
+(Ctrl+mouse wheel scales it when BlizzMove is installed), and its position and scale saved per profile. Every
+window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). The
+shared window is not resizable and is one size for every tab: the largest `minWidth` / `minHeight` (or `minSize()`)
+among its tabs, capped at the screen. Lay your content out to fill whatever room it gets, and keep your minimum
+honest: a large one makes the panel larger for every tab. Only a window with `dockable = false` (a HUD, a popup) gets a
+frame of its own, with a resize grip and a saved size. Check `HC:Supports("windows")`.
 
 | Call | Notes |
 |---|---|

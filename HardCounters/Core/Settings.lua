@@ -10,7 +10,7 @@ ns.SETTINGS_DEFAULTS = {
     -- (UI/BoardModel.lua Seed); nothing writes them any more. The panels themselves were deleted (HC-24).
     runPanel = { shown = true, locked = false, scale = 1, headline = nil, compact = false, width = nil, height = nil },
     runPanelPos = nil,
-    windows = nil,             -- per window: { pos, width, height, scale, locked, shown }; "_main" = shared frame
+    windows = nil,             -- per window: { pos, width, height, scale, locked, shown }; "_main" = shared frame (no size: it follows its tab)
     liveNumber = { shown = false, locked = false, scale = 1, view = nil },
     liveNumberPos = nil,
     ldb = true,                -- publish LibDataBroker objects (Titan Panel, ElvUI, ...)

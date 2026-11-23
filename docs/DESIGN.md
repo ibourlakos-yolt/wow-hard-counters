@@ -358,7 +358,13 @@ Nothing from a deeper layer leaks into a shallower one: no setting has to be tou
 - **One window host for every window, packs included** (`UI/Windows.lua`, API §9). Hard Counters owns the chrome:
   title, close, drag, resize grip, Escape, BlizzMove registration, and the saved position, size and scale per
   window (`settings.windows[id]`). Packs only build content. So "every window is resizable and BlizzMove-aware" holds
-  by construction, not by each pack remembering to do it.
+  by construction, not by each pack remembering to do it. **Except the shared window** (user, 2026-11-23): it is not
+  resizable, and it is **one size for every tab** (one panel, visually consistent): the smallest size every tab
+  fits, i.e. the largest minimum width and height among its tabs (`minWidth` / `minHeight` or `minSize()`), capped
+  at the screen. A tab's own `width` / `height` don't count. With the tabs of 2026-11-23 that is about 640 × 566:
+  Diagnostics' 640 (its button row) and Character Stats' height (every stat row without a scroll bar). A pack whose
+  tab asks for more grows the panel for every tab. A size saved from an old drag is dropped at load, and the "Reset
+  its size" option is gone. Windows of their own and popups keep their grip.
 - **The shared Hard Counters window: every window is a tab of it** (Trackers, Runs, Farmer's Ledger, the
   Diagnostics console, any pack's). **No pop-out** (user, 2026-11-15, replacing the Dock / Pop out choice of
   2026-11-14): in run 3 every tab had been popped out, which left an empty Hard Counters window, and the Dock buttons
@@ -1397,3 +1403,114 @@ tile's `display`, each a full-width row of its own, offered in the Display menu 
 - A display the reading no longer fits draws as a number. No live pass-through (both need arithmetic).
 - Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
   screen, the shares written, the Display menu).
+
+## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23, not built)
+
+The user, 2026-11-23, after three mockups: the Hard Counters window is the one-stop panel, modelled on the Auction
+House (and Auctioneer): predictable tabs, clear categories, quick clicks, and deep search and filtering still there
+for demanding players. Queue: HC-65 to HC-70 (order in §17.7). Supersedes HC-44(a) and answers HC-38.
+
+### 17.1 Words
+
+The stack is **counters → trackers → readings → tiles → boards**. Counters are storage and never shown to players;
+a tracker is what the player switches on (it needs counters); a reading is a number a tracker offers; a tile is a
+reading the player placed, with its choices (§16.1); a board is a HUD stack of tiles.
+
+### 17.2 Tabs
+
+- **Bottom tabs, Hard Counters' own, in this order:** Overview, Boards, Trackers, Runs. A new player lands on
+  Overview, the casual tab (HC-38a).
+- **Right-side icon tabs:** every pack's window (Ledger, Character Stats, any later pack) and **Diagnostics**, which
+  stays in the main window (the user overrode HC-44(a): one-stop panel). Blizzard's `LargeSideTabButtonTemplate`, as
+  on Forever's profession window (`Blizzard_Professions/Camelot/Blizzard_ProfessionsFrame.xml`); the title is the
+  tooltip. They hang off the frame's right edge (no width taken); about nine fit, then the column scrolls
+  vertically. `RegisterWindow` gains an `icon` field.
+- **Tab labels are an option:** icon only, title only, icon and title (the bottom tabs; side tabs are always
+  icons). Icon only shows the title as a tooltip. `PanelTabButtonTemplate` has no icon slot: we add the texture.
+- **Overflow:** tab content scrolls vertically when taller than the panel; the side column scrolls when too long.
+  Abbreviating titles stays a fallback. `ScrollableTabsContainer` is Mainline-only in the Forever source (not
+  reusable); `TabSystemTemplate` loads on Forever but has no overflow handling.
+- The panel keeps one size for every tab (§7.1, 2026-11-23). With content scrolling, that size can become a design
+  size (the browser layout needs about 780 wide) instead of the tallest tab's minimum; settled when the browser is
+  built.
+
+### 17.3 The browser layout (one widget, used by Trackers and Diagnostics)
+
+Category tree on the left; a search box and a **Filters** dropdown on top (casual players see only search and the
+tree); a list with sortable columns and a scroll bar; a detail pane for the selected row; an action bar whose
+buttons follow the selection. One shared widget, so every tab behaves the same.
+
+### 17.4 Each tab
+
+- **Overview: your tiles** (note #9 of the 2026-11-20 playtest). The player's own collection of tiles, laid out as
+  tiles in sections the player names, with a search box. Each tile shows "On HUD: <board>" or "Window only";
+  right-click: edit, show on HUD, remove. "Add tile" goes to Trackers.
+- **Every tile lives in the collection; some are also on HUD boards** (the user's rule). So a tile exists apart from
+  boards: a board holds references to collection tiles, and each placement keeps only its order and size. Reading,
+  argument, scope, character or account, calc, display, target, name and extras belong to the tile and are shared:
+  edit it anywhere and the HUD follows. Migration (BoardModel v6): every existing board tile moves into the
+  collection. Settings only, no storage change. Copies were rejected: they drift apart.
+- **Boards.** "Your boards": name, status (Shown; Hidden by rule, naming the rule; Off; Off screen?), tiles, mini.
+  Actions: New board, Show or Hide, Show all / Hide all, **Show now** (ignores the rules for a while), Edit on screen,
+  Edit all, **Reset position** (centre of the screen, scale 1), Duplicate, Save as preset, Delete. Hovering a row
+  flashes that board on screen, raised above the window (strata HIGH) until the pointer leaves. "Presets": the
+  built-in presets grouped by pack plus "Your presets"; create a board from one, save a board as one (HC-22's
+  player presets), edit, delete. Categories beyond the pack stay HC-57 (proposed). Boards are clamped to the screen,
+  so they go missing by rules, mouse-over fade, a tiny scale, Blizzard frames on top or a UI scale change: the
+  status column, Show now and Reset position cover those.
+- **New board dialog.** Every way to make a board opens it (Boards tab, the launcher, a board's [+] menu, Options;
+  `/hc board new` without a name). Fields: **Name** (required, at most 24 characters, unique ignoring case; starts
+  as the preset's name; a taken name suggests "<name> 2"; shows the `/hc board` command that will toggle it),
+  **Start from** (presets by pack, your presets, Empty board, Copy of a board: its own tiles, not shared), **Show it**
+  (always, in combat, in instances, during runs: the board's existing flags). Create puts the board at the centre
+  of the screen with one flash; an empty board opens in edit mode. Enter creates, Escape cancels; DIALOG strata.
+  Rename enforces the same uniqueness, so `/hc board <name>` is never ambiguous. `/hc board new <name>` with a name
+  creates directly.
+- **Trackers: the catalog and management** (the playtest's note #3; HC-39's words apply). Tree from each tracker's
+  `category` (Basics, Farming, Travel, Character, ...) plus "Not loaded"; columns Name, On, History, Size; filters
+  on or off, history on, used by this character, pack; the detail pane lists the tracker's readings, each with
+  "Add tile" (HC-50's searchable reading list is the same catalog). Actions: turn on or off, History..., Delete data.
+  Trackers this character can't use show greyed. HC-35 (no on/off switch) stays proposed: the tree suits it, but
+  it is not decided here.
+- **Runs:** a list and a detail pane; HC-15's run details go in the pane, not a floating card.
+- **Diagnostics (side tab):** the browser layout for probes. Tree by kind (functions, events, strings, samplers);
+  status column and filter (ok, missing, changed, error, never fired); actions Run selected (`ns.RunProbe` exists,
+  no UI yet), Run all, Copy, Clear history; Log, Live and Storage stay. Probe definitions are file-local today: a
+  `ns.ProbeList` accessor first. Note #7 (probe taxonomy and status) is still the user's to decide.
+
+### 17.5 Overlap: strata, levels, Blizzard's panels
+
+| Strata (low to high) | What |
+|---|---|
+| LOW | Boards; a board's flyouts above that board (HC-43) |
+| MEDIUM | The Hard Counters window and Blizzard's panels: the one clicked last is on top (`SetToplevel`) |
+| HIGH | A board while its row is hovered in the Boards tab, then back to LOW |
+| DIALOG | The copy box, confirm popups, the New board dialog |
+| FULLSCREEN_DIALOG | Our right-click menus |
+| TOOLTIP | Tooltips (Blizzard's) |
+
+- **Not a managed UI panel.** Registering in `UIPanelWindows` would give AH-like slots, but Forever's panel manager
+  refuses addons in combat ("We no longer allow addons to show or hide UI panels in combat",
+  `Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua`) and repositions the frame, ignoring the saved
+  position. So the window stays free: last clicked on top; default position off the left slot where Blizzard's
+  panels open; opens and closes in combat; Escape closes it (`UISpecialFrames`); no secure templates inside it.
+- **Side tabs and clamping:** `SetClampRectInsets` extends the clamp to the tab column, so the tabs never leave the
+  screen.
+- **Popups never open under the window:** the run card shares MEDIUM without `SetToplevel` and probably stays under
+  the window once the window is clicked (unverified). It gets `SetToplevel` until HC-15 removes it.
+- Alt+Z, pet battles and cinematics hide everything under UIParent; positions are saved as top-left points.
+
+### 17.6 The launcher (minimap button, AddOns menu, bar feed)
+
+The launcher is a shortcut, never the only way: everything it does is in the window under the same words. Click
+opens the window on its last tab; Shift-click shows or hides all boards; Ctrl-click edits every board (all
+unchanged). The right-click menu's "New board ▸ presets" becomes one "New board…" that opens the dialog, and gains
+"Open Boards tab". Options keeps its general settings; its per-board show and mini toggles move to the Boards tab.
+The Trackers tab's "Edit boards" button moves to the Boards tab (also the playtest's note #4).
+
+### 17.7 Before building, and the order
+
+Probe in game first (HC-65): `LargeSideTabButtonTemplate` and an icon texture on `PanelTabButtonTemplate` create
+without errors on Forever; `SetClampRectInsets` holds the side tabs on screen; the run card's stuck-under bug.
+Then: the tab chrome (HC-69) with the browser widget and the Trackers tab (HC-66); the tile collection and Overview
+(HC-67); the Boards tab, the New board dialog and the launcher (HC-68); the Diagnostics probes browser (HC-70).

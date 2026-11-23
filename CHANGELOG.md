@@ -15,6 +15,9 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 ### Changed
 - **A board in mini mode names what it shows** ("Gold/h 12g 40s/h 0:42"): a fresh Pocket board used to read only
   "- 0:09".
+- **The Hard Counters window is one fixed size.** It no longer resizes, and it stays the same size on every tab:
+  the smallest size every tab fits. A size you dragged before is forgotten, and the "Reset its size" option is
+  gone. Windows of their own and popups still resize.
 
 ## 0.2.0-beta1 (2026-11-22)
 

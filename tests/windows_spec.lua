@@ -254,17 +254,48 @@ describe("windows", function()
     end)
   end)
 
-  it("never opens a window bigger than the screen, whatever size was saved", function()
+  it("never opens a window of its own bigger than the screen, whatever size was saved", function()
     -- in game the old grip saved the shared window at 1333 x 1151 (2026-11-15)
+    local sv = { profiles = { Default = { windows = { ["t:big"] = { width = 1333, height = 1400, scale = 0.9 } } } } }
+    UI.with(function(ctx)
+      local HC, Win = ctx.HC, ctx.hc.Windows
+      HC:RegisterWindow("t:big", counting({ dockable = false }))
+      HC:ShowWindow("t:big", true)
+      local host = Win.Host("t:big")
+      assert.is_true(host:GetWidth() <= math.floor(1920 / 0.9))
+      assert.are.equal(math.floor(1080 / 0.9), host:GetHeight())   -- as tall as fits, no taller
+      assert.are.equal(1333 + host.padW, host:GetWidth())         -- the width fits: kept
+    end, { settings = sv })
+  end)
+
+  -- user, 2026-11-23: the Hard Counters window is not resizable
+  -- and keeps one size for every tab: one panel, visually consistent
+  it("keeps the shared frame one size for every tab, the smallest they all fit: no grip, no saved size", function()
     local sv = { profiles = { Default = { windows = { _main = { width = 1333, height = 1151, scale = 0.9 } } } } }
     UI.with(function(ctx)
-      local Win = ctx.hc.Windows
-      Win.ShowMain(true)
+      local HC, Win = ctx.HC, ctx.hc.Windows
+      assert.is_nil(ctx.hc.settings.windows._main.width)          -- a dragged size from before is dropped
+      assert.is_nil(ctx.hc.settings.windows._main.height)
+      HC:RegisterWindow("t:wide", counting({ width = 1000, height = 100, minWidth = 900, minHeight = 50 }))
+      HC:RegisterWindow("t:tall", counting({ minWidth = 300, minHeight = 700 }))
+      HC:ShowWindow("t:wide", true)
       local main = Win.Host("_main")
-      assert.is_true(main:GetWidth() <= math.floor(1920 / 0.9))
-      assert.is_true(main:GetHeight() <= math.floor(1080 / 0.9))
-      assert.are.equal(math.floor(1080 / 0.9), main:GetHeight())   -- as tall as fits, no taller
-      assert.are.equal(1333 + main.padW, main:GetWidth())         -- the width fits: kept
+      assert.is_nil(main.grip)
+      local w, h = main:GetWidth(), main:GetHeight()
+      assert.are.equal(900 + main.padW, w)                          -- the widest minimum, not a tab's own width
+      assert.are.equal(700 + main.padH, h)                          -- the tallest minimum
+      local b = main._bounds                                        -- min == max: the client can't size it either
+      assert.are.same({ w, h, w, h }, b)
+      for _, id in ipairs({ "t:tall", "trackers", "runs", "hcdiag:console", "t:wide" }) do
+        HC:ShowWindow(id, true)
+        assert.are.same({ w, h }, { main:GetWidth(), main:GetHeight() }, id)
+      end
+      -- a tab registered later that needs more room grows the panel, capped at the screen
+      HC:RegisterWindow("t:huge", counting({ minWidth = 300, minHeight = 3000 }))
+      assert.are.equal(math.floor(1080 / 0.9), main:GetHeight())
+      HC:ShowWindow("runs", true)
+      assert.are.equal(math.floor(1080 / 0.9), main:GetHeight())
+      assert.are.same({}, ctx.env.errors)
     end, { settings = sv })
   end)
 
