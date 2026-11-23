@@ -3,9 +3,10 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.1-beta1 (2026-11-23)
 
-<!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
+The second beta, **still experimental**: the Hard Counters window rebuilt in the spirit of the Auction House, with
+Overview (all your tiles) and Boards (every board, easy to find) as its first tabs.
 
 **Saved data:** kept. The first time you log in, your boards' tiles move into your tile collection (the new
 Overview tab); the boards look and count exactly as before.
