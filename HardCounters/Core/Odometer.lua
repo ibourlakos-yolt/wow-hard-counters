@@ -479,7 +479,7 @@ local function fold(t, x, a)
   local d = a - t.a
   if d < -1e-3 or x < t.x - 1e-6 * (1 + math.abs(t.x)) then   -- (not a rounding at a pause: banking re-adds)
     -- the window's active time or total went back (a flow never does): the entry was folded against another
-    -- period (a Reset before 0.3.0 saved such entries). Start it again from the window's average.
+    -- period (a Reset before 0.2.1-beta1 saved such entries). Start it again from the window's average.
     local n = newEntry(x, a, t.n)
     t.s, t.x, t.a, t.r, t.ra = n.s, n.x, n.a, nil, nil
     return
