@@ -30,6 +30,10 @@ Overview tab); the boards look and count exactly as before.
   `/hc board <name>` always finds the right one), start it from a preset, one of yours, an empty board or a copy
   of another board (with tiles of its own), and choose when it shows. It appears at the centre of the screen with a
   flash. `/hc board new <name>` still makes one straight away.
+- **Diagnostics: a probes browser** (for testers who help with the game's APIs). The Probes view lists every
+  probe by kind (functions, events, client strings, samplers) with the feature it serves and its status (ok,
+  missing, error, changed since the last run, secret, never fired, not run yet), filters by both, and shows what
+  each kept. Run one or all, Copy one or all (to paste for us), Clear history.
 
 ### Fixed
 - **The run summary card opened behind the Hard Counters window.** Clicking a run in the Runs tab opened its card

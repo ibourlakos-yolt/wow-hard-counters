@@ -1473,9 +1473,13 @@ function ns.RunProbes()
     if runOne(pr, t, ctx) == "ok" then ok = ok + 1 else fail = fail + 1 end
   end
   local strings = P().strings
+  P().stringsWas = type(P().stringsWas) == "table" and P().stringsWas or {}
   for _, name in ipairs(STRINGS) do
     local v = G(name)
-    strings[name] = type(v) == "string" and v or ("<" .. describe(v) .. ">")
+    local now = type(v) == "string" and v or ("<" .. describe(v) .. ">")
+    -- (HC-70) a client string that changed since the last run (a patch): its status says "changed", with the old one
+    if strings[name] ~= nil and strings[name] ~= now then P().stringsWas[name] = { was = strings[name], t = t } end
+    strings[name] = now
   end
   P().lastRun = { t = t, ctx = ctx, ok = ok, other = fail }
   B.Log("info", "Diag", "probes: %d ok, %d not ok (%s); /reload to save", ok, fail, ctx)
@@ -1590,4 +1594,183 @@ function ns.ProbesText()
   out[#out + 1] = "GLOBAL STRINGS"
   for _, name in ipairs(STRINGS) do out[#out + 1] = format("  %-38s %s", name, tostring(p.strings[name] or "-")) end
   return table.concat(out, "\n")
+end
+
+---------------------------------------------------------------------------
+-- The probe list (HC-70, DESIGN §17.4; the playtest's note #7, decided by the user 2026-11-23): every probe as one
+-- record, for the Diagnostics tab's browser and its Copy. Kinds: "function" (an API check run on demand, the last 5
+-- runs kept), "event" (fires counted by instance type), "string" (a client string's value), "sampler" (a sampler's
+-- running tables: travel, TR-6, loading screens, item links, Edit Mode). Feature: the queue id a probe serves
+-- ("TR-6", "CS-8"), from its name, else "Core". Statuses: ok; missing (no such API or event); error (it failed);
+-- changed (different from the previous run); secret (a protected value came back); never fired (an event or a
+-- sampler with nothing yet); not run yet.
+---------------------------------------------------------------------------
+
+ns.PROBE_KINDS = { "function", "event", "string", "sampler" }
+ns.PROBE_STATUSES = { "ok", "missing", "error", "changed", "secret", "never fired", "not run yet" }
+
+-- { title, key in HardCountersDiagDB.probes, feature }; their own fields to keep when cleared (versions, this
+-- load's registration state)
+local SAMPLERS = {
+  { "Travel sampler", "travel", "TR-1" },
+  { "TR-6 sampler", "tr6", "TR-6" },
+  { "Loading screens", "loading", "Core" },
+  { "Item link fields", "links", "Core" },
+  { "Edit Mode", "editMode", "HC-42" },
+}
+local KEEP_ON_CLEAR = { v = true, reg = true, hook = true }
+
+local function featureOf(name) return name:match("^(%u%u%-%d+) ") or "Core" end
+
+local function funcStatus(h)
+  local r = type(h) == "table" and h[#h]
+  if not r then return "not run yet" end
+  local prev = h[#h - 1]
+  if prev and (prev.status ~= r.status or tostring(prev.detail) ~= tostring(r.detail)) then return "changed" end
+  if r.status == "secret" or (r.status == "ok" and tostring(r.detail):find("secret", 1, true)) then return "secret" end
+  return tostring(r.status)
+end
+
+local function eventStatus(p, ev)
+  if p.missingEvents[ev] then return "missing" end
+  local e = p.events[ev]
+  if not e then return "never fired" end
+  if (e.secretArgs or 0) > 0 then return "secret" end
+  return "ok"
+end
+
+local function stringStatus(p, name)
+  local v = p.strings[name]
+  if v == nil then return "not run yet" end
+  if type(p.stringsWas) == "table" and p.stringsWas[name] then return "changed" end
+  if v:sub(1, 1) == "<" then return "missing" end
+  return "ok"
+end
+
+local function samplerStatus(p, key)
+  local s = p[key]
+  if type(s) ~= "table" then return "not run yet" end
+  for k in pairs(s) do if not KEEP_ON_CLEAR[k] then return "ok" end end
+  return "never fired"
+end
+
+--- Every probe, in order: functions, events, strings, samplers. { key, kind, name, feature, status, last (time of
+--- the last run, functions only), runnable }.
+function ns.ProbeList()
+  local p = HardCountersDiagDB and HardCountersDiagDB.probes
+  local out = {}
+  if type(p) ~= "table" then return out end
+  for _, pr in ipairs(FUNCS) do
+    local h = p.funcs[pr[1]]
+    local last = type(h) == "table" and h[#h]
+    out[#out + 1] = { key = "function:" .. pr[1], kind = "function", name = pr[1], feature = featureOf(pr[1]),
+      status = funcStatus(h), last = last and last.t, runnable = true }
+  end
+  for _, ev in ipairs(EVENTS) do
+    out[#out + 1] = { key = "event:" .. ev, kind = "event", name = ev, feature = "Core", status = eventStatus(p, ev) }
+  end
+  for _, name in ipairs(STRINGS) do
+    out[#out + 1] = { key = "string:" .. name, kind = "string", name = name, feature = "Core",
+      status = stringStatus(p, name), runnable = true }
+  end
+  for _, s in ipairs(SAMPLERS) do
+    out[#out + 1] = { key = "sampler:" .. s[2], kind = "sampler", name = s[1], field = s[2], feature = s[3],
+      status = samplerStatus(p, s[2]) }
+  end
+  return out
+end
+
+local function dumpInto(v, ind, out, depth, cap)
+  local keys = {}
+  for k in pairs(v) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  for _, k in ipairs(keys) do
+    if #out >= cap then out[#out + 1] = ind .. "..."; return end
+    local x = v[k]
+    if type(x) == "table" and depth < 3 then
+      out[#out + 1] = ind .. tostring(k) .. ":"
+      dumpInto(x, ind .. "  ", out, depth + 1, cap)
+    else
+      out[#out + 1] = ind .. tostring(k) .. " = " .. tostring(x)
+    end
+  end
+end
+
+--- What a probe holds, as lines (newest run first for a function).
+function ns.ProbeLines(rec)
+  local p = HardCountersDiagDB.probes
+  local out = {}
+  if rec.kind == "function" then
+    local h = p.funcs[rec.name] or {}
+    for i = #h, 1, -1 do
+      local r = h[i]
+      out[#out + 1] = format("%s  %s  %s  (%s)", ns.clock(r.t), tostring(r.status), tostring(r.detail), tostring(r.ctx))
+    end
+  elseif rec.kind == "event" then
+    local e = p.events[rec.name]
+    if p.missingEvents[rec.name] then out[#out + 1] = "RegisterEvent failed: this client has no such event"
+    elseif e then
+      local fires = {}
+      for k, v in pairs(e.fires) do fires[#fires + 1] = k .. "=" .. v end
+      table.sort(fires)
+      out[#out + 1] = "fires by instance type: " .. table.concat(fires, " ")
+      out[#out + 1] = "argument types (latest): " .. tostring(e.sig)
+      if (e.secretArgs or 0) > 0 then out[#out + 1] = "secret arguments: " .. e.secretArgs end
+      local m = {}
+      for k, v in pairs(e.matched or {}) do m[#m + 1] = k .. "=" .. v end
+      table.sort(m)
+      if #m > 0 or (e.unmatched or 0) > 0 then
+        out[#out + 1] = "chat patterns matched: " .. table.concat(m, " ") .. "  unmatched: " .. tostring(e.unmatched)
+      end
+    end
+  elseif rec.kind == "string" then
+    out[#out + 1] = tostring(p.strings[rec.name])
+    local was = type(p.stringsWas) == "table" and p.stringsWas[rec.name]
+    if was then out[#out + 1] = format("was until %s: %s", ns.clock(was.t), tostring(was.was)) end
+  else
+    local s = p[rec.field]
+    if type(s) == "table" then dumpInto(s, "", out, 0, 60) end
+  end
+  return out
+end
+
+--- One probe as text (Copy).
+function ns.ProbeText(rec)
+  local out = { format("%s  [%s, %s]  %s", rec.name, rec.kind, rec.feature, rec.status) }
+  for _, l in ipairs(ns.ProbeLines(rec)) do out[#out + 1] = "  " .. l end
+  return table.concat(out, "\n")
+end
+
+--- Run one probe now: a function probe (with context), or a string read again. Returns its status.
+function ns.RunProbeRecord(rec)
+  if rec.kind == "function" then return ns.RunProbe(rec.name) end
+  if rec.kind == "string" then
+    local p = P()
+    local v = G(rec.name)
+    local now = type(v) == "string" and v or ("<" .. describe(v) .. ">")
+    p.stringsWas = type(p.stringsWas) == "table" and p.stringsWas or {}
+    if p.strings[rec.name] ~= nil and p.strings[rec.name] ~= now then p.stringsWas[rec.name] = { was = p.strings[rec.name], t = W.now() } end
+    p.strings[rec.name] = now
+    return stringStatus(p, rec.name)
+  end
+  return nil
+end
+
+--- Forget what a probe kept (a sampler's tables are emptied in place: it keeps counting into them).
+function ns.ClearProbe(rec)
+  local p = P()
+  if rec.kind == "function" then p.funcs[rec.name] = nil
+  elseif rec.kind == "event" then p.events[rec.name] = nil
+  elseif rec.kind == "string" then
+    p.strings[rec.name] = nil
+    if type(p.stringsWas) == "table" then p.stringsWas[rec.name] = nil end
+  elseif type(p[rec.field]) == "table" then
+    local s = p[rec.field]
+    for k in pairs(s) do if not KEEP_ON_CLEAR[k] then s[k] = nil end end
+  end
+end
+
+function ns.ClearProbes()
+  for _, rec in ipairs(ns.ProbeList()) do ns.ClearProbe(rec) end
+  P().lastRun = nil
 end

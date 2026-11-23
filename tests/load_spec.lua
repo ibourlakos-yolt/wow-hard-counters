@@ -138,6 +138,83 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
+  -- HC-70 (DESIGN §17.4; note #7 decided 2026-11-23): every probe as a record, and the browser over them
+  it("lists every probe by kind with a feature and a status, and browses, runs, copies and clears them", function()
+    UI.with(function(ctx)
+      local D = ctx.diag
+      local list = D.ProbeList()
+      local byKind, byKey = {}, {}
+      for _, r in ipairs(list) do byKind[r.kind] = (byKind[r.kind] or 0) + 1; byKey[r.key] = r end
+      for _, k in ipairs({ "function", "event", "string", "sampler" }) do assert.is_true((byKind[k] or 0) > 0, k) end
+      assert.are.equal("TR-6", byKey["function:TR-6 dungeons"].feature)
+      assert.are.equal("Core", byKey["function:GetMoney"].feature)
+      D.ClearProbe(byKey["function:GetMoney"])                    -- (the automatic run may have been already)
+      for _, r in ipairs(D.ProbeList()) do byKey[r.key] = r end
+      assert.are.equal("not run yet", byKey["function:GetMoney"].status)
+      D.RunProbes()
+      list = D.ProbeList()
+      for _, r in ipairs(list) do byKey[r.key] = r end
+      assert.are.equal("ok", byKey["function:GetMoney"].status)
+      assert.truthy(byKey["function:GetMoney"].last)
+      -- a function whose answer differs from the run before is "changed"
+      _G.GetMoney = function() return nil end
+      D.RunProbeRecord(byKey["function:GetMoney"])
+      for _, r in ipairs(D.ProbeList()) do byKey[r.key] = r end
+      assert.are.equal("changed", byKey["function:GetMoney"].status)
+      -- a client string that changed since the last run is "changed", with what it was
+      local s = byKey["string:GOLD_AMOUNT"]
+      _G.GOLD_AMOUNT = "%d Gold"
+      D.RunProbeRecord(s)
+      for _, r in ipairs(D.ProbeList()) do byKey[r.key] = r end
+      assert.are.equal("changed", byKey["string:GOLD_AMOUNT"].status)
+      assert.truthy(table.concat(D.ProbeLines(byKey["string:GOLD_AMOUNT"]), "\n"):find("was until", 1, true))
+      -- an event nothing fired yet
+      assert.are.equal("never fired", byKey["event:MAIL_CLOSED"] and byKey["event:MAIL_CLOSED"].status or "never fired")
+      -- clearing a sampler empties it in place and keeps its version
+      local tr6 = _G.HardCountersDiagDB.probes.tr6
+      tr6.something = 3
+      D.ClearProbe(byKey["sampler:tr6"])
+      assert.is_nil(tr6.something)
+      assert.truthy(tr6.v)
+      assert.are.same(tr6, _G.HardCountersDiagDB.probes.tr6)       -- the same table: the sampler keeps counting into it
+      -- the Diagnostics tab's Probes view is the browser
+      _G.SlashCmdList.HCDIAG("")
+      local con = ctx.hc.Windows.Content("hcdiag:console")
+      con:SetSize(762, 568)
+      con.tabs.Probes:GetScript("OnClick")(con.tabs.Probes)
+      assert.is_true(con.probes:IsShown())
+      assert.is_false(con.scroll:IsShown())
+      con.probes:SetSize(762, 502)
+      local br = D.ProbesBrowser
+      br:Refresh()
+      local nodes = {}
+      for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
+      assert.truthy(nodes[1]:find("^All probes"))
+      assert.truthy(table.concat(nodes, "|"):find("Samplers", 1, true))
+      br:Select("function:GetMoney", "function")
+      local acts = {}
+      for _, b in ipairs(br.actionBtns) do if b:IsShown() then table.insert(acts, 1, b:GetText()) end end
+      assert.are.same({ "Run", "Copy", "Clear history" }, acts)
+      assert.truthy(br.detail.title:GetText():find("GetMoney", 1, true))
+      -- Copy shows the copy box; Clear history (confirmed) forgets the runs
+      local copied
+      local realCopy, realConfirm = ctx.hc.ShowCopyBox, ctx.hc.Boards.Confirm
+      ctx.hc.ShowCopyBox = function(_, text) copied = text end
+      ctx.hc.Boards.Confirm = function(_, fn) fn() end
+      for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Copy" then b:GetScript("OnClick")(b) end end
+      assert.truthy(copied and copied:find("GetMoney", 1, true))
+      for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Clear history" then b:GetScript("OnClick")(b) end end
+      assert.is_nil(_G.HardCountersDiagDB.probes.funcs.GetMoney)
+      ctx.hc.ShowCopyBox, ctx.hc.Boards.Confirm = realCopy, realConfirm
+      -- Filters: hide "ok": no ok row left
+      local items = br.spec.filters()
+      for _, it in ipairs(items) do if it.text == "ok" then it.func() end end
+      for _, r in ipairs(br.rowsData) do assert.are_not.equal("ok", r.rec.status) end
+      assert.are.equal("Filters *", br.filterBtn:GetText())
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+
   -- CS-8: UnitDefense is absent on Forever (run 3); do the skill lines list Defence and weapon skills?
   it("probes the skill lines: headers with line counts, Defence's rank types", function()
     local lines = {

@@ -1412,7 +1412,7 @@ tile's `display`, each a full-width row of its own, offered in the Display menu 
 - Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
   screen, the shares written, the Display menu).
 
-## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65 to HC-69 built)
+## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; built the same day, HC-65 to HC-70)
 
 The user, 2026-11-23, after three mockups: the Hard Counters window is the one-stop panel, modelled on the Auction
 House (and Auctioneer): predictable tabs, clear categories, quick clicks, and deep search and filtering still there
@@ -1699,3 +1699,29 @@ also Rename..., Delete. The tab refreshes once a second while shown (statuses fo
 editing boards, Options. Options ▸ Boards keeps Edit every board and gains New board... and Open Boards tab; its
 per-board Show and mini switches are gone (the Boards tab has them). The Trackers tab's "Edit boards" is gone (the
 Boards tab's Edit all; the playtest's note #4).
+
+### 17.11 As built (HC-70, 2026-11-23): the probes browser in Diagnostics
+
+The playtest's note #7 (probes: status, data, taxonomy, UX) was decided by the user on 2026-11-23 as proposed:
+- **Taxonomy:** the tree by kind: Functions (API checks run on demand), Events (fires counted by instance type),
+  Global strings (client strings the chat parsers use), Samplers (travel, TR-6, loading screens, item link fields,
+  Edit Mode). The **feature** a probe serves is a column and a filter: the queue id at the start of its name
+  ("TR-6 dungeons" serves TR-6, "CS-1 UnitStat(player,1)" CS-1), else "Core"; the samplers name theirs.
+- **Statuses:** ok; missing (no such API or event); error (it failed); **changed** (a function's last two runs
+  differ in status or detail; a string that differs from the last read, with the old value kept in
+  `probes.stringsWas`); **secret** (a protected value came back: status "secret" or "secret" in an ok detail; an
+  event with secret arguments); **never fired** (an event or a sampler with nothing yet); not run yet.
+- **Data:** what was kept already (a function's last 5 runs with time, status, detail and context; an event's
+  fires, argument types, secret arguments, chat patterns matched; a string's value; a sampler's tables), shown in
+  the detail pane, newest first.
+
+Built: `ns.ProbeList()` in `Probes.lua` (records `{ key, kind, name, feature, status, last, runnable }`),
+`ns.ProbeLines(rec)`, `ns.ProbeText(rec)`, `ns.RunProbeRecord(rec)` (a function probe, or a string read again),
+`ns.ClearProbe(rec)` / `ns.ClearProbes()` (a sampler's table is emptied **in place**, keeping its version and this
+load's registration state: the sampler keeps counting into it). The Diagnostics tab's **Probes** view is now the
+shared browser (through the private bridge: `HardCounters._diag.NewBrowser`, `.Confirm`): tree All probes /
+Functions / Events / Global strings / Samplers with counts; columns Name, Feature, Status (coloured), Last run;
+Filters by status and feature; actions Run (functions and strings), Copy (the probe as text, in the copy box),
+Clear history (confirmed); at the top Run all, Copy all (the old text page, for pasting to Claude), Clear all
+(confirmed). Log, Live and Storage stay text; the bottom row's Copy copies the probes' text on the Probes view.
+Without the browser (an older Hard Counters) the Probes view stays text.

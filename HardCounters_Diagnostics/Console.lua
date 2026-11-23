@@ -1,5 +1,6 @@
 -- Console: the dev console window. Tabs: Log, Live, Storage, Probes. Buttons: Refresh, Snapshot, Copy, Marker,
--- Run probes, Level. The text area is a read-only edit box, so the Copy button is just "select all".
+-- Run probes, Level. The text area is a read-only edit box, so the Copy button is just "select all". Probes is a
+-- browser since HC-70 (below).
 -- /hc diag toggles it (/hcdiag is an alias); /hc diag mark drops a marker; /hc diag snap snapshots the current tab.
 local ADDON, ns = ...
 
@@ -78,8 +79,135 @@ local function textFor(tab)
   return ""
 end
 
+---------------------------------------------------------------------------
+-- The Probes view (HC-70, DESIGN §17.4; the playtest's note #7, decided 2026-11-23): the shared browser over
+-- ns.ProbeList(). Tree by kind; columns Name, Feature, Status, Last run; Filters by status and feature; the detail
+-- pane holds what the probe kept (a function's last 5 runs, newest first); actions Run (functions and strings),
+-- Copy, Clear history; at the top Run all, Copy all, Clear all. Without the browser (an older Hard Counters) the
+-- Probes view stays the text it was.
+---------------------------------------------------------------------------
+
+local KIND_NODES = { { "function", "Functions" }, { "event", "Events" }, { "string", "Global strings" }, { "sampler", "Samplers" } }
+local STATUS_COLOR = { ok = "|cff60ff60", missing = "|cffff6060", error = "|cffff6060", changed = "|cffffd200",
+  secret = "|cffc080ff", ["never fired"] = "|cff808080", ["not run yet"] = "|cff808080" }
+local hideStatus, hideFeature = {}, {}         -- the Filters menu: statuses and features hidden
+local probesBrowser
+
+local function shownRecord(rec, search)
+  if hideStatus[rec.status] or hideFeature[rec.feature] then return false end
+  if search == "" then return true end
+  return rec.name:lower():find(search, 1, true) ~= nil or rec.feature:lower():find(search, 1, true) ~= nil
+end
+
+local probeSpec = {
+  columns = {
+    { key = "name", title = "Name" },
+    { key = "feature", title = "Feature", width = 64 },
+    { key = "status", title = "Status", width = 90 },
+    { key = "last", title = "Last run", width = 64, sort = function(r) return r.rec.last or 0 end },
+  },
+  nodes = function()
+    local list = ns.ProbeList()
+    local n, by = 0, {}
+    for _, rec in ipairs(list) do
+      if shownRecord(rec, "") then n = n + 1; by[rec.kind] = (by[rec.kind] or 0) + 1 end
+    end
+    local out = { { key = "all", text = "All probes", count = n } }
+    for _, k in ipairs(KIND_NODES) do out[#out + 1] = { key = k[1], text = k[2], count = by[k[1]] or 0, indent = 1 } end
+    return out
+  end,
+  rows = function(node, search)
+    local out = {}
+    for _, rec in ipairs(ns.ProbeList()) do
+      if (node == "all" or node == rec.kind) and shownRecord(rec, search) then
+        out[#out + 1] = { key = rec.key, rec = rec, grey = rec.status == "not run yet",
+          cells = { name = rec.name, feature = rec.feature, status = (STATUS_COLOR[rec.status] or "") .. rec.status .. "|r",
+            last = rec.last and ns.clock(rec.last) or "" } }
+      end
+    end
+    return out
+  end,
+  filters = function()
+    local items = { { text = "Status", title = true } }
+    for _, s in ipairs(ns.PROBE_STATUSES) do
+      items[#items + 1] = { text = s, checked = not hideStatus[s], keepOpen = true,
+        func = function() hideStatus[s] = (not hideStatus[s]) or nil; if probesBrowser then probesBrowser:Refresh() end end }
+    end
+    local features, seen = {}, {}
+    for _, rec in ipairs(ns.ProbeList()) do
+      if not seen[rec.feature] then seen[rec.feature] = true; features[#features + 1] = rec.feature end
+    end
+    table.sort(features)
+    items[#items + 1] = { text = "Feature", title = true }
+    for _, f in ipairs(features) do
+      items[#items + 1] = { text = f, checked = not hideFeature[f], keepOpen = true,
+        func = function() hideFeature[f] = (not hideFeature[f]) or nil; if probesBrowser then probesBrowser:Refresh() end end }
+    end
+    items[#items + 1] = { text = "Show everything", keepOpen = true, func = function()
+      hideStatus, hideFeature = {}, {}
+      if probesBrowser then probesBrowser:Refresh() end
+    end }
+    return items
+  end,
+  filtersActive = function() return next(hideStatus) ~= nil or next(hideFeature) ~= nil end,
+  detail = function(row)
+    local rec = row.rec
+    local items = {}
+    for _, l in ipairs(ns.ProbeLines(rec)) do items[#items + 1] = { text = l, tip = l } end
+    if #items == 0 then items[1] = { text = "nothing kept yet", grey = true } end
+    return { title = rec.name, lines = { format("%s  \194\183  %s  \194\183  %s%s|r", rec.kind, rec.feature,
+      STATUS_COLOR[rec.status] or "", rec.status) }, items = items }
+  end,
+  actions = function(row)
+    if not row then return {} end
+    local rec = row.rec
+    local acts = {}
+    if rec.runnable then
+      acts[#acts + 1] = { text = "Run", tip = "Run this probe now, with the context (zone, instance, combat).",
+        func = function() ns.RunProbeRecord(rec); if probesBrowser then probesBrowser:Refresh() end end }
+    end
+    acts[#acts + 1] = { text = "Copy", tip = "This probe as text, to paste to Claude.",
+      func = function() B.ShowCopyBox(rec.name, ns.ProbeText(rec)) end }
+    acts[#acts + 1] = { text = "Clear history", tip = "Forget what this probe kept (saved at the next /reload).",
+      func = function()
+        B.Confirm(format("Clear what the probe %s kept?", rec.name), function()
+          ns.ClearProbe(rec)
+          if probesBrowser then probesBrowser:Refresh() end
+        end)
+      end }
+    return acts
+  end,
+  header = {
+    { text = "Clear all", width = 80, func = function()
+      B.Confirm("Clear what every probe kept? The samplers start again from nothing.", function()
+        ns.ClearProbes()
+        if probesBrowser then probesBrowser:Refresh() end
+      end)
+    end },
+    { text = "Copy all", width = 80, func = function() B.ShowCopyBox("Probes", ns.ProbesText()) end },
+    { text = "Run all", width = 80, func = function() ns.RunProbes(); if probesBrowser then probesBrowser:Refresh() end end },
+  },
+  footer = function()
+    local p = HardCountersDiagDB.probes
+    local lr = p and p.lastRun
+    return lr and format("last run %s: %d ok, %d not ok", ns.clock(lr.t), lr.ok, lr.other) or "function probes not run yet"
+  end,
+  empty = function() return "No probe matches (see Filters)." end,
+  noSelection = "Click a probe for what it kept. Run all checks every function probe now.",
+}
+
 local function refresh()
   if not (win and win:IsShown()) then return end
+  -- (HC-70) the Probes view is the browser; the others are text
+  local browse = current == "Probes" and win.probes ~= nil
+  if win.probes then win.probes:SetShown(browse) end
+  win.scroll:SetShown(not browse)
+  if browse then
+    for name, b in pairs(win.tabs) do b:SetEnabled(name ~= current) end
+    win.levelBtn:SetText("Level: " .. LEVEL_NAMES[ns.minLevel])
+    probesBrowser:Refresh()
+    return
+  end
   local ok, text = pcall(textFor, current)
   if not ok then text = "error building " .. current .. ": " .. tostring(text) end
   win.text = text
@@ -135,7 +263,9 @@ local function build(f)
   end
   bottom("Refresh", 70, refresh)
   bottom("Snapshot", 80, function() ns.Snapshot(current, textFor(current)); refresh() end)
-  bottom("Copy", 60, function() edit:SetFocus(); edit:HighlightText() end)
+  bottom("Copy", 60, function()
+    if current == "Probes" and f.probes then B.ShowCopyBox("Probes", ns.ProbesText()) else edit:SetFocus(); edit:HighlightText() end
+  end)
   bottom("Marker", 70, function() ns.Marker(); refresh() end)
   bottom("Run probes", 90, function() ns.RunProbes(); current = "Probes"; refresh() end)
   bottom("Report", 70, function() B.ShowCopyBox("Hard Counters report", B.BuildReport({})) end)
@@ -144,6 +274,16 @@ local function build(f)
     refresh()
   end)
   bottom("Clear log", 80, function() ns.lines.head, ns.lines.n = 0, 0; ns.lines.items = {}; refresh() end)
+
+  -- (HC-70) the Probes view: the shared browser between the view buttons and the bottom row
+  if B.NewBrowser then
+    local pf = CreateFrame("Frame", nil, f)
+    pf:SetPoint("TOPLEFT", 0, -30)
+    pf:SetPoint("BOTTOMRIGHT", 0, 36)
+    pf:Hide()
+    probesBrowser = B.NewBrowser(pf, probeSpec)
+    if probesBrowser then f.probes = pf; ns.ProbesBrowser = probesBrowser end
+  end
 end
 
 -- refresh Live once a second while the window is on screen; Log refreshes when lines arrive (throttled)

@@ -49,3 +49,10 @@ end
 D.Run = function() return ns.HC:GetRun() end
 D.RunSummary = function() return ns.RunSummary() end
 D.Sources = function() return ns.SourceStats and ns.SourceStats() or {} end
+
+-- (HC-70) the shared browser widget and a confirm popup, for the Diagnostics tab's probes browser (UI files load after
+-- this one: looked up at the call)
+D.NewBrowser = function(parent, spec) return ns.Browser and ns.Browser.New(parent, spec) or nil end
+D.Confirm = function(text, fn)
+  if ns.Boards and ns.Boards.Confirm then ns.Boards.Confirm(text, fn) else fn() end
+end
