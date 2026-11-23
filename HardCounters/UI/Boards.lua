@@ -869,6 +869,97 @@ local function applyGeometry(f)
   f:SetWidth(b.width or M.WIDTH)
 end
 
+---------------------------------------------------------------------------
+-- Finding a board (HC-68, the Boards tab): Show now, a row's hover, Reset position, the status in words. Boards
+-- are clamped to the screen, so a board goes missing by its rules, mouse-over fade, a tiny scale, Blizzard frames
+-- on top or a UI scale change; these cover those.
+---------------------------------------------------------------------------
+
+local peekUntil = {}        -- board id -> time: Show now shows it, whatever its rules, until then
+local hovered = {}          -- board id -> true: its row is hovered in the Boards tab
+Boards.SHOW_NOW = 20        -- seconds
+
+local function peeking(id)
+  if hovered[id] then return true end
+  local t = peekUntil[id]
+  if t and t > ns.wow.time() then return true end
+  peekUntil[id] = nil
+  return false
+end
+
+--- Show a board for a while whatever its rules (Show now): SHOW_NOW seconds, then its rules again.
+function Boards.ShowNow(id, seconds)
+  seconds = seconds or Boards.SHOW_NOW
+  peekUntil[id] = ns.wow.time() + seconds
+  Boards.Refresh(id, true)
+  Boards.Flash(id)
+  C_Timer.After(seconds + 0.1, function() Boards.Refresh(id) end)
+end
+
+--- A board's row is hovered in the Boards tab: the board shows (whatever its rules), raised above the Hard Counters
+--- window (HIGH) and flashing, until the pointer leaves (on = false): then back to LOW and its rules.
+function Boards.Highlight(id, on)
+  hovered[id] = on and true or nil
+  Boards.Refresh(id)
+  local f = frames[id]
+  if not f then return end
+  f:SetFrameStrata(on and "HIGH" or Boards.STRATA)
+  if not f.hoverFlash then
+    f.hoverFlash = f:CreateTexture(nil, "OVERLAY")
+    f.hoverFlash:SetAllPoints()
+    f.hoverFlash:SetColorTexture(1, 0.82, 0, 0.25)
+  end
+  f.hoverFlash:SetShown(on and true or false)
+end
+
+--- One flash over the whole board (a new board, Show now, Reset position).
+function Boards.Flash(id)
+  local f = frames[id]
+  if not (f and f:IsShown()) then return end
+  if not f.wholeFlash then
+    f.wholeFlash = f:CreateTexture(nil, "OVERLAY")
+    f.wholeFlash:SetAllPoints()
+    f.wholeFlash:SetColorTexture(1, 0.82, 0, 0.35)
+  end
+  f.wholeFlash:Show()
+  C_Timer.After(0.8, function() f.wholeFlash:Hide() end)
+end
+
+--- Back to the centre of the screen at scale 1 (Reset position).
+function Boards.ResetPosition(board)
+  board.pos, board.scale = { "CENTER", 0, 0, "CENTER" }, 1
+  local f = frames[board.id]
+  if f then f.placed = nil end
+  Boards.Refresh(board.id, true)
+  Boards.Flash(board.id)
+end
+
+local REASON = { off = "Off", runOnly = "Hidden: only during runs", instance = "Hidden: in instances",
+  combat = "Hidden: in combat" }
+
+--- The board's status in words for the Boards tab: "Shown", "Off", "Hidden: in combat" (naming the rule),
+--- "Off screen?" (shown but outside the screen), "Faded" (mouse-over fade), "Tiny?" (a scale under 0.5).
+function Boards.Status(board)
+  local f = frames[board.id]
+  local st = { combat = state.combat, instance = state.instance, runOpen = HC:GetRun() ~= nil, mouseOver = true,
+    editing = isEditing(board) }
+  local shown, _, why = M.Visibility(board, st)
+  if not shown then return L[REASON[why] or "Hidden"], why end
+  if (board.scale or 1) < 0.5 then return L["Tiny?"], "tiny" end
+  if f and f:IsShown() then
+    local l, r, t, b = f:GetLeft(), f:GetRight(), f:GetTop(), f:GetBottom()
+    local W, H = UIParent:GetWidth(), UIParent:GetHeight()
+    local s = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if type(l) == "number" and type(r) == "number" and type(t) == "number" and type(b) == "number"
+        and type(W) == "number" and type(H) == "number" and type(s) == "number"
+        and (r * s < 1 or l * s > W - 1 or t * s < 1 or b * s > H - 1) then
+      return L["Off screen?"], "offscreen"
+    end
+  end
+  if (board.show or {}).mouseoverFade then return L["Shown (faded)"], "faded" end
+  return L["Shown"], "shown"
+end
+
 --- Redraw one board: visibility, mode, values. rebuild = true re-lays its rows (tiles or width changed).
 function Boards.Refresh(id, rebuild)
   local board = M.Get(id)
@@ -881,6 +972,7 @@ function Boards.Refresh(id, rebuild)
   f = ensureFrame(board)
   local editingThis = isEditing(board)
   state.editing = editingThis
+  state.peek = peeking(id)                      -- (HC-68) Show now, or its row hovered in the Boards tab
   state.runOpen = HC:GetRun() ~= nil            -- "only while a run is open": a dungeon run, or /hc run start
   state.mouseOver = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
   local shown, alpha = M.Visibility(board, state)
@@ -1263,9 +1355,9 @@ function Boards.AddMenu(anchor, board)
       Boards.Refresh(board.id, true)
     end)
   end }
-  -- HC-42 b: "New board" lives here now (and on the launcher's right-click and in Options), not on a toolbar
-  items[#items + 1] = { text = L["New board"], sub = Boards.NewBoardItems(),
-    tip = L["Another board: from a preset, or empty to fill yourself"] }
+  -- HC-42 b, HC-68: "New board..." opens the New board dialog, as every way to make a board does
+  items[#items + 1] = { text = L["New board..."], func = function() Boards.OpenNewBoard() end,
+    tip = L["Another board: from a preset, a copy of one, or empty to fill yourself"] }
   ns.Menu.Show(anchor, items)
 end
 
@@ -1535,6 +1627,19 @@ function Boards.ScopeItems(board)
   return items
 end
 
+--- Rename a board under the naming rules (HC-68: required, at most 24 letters, unique): says why when it can't.
+function Boards.Rename(board, name)
+  local ok, why = M.Rename(board, name or "")
+  if not ok then
+    if why == "taken" then ns.Print(L["Another board is called %s: pick another name."], name)
+    elseif why == "long" then ns.Print(L["A board name has at most 24 letters."]) end
+    return false
+  end
+  Boards.Refresh(board.id, true)
+  if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
+  return true
+end
+
 function Boards.BoardMenu(anchor, board)
   local items = { { text = board.name, title = true } }
   for _, item in ipairs(Boards.AllItems(board)) do items[#items + 1] = item end
@@ -1546,7 +1651,7 @@ function Boards.BoardMenu(anchor, board)
     end },
     { text = L["Visibility"], sub = showItems(board) },
     { text = L["Rename"], func = function()
-      askText(L["Board name"], board.name, function(s) if s ~= "" then board.name = s:sub(1, 32); Boards.Refresh(board.id, true) end end)
+      askText(L["Board name"], board.name, function(s) Boards.Rename(board, s) end)
     end },
     { text = L["Hide this board"], func = function() board.shown = false; Boards.Refresh(board.id) end },
     { text = L["Delete this board"], func = function()
@@ -1588,9 +1693,27 @@ end
 
 function Boards.NewBoardMenu(anchor) ns.Menu.Show(anchor, Boards.NewBoardItems()) end
 
---- The launcher's right-click (minimap button, AddOns menu, a bar's feed; HC-42 b): new board, edit, options.
+--- The New board dialog (HC-68): every way to make a board opens it. opts as BoardDialog.Open.
+function Boards.OpenNewBoard(opts)
+  if ns.BoardDialog then return ns.BoardDialog.Open(opts) end
+  return Boards.NewBoard(opts and opts.preset)
+end
+
+--- A board the dialog just made: on screen at once with one flash; an empty one opens in edit mode.
+function Boards.Created(b, empty)
+  if empty then editIds[b.id] = true; Boards.SyncEscape() end
+  Boards.RefreshAll(true)
+  Boards.Flash(b.id)
+  if ns.Print then ns.Print(L["Board %s made: /hc board %s shows or hides it."], b.name, b.name:lower()) end
+  if ns.RefreshOverview then ns.RefreshOverview() end
+  if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
+end
+
+--- The launcher's right-click (minimap button, AddOns menu, a bar's feed; HC-42 b, HC-68 lined up with the Boards
+--- tab, DESIGN §17.6): New board..., Open Boards tab, edit, options.
 function Boards.LauncherItems()
-  local items = { { text = L["New board"], sub = Boards.NewBoardItems() } }
+  local items = { { text = L["New board..."], func = function() Boards.OpenNewBoard() end },
+    { text = L["Open Boards tab"], func = function() if ns.ShowBoardsTab then ns.ShowBoardsTab(true) end end } }
   if anyEditing() then
     items[#items + 1] = { text = L["Stop editing boards"], func = function() Boards.SetEditing(false) end }
   else
@@ -1645,11 +1768,23 @@ ns.AddSlash("board", function(rest)
     for i, b in ipairs(list) do
       ns.Print("%d. %s%s%s", i, b.name, b.shown and "" or (" (" .. L["hidden"] .. ")"), b.mini and (" (" .. L["mini"] .. ")") or "")
     end
-    ns.Print(L["/hc board <n> | new run|pocket|leveling | mini <n> | reset"])
+    ns.Print(L["/hc board <name or n> | new [name or run|pocket|leveling] | mini <n> | reset"])
   elseif cmd == "new" then
+    -- (HC-68) no name: the dialog; a preset's key: that preset; a name: an empty board of that name (unique)
+    if arg == "" then Boards.OpenNewBoard(); return end
     local key = M.PRESETS[arg] and arg or nil
-    M.Create(key, { name = (not key and arg ~= "") and arg or nil })
-    Boards.RefreshAll()
+    if not key then
+      local ok, why = M.CheckName(arg)
+      if not ok then
+        ns.Print(why == "taken" and L["Another board is called %s: pick another name."] or L["A board name has at most 24 letters."], arg)
+        return
+      end
+    end
+    local b = M.Create(key, { name = (not key) and arg or nil })
+    if not key then editIds[b.id] = true; Boards.SyncEscape() end
+    Boards.RefreshAll(true)
+    Boards.Flash(b.id)
+    ns.Print(L["Board %s made: /hc board %s shows or hides it."], b.name, b.name:lower())
   elseif cmd == "mini" then
     local b = findBoard(arg ~= "" and arg or "1")
     if b then b.mini = not b.mini; Boards.Refresh(b.id, true) end
@@ -1746,23 +1881,14 @@ ns.AddOptions("boards", function()
     intro = { type = "description", order = 0, fontSize = "medium",
       name = L["Boards are your on-screen numbers. Hover a board and click Edit above it to change it; /hc edit edits every board."] },
     edit = { type = "execute", order = 1, name = L["Edit every board"], func = function() Boards.SetEditing(true) end },
-    -- HC-42 b: "New board" moved here from the old edit toolbar
-    new = { type = "select", order = 2, name = L["New board"],
-      desc = L["Another board: from a preset, or empty to fill yourself"],
-      values = function()
-        local v = { [""] = L["Empty board"] }
-        for _, key in ipairs(M.PRESET_ORDER) do v[key] = M.PRESETS[key].name end
-        return v
-      end,
-      get = function() return nil end,
-      set = function(_, key) Boards.NewBoard(key ~= "" and key or nil) end },
+    -- HC-68 (DESIGN §17.6): New board opens the dialog; each board's show and mini switches moved to the Boards tab
+    new = { type = "execute", order = 2, name = L["New board..."],
+      desc = L["Another board: from a preset, a copy of one, or empty to fill yourself"],
+      func = function() Boards.OpenNewBoard() end },
+    tab = { type = "execute", order = 3, name = L["Open Boards tab"],
+      desc = L["Every board: show or hide, show now, reset its position, duplicate, presets."],
+      func = function() if ns.ShowBoardsTab then ns.ShowBoardsTab(true) end end },
   }
-  for i, b in ipairs(M.Store().list) do
-    args["shown" .. i] = { type = "toggle", order = 10 + i * 2, name = format(L["Show %s"], b.name),
-      get = function() return b.shown end, set = function(_, v) b.shown = v; Boards.Refresh(b.id, true) end }
-    args["mini" .. i] = { type = "toggle", order = 11 + i * 2, name = L["mini mode"],
-      get = function() return b.mini end, set = function(_, v) b.mini = v; Boards.Refresh(b.id, true) end }
-  end
   return { type = "group", name = L["Boards"], inline = true, args = args }
 end)
 

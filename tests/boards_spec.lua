@@ -122,7 +122,7 @@ describe("boards", function()
     b.show.combat = "fade"
     assert.same({ true, 0.35 }, { M.Visibility(b, { combat = true }) })
     b.show.combat = "hide"
-    assert.same({ false, 1 }, { M.Visibility(b, { combat = true }) })
+    assert.same({ false, 1, "combat" }, { M.Visibility(b, { combat = true }) })   -- (HC-68: and why)
     assert.same({ true, 1 }, { M.Visibility(b, { combat = true, editing = true }) })
     b.show.instance = "hide"
     assert.is_false((M.Visibility(b, { instance = true })))
@@ -750,5 +750,93 @@ describe("the tile collection", function()
     local a, b = M.Create("pocket"), M.Create("pocket")
     assert.are_not.equal(a.tiles[1].extras, b.tiles[1].extras)
     assert.are_not.equal(a.tiles[1].ref, b.tiles[1].ref)
+  end)
+end)
+
+-- HC-68 (DESIGN §17.4): names, Duplicate, presets of the player's own, and why a board is hidden
+describe("boards: names, copies and your presets", function()
+  it("keeps board names unique ignoring case, at most 24 letters, and suggests '<name> 2'", function()
+    local env = boot()
+    local M = env.M
+    local a = M.Create("pocket")
+    assert.are.equal("Pocket", a.name)
+    local b = M.Create("pocket")
+    assert.are.equal("Pocket 2", b.name)                           -- a preset's name, made free
+    assert.is_true(M.NameTaken("  pocket "))
+    assert.is_false(M.NameTaken("pocket", a) and M.NameTaken("Pocket 2", b))
+    assert.are.equal("POCKET 3", M.FreeName("POCKET"))                 -- (the case typed)
+    assert.are.same({ false, "empty" }, { M.CheckName("   ") })
+    assert.are.same({ false, "long" }, { M.CheckName(string.rep("x", 25)) })
+    assert.are.same({ false, "taken" }, { M.CheckName("pocket 2") })
+    assert.is_true(M.CheckName("Pocket", a))                       -- its own name is fine
+    assert.are.same({ false, "taken" }, { M.Rename(b, "POCKET") })
+    assert.are.equal("Pocket 2", b.name)
+    assert.is_true(M.Rename(b, "  Farm  "))
+    assert.are.equal("Farm", b.name)
+    assert.are.equal(24, #M.FreeName(string.rep("y", 24)))
+  end)
+
+  it("duplicates a board with tiles of its own, and saves one as a preset to make boards from", function()
+    local env = boot()
+    local M = env.M
+    local a = M.Create("leveling")
+    a.mini, a.scope = true, "session"
+    a.show.combat = "hide"
+    M.AddTile(a, "label", { text = "Gold" })
+    local copy = M.Duplicate(a)
+    assert.are.equal("Leveling 2", copy.name)
+    assert.are.equal(#a.tiles, #copy.tiles)
+    assert.is_true(copy.mini)
+    assert.are.equal("session", copy.scope)
+    assert.are.equal("hide", copy.show.combat)
+    assert.are_not.equal(a.show, copy.show)
+    for i, t in ipairs(copy.tiles) do
+      local o = a.tiles[i]
+      if t.kind == "reading" then
+        assert.are_not.equal(o.ref, t.ref)                         -- its own tile, not shared
+        assert.are.same({ o.reading, o.scope, o.calc, rawget(o, "size") }, { t.reading, t.scope, t.calc, rawget(t, "size") })
+        assert.are.equal("Leveling 2", M.TileOf(t).section)
+      else
+        assert.are.same(o, t)
+        assert.are_not.equal(o, t)
+      end
+    end
+    copy.tiles[1].calc = "total"
+    assert.are_not.equal("total", a.tiles[1].calc)                 -- editing the copy leaves the first alone
+    -- save as preset, make a board from it, rename and delete the preset
+    local key = M.SaveAsPreset(a, "My leveling")
+    local p = M.Preset(key)
+    assert.are.equal("My leveling", p.name)
+    assert.is_nil(p.tiles[1].id)
+    assert.is_nil(p.tiles[1].section)
+    assert.are.equal("large", p.tiles[1].size)                     -- the placement's size travels with it
+    local groups = M.PresetGroups()
+    assert.are.equal("Hard Counters", groups[1].title)
+    assert.are.equal("Your presets", groups[#groups].title)
+    assert.are.same({ key }, groups[#groups].keys)
+    local made = M.Create(key)
+    assert.are.equal("My leveling", made.name)
+    assert.are.equal(#a.tiles, #made.tiles)
+    assert.is_true(made.mini)
+    assert.are.equal("session", made.scope)
+    assert.are.equal("large", rawget(made.tiles[1], "size"))
+    assert.is_true(M.RenamePreset(key, "Lvl"))
+    assert.are.equal("Lvl", M.Preset(key).name)
+    assert.is_true(M.DeletePreset(key))
+    assert.is_nil(M.Preset(key))
+    assert.are.equal(1, #M.PresetGroups())                         -- no "Your presets" left
+  end)
+
+  it("says why a board is hidden, and shows any board while peeked at (Show now, a hovered row)", function()
+    local env = boot()
+    local M = env.M
+    local b = M.Create("pocket")
+    b.show.runOnly = true
+    assert.are.same({ false, 1, "runOnly" }, { M.Visibility(b, {}) })
+    b.show.runOnly, b.show.instance = false, "hide"
+    assert.are.same({ false, 1, "instance" }, { M.Visibility(b, { instance = true }) })
+    b.shown = false
+    assert.are.same({ false, 1, "off" }, { M.Visibility(b, {}) })
+    assert.are.same({ true, 1 }, { M.Visibility(b, { peek = true }) })
   end)
 end)

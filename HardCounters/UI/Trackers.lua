@@ -480,8 +480,7 @@ local function build(f)
     },
     nodes = nodes, rows = rows, filters = filterItems, filtersActive = filtersActive,
     detail = detail, actions = actions, footer = footer,
-    header = { { text = L["Edit boards"], width = 100, tip = L["Move, size and arrange your boards on screen."],
-      func = function() if ns.Boards then ns.Boards.SetEditing(true) end end } },
+    -- (HC-68: "Edit boards" moved to the Boards tab, as Edit all; the playtest's note #4)
     empty = function(_, search)
       return search ~= "" and L["No tracker matches the search."] or L["No trackers here (see Filters)."]
     end,

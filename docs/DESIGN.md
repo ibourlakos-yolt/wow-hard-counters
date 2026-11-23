@@ -435,7 +435,9 @@ dropdown templates differ between clients).
     an invisible frame in `UISpecialFrames` (`HardCountersBoardEdit`), shown while any board is edited. "New board"
     is in the `+` menu, on the launcher's right-click (now a small menu at the cursor: New board ▸, Edit every
     board / Stop editing boards, Options; it opened Options alone before) and in Options ▸ Boards (a dropdown). An
-    empty new board opens for editing; a preset board doesn't. The "Trackers" button went with the toolbar.
+    empty new board opens for editing; a preset board doesn't. The "Trackers" button went with the toolbar. **Since
+    HC-68 (§17.10)** each of those opens the New board dialog, and the launcher's menu reads New board..., Open Boards
+    tab, Edit every board, Options.
   - *Blizzard's Edit Mode (c), built 2026-11-20 (the user's go after the probe):* mirroring only. `EventRegistry`'s
     `EditMode.Enter` puts every board in edit mode (`Boards.SetEditing(true, true)`: without opening the Trackers
     window, Edit Mode has its own panels up); `EditMode.Exit` ends edit mode on every board, also one edited on its
@@ -1410,7 +1412,7 @@ tile's `display`, each a full-width row of its own, offered in the Display menu 
 - Specs: `tests/odomix_spec.lua` (digits, where each fits, the parts and "other", the wheels set and rolled on
   screen, the shares written, the Display menu).
 
-## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65, HC-69, HC-66, HC-67 built)
+## 17. The main window, rebuilt in the spirit of the Auction House (agreed 2026-11-23; HC-65 to HC-69 built)
 
 The user, 2026-11-23, after three mockups: the Hard Counters window is the one-stop panel, modelled on the Auction
 House (and Auctioneer): predictable tabs, clear categories, quick clicks, and deep search and filtering still there
@@ -1648,3 +1650,52 @@ opens the Trackers tab in a mode (`ns.TrackersForOverview`, until that tab close
 Window-only tile in "My tiles"; the Trackers tab's board menu also has "Overview only (no board)". On a board, the
 tile menu's Remove is now **Remove from board** (the tile stays in Overview), and Delete this board says its tiles
 stay in the Overview tab.
+
+### 17.10 As built (HC-68, 2026-11-23): the Boards tab, the New board dialog, the launcher lined up
+
+**Names** (`UI/BoardModel.lua`): `M.CheckName` (required, at most `M.NAME_MAX` = 24, unique ignoring case and
+surrounding spaces), `M.FreeName` ("<name> 2", ...: keeps the case typed, cut to fit), `M.Rename`. `M.Create`
+makes every name free, so a second board from a preset is "Pocket 2". Boards saved before with the same name keep
+it until renamed (nothing renamed silently). The board's own menu (Rename) and the Boards tab go through
+`Boards.Rename`, which says why it refused.
+
+**Duplicate and your presets** (HC-22's player presets): `M.Duplicate(board, name)` copies the look, rules and
+scope with **tiles of its own** (new collection tiles, a fresh timer, at the centre). `M.SaveAsPreset(board, name)`
+keeps every tile's settings with its placement's size (no ids, no sections) plus mini, scope and rules in
+`boards.presets` (keys `user:<n>`); `M.Preset(key)` finds any preset, `M.Create` makes boards from yours too,
+`M.RenamePreset`, `M.DeletePreset` (boards made from it stay). `M.PresetGroups()`: Hard Counters', each pack's
+under its title, then "Your presets". `M.Create` takes a preset's `show` (rules) and scope when it has them.
+
+**Why a board is hidden**: `M.Visibility` returns a third value, "off", "runOnly", "instance" or "combat";
+`state.peek` shows any board at full alpha. `Boards.Status(board)`: Shown, Shown (faded), Off, Hidden: only during
+runs / in instances / in combat, Tiny? (scale under 0.5), Off screen? (shown but its rect outside the screen: rare,
+boards are clamped). **Show now** (`Boards.ShowNow`, 20 s) and a **hovered row** (`Boards.Highlight`: the board
+shows, strata HIGH, a gold overlay, back to LOW when the pointer leaves or the tab hides) peek. **Reset position**
+puts the board at the centre, scale 1, with one flash (`Boards.Flash`).
+
+**The New board dialog** (`UI/BoardDialog.lua`, `ns.BoardDialog.Open{ preset | copy | empty }`): a
+`ButtonFrameTemplate` panel in DIALOG strata, 380 × 250, movable, Escape cancels (`UISpecialFrames`), Enter in the
+name creates. Name (max 24 letters; under it "/hc board <name> will show or hide it", or why not in red, with a
+free name suggested; Create greys out), Start from (a button opening the groups: presets, then Empty board and
+Copy of a board ▸ boards; picking one renames the board after it until the player typed a name), Show it (in
+combat, in instances, only while a run is open: the board's `show` flags; a fade in combat from a preset is kept).
+Create puts it at the centre, flashes it, prints its command; an empty board opens in edit mode. Opened by the
+Boards tab (New board..., Duplicate, a preset's New board from it...), a board's [+] menu (New board...), the
+launcher (New board...), Options ▸ Boards (New board...) and `/hc board new` without a name. `/hc board new <name>`
+makes an empty board of that name directly (in edit mode; a taken or too long name is refused), and
+`/hc board new <preset key>` still makes that preset.
+
+**The Boards tab** (`UI/BoardsTab.lua`, tab order 2, icon `INV_Misc_Map_01`, `/hc boards`), on the browser (which
+gained `hover(row, on)`, `rowMenu(row, anchor)` and `headerBtns`): tree "Your boards" (count), "Presets", then each
+group. Columns Name, Status (coloured: green shown, grey off, yellow hidden by a rule, red off screen, orange
+tiny), Tiles, Mini. Header: New board..., Show all, Hide all, Edit all (every board in edit mode without switching
+to Trackers; "Stop editing" while on). A board's actions: Show/Hide, Show now, Edit on screen / Stop editing,
+Reset position, Duplicate (the dialog, a copy), Save as preset (asks a name), Delete (its tiles stay in Overview).
+Right-click adds Mini mode and Rename. Detail: its command, its rules in words, Mini (Full / Mini button), Name
+(Rename...), its tiles by label. A preset: its tiles (grey: a pack not installed), New board from it...; yours
+also Rename..., Delete. The tab refreshes once a second while shown (statuses follow combat and instances).
+
+**Lined up (§17.6):** the launcher's right-click reads New board..., Open Boards tab, Edit every board / Stop
+editing boards, Options. Options ▸ Boards keeps Edit every board and gains New board... and Open Boards tab; its
+per-board Show and mini switches are gone (the Boards tab has them). The Trackers tab's "Edit boards" is gone (the
+Boards tab's Edit all; the playtest's note #4).

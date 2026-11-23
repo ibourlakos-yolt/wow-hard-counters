@@ -684,12 +684,150 @@ function HC:RegisterBoardPreset(key, def)
   return key
 end
 
---- A new board from a preset (or empty), added to the list. Returns it.
+---------------------------------------------------------------------------
+-- Names (HC-68, DESIGN §17.4): a board's name is required, at most 24 letters, and unique ignoring case, so
+-- `/hc board <name>` is never ambiguous. A taken name suggests "<name> 2".
+---------------------------------------------------------------------------
+
+M.NAME_MAX = 24
+
+--- Is the name used by a board other than `except`? (ignoring case and surrounding spaces)
+function M.NameTaken(name, except)
+  local n = (name or ""):match("^%s*(.-)%s*$"):lower()
+  for _, b in ipairs(M.Store().list) do
+    if b ~= except and (b.name or ""):lower() == n then return true end
+  end
+  return false
+end
+
+--- The name itself when free, else "<name> 2", "<name> 3", ... (cut so it stays within M.NAME_MAX).
+function M.FreeName(base, except)
+  base = ((base or ""):match("^%s*(.-)%s*$") or ""):sub(1, M.NAME_MAX)
+  if base == "" then base = "Board" end
+  if not M.NameTaken(base, except) then return base end
+  for i = 2, 999 do
+    local suffix = " " .. i
+    local n = base:sub(1, M.NAME_MAX - #suffix) .. suffix
+    if not M.NameTaken(n, except) then return n end
+  end
+  return base
+end
+
+--- Can a board (`board`, or a new one) take this name? true, or false and why: "empty", "long", "taken".
+function M.CheckName(name, board)
+  local n = (name or ""):match("^%s*(.-)%s*$")
+  if n == "" then return false, "empty" end
+  if #n > M.NAME_MAX then return false, "long" end
+  if M.NameTaken(n, board) then return false, "taken" end
+  return true
+end
+
+--- Rename a board under the same rules. Returns true, or false and why.
+function M.Rename(board, name)
+  local ok, why = M.CheckName(name, board)
+  if not ok then return false, why end
+  board.name = name:match("^%s*(.-)%s*$")
+  return true
+end
+
+---------------------------------------------------------------------------
+-- Presets of the player's own (HC-22, HC-68): a board saved as a preset, the same data a board's tiles are, kept in
+-- settings.boards.presets = { list = { { key = "user:3", name, mini, scope, show, tiles } }, next = n }.
+---------------------------------------------------------------------------
+
+local function userPresets()
+  local B = M.Store()
+  if type(B.presets) ~= "table" then B.presets = { list = {}, next = 1 } end
+  if type(B.presets.list) ~= "table" then B.presets.list = {} end
+  return B.presets
+end
+
+--- The player's presets, in order (their entries: change them through the calls below).
+function M.UserPresets() return userPresets().list end
+
+local function userPreset(key)
+  for _, p in ipairs(userPresets().list) do if p.key == key then return p end end
+  return nil
+end
+M.UserPreset = userPreset
+
+--- A preset by key: Hard Counters' or a pack's (M.PRESETS), or one of the player's.
+function M.Preset(key)
+  if type(key) ~= "string" then return nil end
+  return M.PRESETS[key] or userPreset(key)
+end
+
+--- A board's tiles as preset data: every field of its tiles (copies), the placements' sizes, no ids or sections.
+local function tileSpecs(board)
+  local out = {}
+  for _, t in ipairs(board.tiles) do
+    local raw = M.TileOf(t)
+    local c = U.deepcopy(raw)
+    c.id, c.section, c.lastSize = nil, nil, nil
+    if getmetatable(t) == PLACEMENT then c.size = rawget(t, "size") end
+    out[#out + 1] = c
+  end
+  return out
+end
+
+--- Save a board as a preset of the player's. Returns its key.
+function M.SaveAsPreset(board, name)
+  local P = userPresets()
+  local key = "user:" .. P.next
+  P.next = P.next + 1
+  P.list[#P.list + 1] = { key = key, name = ((name ~= nil and name ~= "") and name or board.name):sub(1, 32),
+    mini = board.mini and true or false, scope = board.scope, show = U.copy(board.show or defaultShow()),
+    tiles = tileSpecs(board) }
+  return key
+end
+
+function M.RenamePreset(key, name)
+  local p = userPreset(key)
+  if not p or type(name) ~= "string" or name == "" then return false end
+  p.name = name:sub(1, 32)
+  return true
+end
+
+function M.DeletePreset(key)
+  local list = userPresets().list
+  for i, p in ipairs(list) do if p.key == key then table.remove(list, i); return true end end
+  return false
+end
+
+--- The presets in groups for the Boards tab and the New board dialog: Hard Counters' own, each pack's (by its
+--- title), then "Your presets". { { title, keys = { key, ... } } }; empty groups left out.
+function M.PresetGroups()
+  local groups, byTitle = {}, {}
+  local function group(title)
+    if not byTitle[title] then byTitle[title] = { title = title, keys = {} }; groups[#groups + 1] = byTitle[title] end
+    return byTitle[title]
+  end
+  for _, key in ipairs(M.PRESET_ORDER) do
+    local p = M.PRESETS[key]
+    local title = "Hard Counters"
+    if p.pack then
+      title = p.pack
+      for _, pk in pairs(ns.packs or {}) do if pk.namespace == p.pack then title = pk.title or pk.name end end
+    end
+    local g = group(title)
+    g.keys[#g.keys + 1] = key
+  end
+  local mine = userPresets().list
+  if #mine > 0 then
+    local g = group("Your presets")
+    for _, p in ipairs(mine) do g.keys[#g.keys + 1] = p.key end
+  end
+  return groups
+end
+
+--- A new board from a preset (Hard Counters', a pack's or the player's) or empty, added to the list. Its name is
+--- opts.name or the preset's, made free ("Pocket 2"). Returns it.
 function M.Create(presetKey, opts)
-  local p = presetKey and M.PRESETS[presetKey]
+  local p = M.Preset(presetKey)
   opts = opts or {}
-  local b = { id = newId(), name = opts.name or (p and p.name) or "Board", preset = presetKey, shown = true,
-    mini = p and p.mini or false, width = M.WIDTH, scale = 1, show = defaultShow(), tiles = {} }
+  local b = { id = newId(), name = M.FreeName(opts.name or (p and p.name) or "Board"), preset = presetKey, shown = true,
+    mini = p and p.mini or false, width = M.WIDTH, scale = 1, show = p and p.show and U.copy(p.show) or defaultShow(),
+    scope = p and p.scope or nil, tiles = {} }
   local B = M.Store()
   if p then
     for _, t in ipairs(p.tiles) do
@@ -742,6 +880,21 @@ function M.Delete(id, withTiles)
     end
   end
   return false
+end
+
+--- A copy of a board (HC-68: Duplicate, and the New board dialog's "Copy of a board"): its look, rules and scope,
+--- and tiles of its own (new collection tiles, never shared: copies that edit together were rejected), a fresh
+--- timer, placed at the centre. Returns it.
+function M.Duplicate(board, name)
+  local B = M.Store()
+  local b = { id = newId(), name = M.FreeName(name or board.name), shown = true, mini = board.mini and true or false,
+    width = board.width or M.WIDTH, scale = 1, show = U.copy(board.show or defaultShow()), scope = board.scope, tiles = {} }
+  for _, s in ipairs(tileSpecs(board)) do
+    if s.kind == "reading" then b.tiles[#b.tiles + 1] = adopt(B, s, b.name) else b.tiles[#b.tiles + 1] = s end
+  end
+  knowSection(B, b.name)
+  B.list[#B.list + 1] = b
+  return b
 end
 
 ---------------------------------------------------------------------------
@@ -1250,15 +1403,19 @@ end
 ---------------------------------------------------------------------------
 
 --- shown (bool), alpha. state = { combat, instance, runOpen, mouseOver, editing }.
+--- The third value says why a board is hidden: "off" (the player hid it), "runOnly", "instance" or "combat" (its
+--- rules; the Boards tab names them, HC-68). state.peek (Show now, or its row hovered in the Boards tab) shows a board
+--- whatever its rules, at full alpha, even one that is off.
 function M.Visibility(board, state)
-  if not board.shown then return false, 1 end
+  if state.peek then return true, 1 end
+  if not board.shown then return false, 1, "off" end
   if state.editing then return true, 1 end
   local show = board.show or defaultShow()
-  if show.runOnly and not state.runOpen then return false, 1 end
-  if show.instance == "hide" and state.instance then return false, 1 end
+  if show.runOnly and not state.runOpen then return false, 1, "runOnly" end
+  if show.instance == "hide" and state.instance then return false, 1, "instance" end
   local alpha = 1
   if state.combat then
-    if show.combat == "hide" then return false, 1 end
+    if show.combat == "hide" then return false, 1, "combat" end
     if show.combat == "fade" then alpha = 0.35 end
   end
   if show.mouseoverFade and not state.mouseOver then alpha = math.min(alpha, 0.3) end

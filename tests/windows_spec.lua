@@ -340,14 +340,14 @@ describe("windows", function()
         for _, t in ipairs(main.sideTabs) do if t:IsShown() then out[#out + 1] = t.hcId end end
         return out
       end
-      assert.are.same({ "Overview", "Trackers", "Runs" }, bottomTitles())   -- (Overview since HC-67)
+      assert.are.same({ "Overview", "Boards", "Trackers", "Runs" }, bottomTitles())   -- (Overview HC-67, Boards HC-68)
       local side = sideIds()
       assert.are.equal("hcdiag:console", side[#side])                -- Diagnostics always last
       if ctx.farmer then assert.truthy(table.concat(side, " "):find("hcfarm:ledger", 1, true)) end
       -- a window of ours sorts by its tabOrder; a pack's window joins the side column
-      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
+      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
-      assert.are.same({ "Overview", "Ours", "Trackers", "Runs" }, bottomTitles())
+      assert.are.same({ "Overview", "Boards", "Ours", "Trackers", "Runs" }, bottomTitles())
       side = sideIds()
       assert.are.equal("hcdiag:console", side[#side])
       assert.are.equal("t:pack", side[#side - 1])
@@ -648,7 +648,7 @@ describe("boards on screen", function()
       B.EditBoard(b.id, true)
       _G.SlashCmdList.HARDCOUNTERS("edit")
       assert.is_false(B.IsEditing())
-      -- New board: in the + menu and on the launcher's right-click (presets, then empty)
+      -- New board: the + menu and the launcher open the New board dialog (HC-68); the presets list is kept
       local items = B.NewBoardItems()
       assert.are.equal(#M.PRESET_ORDER + 1, #items)
       B.EditBoard(b.id, true)
@@ -656,8 +656,7 @@ describe("boards on screen", function()
       assert.is_true(ctx.hc.Menu.IsShown())
       ctx.hc.Menu.Hide()
       local launcher = B.LauncherItems()
-      assert.are.equal("New board", launcher[1].text)
-      assert.are.equal("Stop editing boards", launcher[2].text)
+      assert.are.same({ "New board...", "Open Boards tab", "Stop editing boards" }, { launcher[1].text, launcher[2].text, launcher[3].text })
       ctx.hc.LauncherClick("RightButton")
       assert.is_true(ctx.hc.Menu.IsShown())
       ctx.hc.Menu.Hide()
@@ -1064,6 +1063,195 @@ describe("the Overview tab", function()
       f.search:GetScript("OnTextChanged")(f.search)
       assert.truthy(f.empty:GetText():find("No tile matches", 1, true))
       ns.Menu.Show, Bo.Confirm = realShow, realConfirm
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)
+
+-- HC-68 (DESIGN §17.4, §17.6): the Boards tab, the New board dialog, the launcher and Options lined up
+describe("the Boards tab and the New board dialog", function()
+  it("lists boards with their status, finds one (hover, Show now, Reset position) and acts on it", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local BM, Bo = ns.BoardModel, ns.Boards
+      ns.ShowBoardsTab(true)
+      local f = ns.Windows.Content("boards")
+      f:SetSize(762, 568)
+      ns.RefreshBoardsTab()
+      local br = ns.BoardsBrowser
+      local pocket = BM.Store().list[1]
+      local function rowFor(pattern)
+        for _, r in ipairs(br.list.rows) do
+          if r:IsShown() and (r.cells[1]:GetText() or ""):find(pattern) then return r end
+        end
+      end
+      local function actionTexts()
+        local out = {}
+        for _, b in ipairs(br.actionBtns) do if b:IsShown() then table.insert(out, 1, b:GetText()) end end
+        return out
+      end
+      local nodes = {}
+      for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
+      assert.truthy(nodes[1]:find("^Your boards"))
+      assert.truthy(nodes[2]:find("^Presets"))
+      assert.truthy(nodes[3]:find("Hard Counters", 1, true))
+      local row = rowFor("^Pocket$")
+      assert.truthy(row)
+      assert.truthy(row.cells[2]:GetText():find("Shown", 1, true))
+      assert.are.equal("mini", row.cells[4]:GetText())
+      -- off: the status says so; hovering its row shows it anyway, raised above the window, until the pointer leaves
+      pocket.shown = false
+      Bo.Refresh(pocket.id, true)
+      ns.RefreshBoardsTab()
+      row = rowFor("^Pocket$")
+      assert.truthy(row.cells[2]:GetText():find("Off", 1, true))
+      local bf = Bo.Frame(pocket.id)
+      assert.is_false(bf:IsShown())
+      row:GetScript("OnEnter")(row)
+      assert.is_true(bf:IsShown())
+      assert.are.equal("HIGH", bf:GetFrameStrata())
+      assert.is_true(bf.hoverFlash:IsShown())
+      row:GetScript("OnLeave")(row)
+      assert.is_false(bf:IsShown())
+      assert.are.equal("LOW", bf:GetFrameStrata())
+      -- a rule names itself
+      pocket.shown, pocket.show.runOnly = true, true
+      ns.RefreshBoardsTab()
+      assert.truthy(rowFor("^Pocket$").cells[2]:GetText():find("only during runs", 1, true))
+      -- select it: its actions; Show now shows it whatever its rules, then the rules again
+      row = rowFor("^Pocket$")
+      row:GetScript("OnClick")(row, "LeftButton")
+      assert.are.same({ "Hide", "Show now", "Edit on screen", "Reset position", "Duplicate", "Save as preset", "Delete" },
+        actionTexts())
+      Bo.ShowNow(pocket.id, 5)
+      assert.is_true(bf:IsShown())
+      ctx.env:advance(6)
+      assert.is_false(bf:IsShown())
+      pocket.show.runOnly = false
+      -- Reset position: the centre, scale 1
+      pocket.pos, pocket.scale = { "TOPLEFT", 3000, -3000, "BOTTOMLEFT" }, 0.2
+      ns.RefreshBoardsTab()
+      assert.truthy(rowFor("^Pocket$").cells[2]:GetText():find("Tiny?", 1, true))
+      Bo.ResetPosition(pocket)
+      assert.are.same({ "CENTER", 0, 0, "CENTER" }, pocket.pos)
+      assert.are.equal(1, pocket.scale)
+      -- the detail: the command, its rules, Mini and Rename, its tiles
+      ns.RefreshBoardsTab()
+      assert.truthy(br.detail.text:GetText():find("/hc board pocket", 1, true))
+      local miniItem = br.detail.items[1]
+      assert.are.equal("Full", miniItem.btn:GetText())
+      miniItem.btn:GetScript("OnClick")(miniItem.btn)
+      assert.is_false(pocket.mini)
+      -- Save as preset: it appears under Presets ▸ Your presets
+      local realAsk, realConfirm = Bo.AskText, Bo.Confirm
+      Bo.AskText = function(_, _, fn) fn("Mine") end
+      Bo.Confirm = function(_, fn) fn() end
+      for _, b in ipairs(br.actionBtns) do
+        if b:IsShown() and b:GetText() == "Save as preset" then b:GetScript("OnClick")(b) end
+      end
+      assert.are.equal("Your presets", BM.PresetGroups()[#BM.PresetGroups()].title)
+      -- the header: Hide all, Show all, Edit all (no Trackers tab switch)
+      local hideAll, showAll, editAll = br.headerBtns[2], br.headerBtns[3], br.headerBtns[1]
+      hideAll:GetScript("OnClick")(hideAll)
+      for _, b in ipairs(BM.Store().list) do assert.is_false(b.shown) end
+      showAll:GetScript("OnClick")(showAll)
+      for _, b in ipairs(BM.Store().list) do assert.is_true(b.shown) end
+      editAll:GetScript("OnClick")(editAll)
+      assert.is_true(Bo.IsEditing())
+      assert.is_true(ns.Windows.IsShown("boards"))                 -- the tab stays
+      editAll:GetScript("OnClick")(editAll)
+      assert.is_false(Bo.IsEditing())
+      -- Delete: its tiles stay in Overview
+      local n = #BM.CollectionTiles()
+      row = rowFor("^Pocket$")
+      row:GetScript("OnClick")(row, "LeftButton")
+      for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Delete" then b:GetScript("OnClick")(b) end end
+      assert.is_nil(BM.Get(pocket.id))
+      assert.are.equal(n, #BM.CollectionTiles())
+      Bo.AskText, Bo.Confirm = realAsk, realConfirm
+      ns.ShowBoardsTab(false)
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+
+  it("makes boards through the dialog: unique names, a start, rules; centre and flash; empty ones open edited", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local BM, Bo, D = ns.BoardModel, ns.Boards, ns.BoardDialog
+      local f = D.Open({ preset = "pocket" })
+      assert.is_true(f:IsShown())
+      assert.are.equal("DIALOG", f:GetFrameStrata())
+      assert.are.equal("Pocket 2", f.name:GetText())               -- a fresh install has a Pocket board already
+      assert.truthy(f.note:GetText():find("/hc board pocket 2", 1, true))
+      -- a taken name: said, with a suggestion, and Create refuses
+      f.name:SetText("pocket")
+      f.name:GetScript("OnTextChanged")(f.name)
+      assert.truthy(f.note:GetText():lower():find("try pocket 2", 1, true))
+      local n = #BM.Store().list
+      assert.is_nil(D.Create())
+      assert.are.equal(n, #BM.Store().list)
+      -- the start menu: presets in groups, then Empty board and Copy of a board
+      local menu
+      local realShow = ns.Menu.Show
+      ns.Menu.Show = function(_, items) menu = items end
+      f.start:GetScript("OnClick")(f.start)
+      ns.Menu.Show = realShow
+      assert.are.equal("Hard Counters", menu[1].text)
+      local texts = {}
+      for _, it in ipairs(menu) do texts[#texts + 1] = it.text end
+      local all = table.concat(texts, "|")
+      assert.truthy(all:find("Empty board", 1, true))
+      assert.truthy(all:find("Copy of a board", 1, true))
+      -- a typed name stays when the start changes
+      f.name:SetText("Farm")
+      f.name:GetScript("OnTextChanged")(f.name)
+      for _, it in ipairs(menu) do if it.text == "  Leveling" then it.func() end end
+      assert.are.equal("Farm", f.name:GetText())
+      -- rules: not in combat
+      f.checks[1]:GetScript("OnClick")(f.checks[1])
+      local b = D.Create()
+      assert.truthy(b)
+      assert.is_false(f:IsShown())
+      assert.are.equal("Farm", b.name)
+      assert.are.equal("leveling", b.preset)
+      assert.are.equal("hide", b.show.combat)
+      assert.are.same({ "CENTER", 0, 0, "CENTER" }, b.pos)
+      assert.is_false(Bo.IsEditing(b.id))
+      -- an empty board opens in edit mode
+      D.Open({ empty = true })
+      local e = D.Create()
+      assert.are.equal("Board", e.name)
+      assert.is_true(Bo.IsEditing(e.id))
+      Bo.SetEditing(false)
+      -- a copy has tiles of its own
+      D.Open({ copy = b })
+      assert.are.equal("Farm 2", f.name:GetText())
+      local c = D.Create()
+      assert.are.equal(#b.tiles, #c.tiles)
+      assert.are_not.equal(b.tiles[1].ref, c.tiles[1].ref)
+      -- Rename keeps names unique
+      assert.is_false(Bo.Rename(c, "farm"))
+      assert.is_true(Bo.Rename(c, "Farm copy"))
+      -- /hc board new: no name opens the dialog; a name makes an empty board at once; a taken one is refused
+      f:Hide()
+      _G.SlashCmdList.HARDCOUNTERS("board new")
+      assert.is_true(f:IsShown())
+      f:Hide()
+      n = #BM.Store().list
+      _G.SlashCmdList.HARDCOUNTERS("board new Herbs")
+      assert.are.equal(n + 1, #BM.Store().list)
+      assert.are.equal("Herbs", BM.Store().list[n + 1].name)
+      _G.SlashCmdList.HARDCOUNTERS("board new herbs")
+      assert.are.equal(n + 1, #BM.Store().list)
+      Bo.SetEditing(false)
+      -- the + menu and the launcher open the dialog
+      f:Hide()
+      local items
+      ns.Menu.Show = function(_, it) items = it end
+      Bo.AddMenu(Bo.Frame(b.id), b)
+      ns.Menu.Show = realShow
+      items[#items].func()
+      assert.is_true(f:IsShown())
       assert.are.same({}, ctx.env.errors)
     end)
   end)

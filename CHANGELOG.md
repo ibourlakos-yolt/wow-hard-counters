@@ -18,6 +18,18 @@ Overview tab); the boards look and count exactly as before.
   where it is: "On HUD: Leveling" or "Window only". Click one to edit it (the same choices as on a board), put it on
   a board or move it to another, take it off the HUD, change its section or delete it. **Add tile** picks a number
   from the Trackers tab and adds it here.
+- **Boards**, the second tab: every board with its status in words (Shown; Off; Hidden, naming the rule: in
+  combat, in instances, only during runs; Off screen? or Tiny? when it may be hard to find), its tiles and mini
+  mode. **Hover a board's row and that board shows and flashes** on screen, above the window, until you move away.
+  Buttons: Show or Hide, **Show now** (for 20 seconds, whatever its rules), Edit on screen, **Reset position**
+  (back to the centre at its normal size), Duplicate, **Save as preset**, Delete; at the top New board..., Show all,
+  Hide all, Edit all. The Presets list groups Hard Counters', each pack's and **your own presets**: make a board
+  from one, rename or delete yours.
+- **The New board dialog**: every way to make a board opens it (the Boards tab, a board's +, the minimap button's
+  menu, Options, `/hc board new`). Name it (required, 24 letters at most, and **no two boards share a name**, so
+  `/hc board <name>` always finds the right one), start it from a preset, one of yours, an empty board or a copy
+  of another board (with tiles of its own), and choose when it shows. It appears at the centre of the screen with a
+  flash. `/hc board new <name>` still makes one straight away.
 
 ### Fixed
 - **The run summary card opened behind the Hard Counters window.** Clicking a run in the Runs tab opened its card
@@ -49,6 +61,9 @@ Overview tab); the boards look and count exactly as before.
   `/hc board reset` still starts from nothing.
 - **Two boards made from the same preset in one session** no longer share their tiles' extras (until a `/reload`,
   a trend badge switched on one board also showed on the other).
+- **The minimap button's right-click menu** reads New board..., Open Boards tab, Edit every board, Options.
+  Options ▸ Boards no longer lists a Show and a mini switch per board (they are in the Boards tab), and the Trackers
+  tab's "Edit boards" button moved to the Boards tab ("Edit all"). Renaming a board can't take another board's name.
 
 ### Developer notes
 - `HC:RegisterWindow` takes an `icon` (a texture path or file id): a pack's window is now an icon tab down the

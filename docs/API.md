@@ -301,7 +301,7 @@ namespaced (`"hcstats:caster"`), `def = { name, mini, tiles = { { reading, scope
 number gets `extras = { sparkline = true, vsUsual = true }` unless the tile lists its own (`{ "sparkline" }`). Bars and
 gauges are drawn as lines whatever the size. A tile's `style` of before HC-51 is still read: hero = large number with
 both extras, grid = half number, row = line number, bar = line bar, gauge = line gauge. A tile naming an alias
-(`hc:goldph`) is made on its target with the alias's calc. Offered under New board after Hard Counters' own, and as
+(`hc:goldph`) is made on its target with the alias's calc. Offered in the New board dialog and the Boards tab under your pack's title (after Hard Counters' own), and as
 `/hc board new <key>`; tiles whose reading isn't registered are left out when a board is made.
 
 **Your characters and account-wide values (FM-16).** `HC:IsOwnCharacter(name)`: true for a character of this account

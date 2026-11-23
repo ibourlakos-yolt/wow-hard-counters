@@ -17,6 +17,8 @@
 --   header     { { text, func(btn), width, tip } }: buttons at the top right (e.g. Edit boards)
 --   footer()   -> text at the bottom left
 --   empty(nodeKey, search) -> the list's text when no row matches; noSelection: the detail pane's text then
+--   hover(row, on)  -> the pointer entered (on) or left a row (the Boards tab flashes that board, HC-68)
+--   rowMenu(row, anchor) -> right-click on a row; without it the row's actions as a menu
 local ADDON, ns = ...
 
 local L, Wd = ns.L, ns.Widgets
@@ -89,10 +91,12 @@ function Browser.New(parent, spec)
     b.filterBtn:SetPoint("LEFT", s, "RIGHT", 8, 0)
   end
   local prev
+  b.headerBtns = {}
   for _, h in ipairs(spec.header or {}) do
     local hb = Wd.Button(parent, h.text, h.width or 100, function(self) h.func(self) end)
     if prev then hb:SetPoint("RIGHT", prev, "LEFT", -4, 0) else hb:SetPoint("TOPRIGHT", -8, -5) end
     tip(hb, h.tip)
+    b.headerBtns[#b.headerBtns + 1] = hb
     prev = hb
   end
 
@@ -307,6 +311,10 @@ function B:DrawList()
       end
       r.sel:SetShown(row.key == self.selected)
       r.row = row
+      if self.spec.hover then
+        r:SetScript("OnEnter", function(btn) if btn.row then self.spec.hover(btn.row, true) end end)
+        r:SetScript("OnLeave", function(btn) if btn.row then self.spec.hover(btn.row, false) end end)
+      end
       r:SetScript("OnClick", function(btn, button)
         self.selected = row.key
         self.detailOff = 0
@@ -325,6 +333,7 @@ end
 
 --- Right-click on a row: its actions as a menu (the same as the action bar).
 function B:RowMenu(row, anchor)
+  if self.spec.rowMenu then return self.spec.rowMenu(row, anchor) end
   local acts = self.spec.actions and self.spec.actions(row) or {}
   if #acts == 0 or not ns.Menu then return end
   local items = {}
