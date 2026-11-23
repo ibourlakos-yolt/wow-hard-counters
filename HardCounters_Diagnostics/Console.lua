@@ -1,6 +1,7 @@
 -- Console: the dev console window. Tabs: Log, Live, Storage, Probes. Buttons: Refresh, Snapshot, Copy, Marker,
 -- Run probes, Level. The text area is a read-only edit box, so the Copy button is just "select all".
--- /hc diag toggles it (/hcdiag is an alias); /hc diag mark drops a marker; /hc diag snap snapshots the current tab.
+-- /hc diag toggles it (/hcdiag is an alias); /hc diag mark drops a marker; /hc diag snap snapshots the current tab;
+-- /hc diag ui opens the HC-65 window probe (Probes.lua).
 local ADDON, ns = ...
 
 local B = ns.B
@@ -179,11 +180,12 @@ local function command(msg)
   if msg == "mark" then ns.Marker()
   elseif msg == "snap" then ns.Snapshot(current, textFor(current))
   elseif msg == "probes" then ns.RunProbes()
+  elseif msg == "ui" then ns.ProbeUI()                   -- HC-65: the window probe panel
   elseif hasWindows then HardCounters:ToggleWindow(WINDOW) end
 end
 
 if HardCounters.RegisterSlash then
-  HardCounters:RegisterSlash("diag", command, "diagnostics console; mark | snap | probes", "Diagnostics")
+  HardCounters:RegisterSlash("diag", command, "diagnostics console; mark | snap | probes | ui", "Diagnostics")
 end
 -- the older command, kept as an alias of /hc diag
 SLASH_HCDIAG1 = "/hcdiag"

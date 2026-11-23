@@ -130,6 +130,35 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
+  -- HC-65: /hc diag ui builds its panel and records every part; it proves the code runs, not what the game draws
+  it("opens the HC-65 window probe and records its four parts without errors", function()
+    UI.with(function(ctx)
+      local D, env = ctx.diag, ctx.env
+      _G.SlashCmdList.HCDIAG("ui")
+      for _ = 1, 4 do env:advance(1) end
+      local panel = _G.HardCountersDiagUIProbe
+      assert.is_true(panel:IsShown())
+      panel:GetScript("OnUpdate")(panel, 1)                -- the card hooks (no card yet: nothing recorded)
+      panel:GetScript("OnDragStop")(panel)
+      env:advance(1)
+      local h = _G.HardCountersDiagDB.probes.hc65
+      assert.is_true(h.a.created)
+      assert.are.equal(12, h.a.tabs)
+      assert.are.equal(4, h.b.created)
+      assert.are.equal(4, #h.b.atBuild)
+      assert.are.equal(4, #h.b.afterReshow)
+      assert.is_table(h.c.plain)
+      assert.is_table(h.c.inset)
+      assert.are.equal(1, #h.c.drags)
+      assert.are.same({}, h.d.events)
+      assert.is_nil(D.LogText():find("HC-65 probe:", 1, true))      -- no measurement failed
+      assert.truthy(D.ProbesText():find("HC-65 WINDOW PROBE", 1, true))
+      _G.SlashCmdList.HCDIAG("ui")                         -- a second time closes it
+      assert.is_false(panel:IsShown())
+      assert.are.same({}, env.errors)
+    end)
+  end)
+
   -- CS-8: UnitDefense is absent on Forever (run 3); do the skill lines list Defence and weapon skills?
   it("probes the skill lines: headers with line counts, Defence's rank types", function()
     local lines = {

@@ -61,6 +61,12 @@ purpose (they test existence): see `Probes.lua` `FUNCS`, `EVENTS`, `STRINGS`. HC
 `EventRegistry:RegisterCallback("EditMode.Enter" / "EditMode.Exit")` and `EditModeManagerFrame:HookScript("OnShow" /
 "OnHide")`, read through `_G` as well.
 
+HC-65, 2026-11-23 (`/hc diag ui`, the window probe before the main-window rebuild, DESIGN §17.7): ❓
+`LargeSideTabButtonTemplate` (on Forever a `Frame` with `SidePanelTabButtonMixin`: `SetChecked`,
+`SetFillToInterior`, `SetCustomOnMouseUpHandler`, `tooltipText`), `C_Texture.GetAtlasInfo("common-sidetab")`, an icon
+texture on `PanelTabButtonTemplate` (`selectedTextX` / `deselectedTextX`, read by `PanelTemplates_SelectTab` /
+`DeselectTab`), `SetClampRectInsets` / `GetClampRectInsets`, `IsToplevel`, `GetFrameLevel`, `GetChildren`, `GameTooltip`.
+
 Since HC-42 the launcher (`UI/Broker.lua`) also reads `CreateFrame`, `UIParent` and `GetCursorPosition`: its
 right-click menu opens at the cursor.
 

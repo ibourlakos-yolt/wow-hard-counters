@@ -1589,5 +1589,470 @@ function ns.ProbesText()
   out[#out + 1] = ""
   out[#out + 1] = "GLOBAL STRINGS"
   for _, name in ipairs(STRINGS) do out[#out + 1] = format("  %-38s %s", name, tostring(p.strings[name] or "-")) end
+  if ns.HC65Lines then ns.HC65Lines(out) end
   return table.concat(out, "\n")
+end
+
+---------------------------------------------------------------------------
+-- HC-65 (DESIGN §17.7): the window probe before the main-window rebuild. `/hc diag ui` opens a test panel the size
+-- of the Hard Counters window; nothing here runs before that. Its measurements go to HardCountersDiagDB.probes.hc65
+-- (read from the saved file after /reload):
+--   a. LargeSideTabButtonTemplate (on Forever a Frame with SidePanelTabButtonMixin, not a Button) creates, and
+--      what it is made of; a column of 12 hangs off the panel's right edge, as on the profession window;
+--   b. an icon texture on PanelTabButtonTemplate tabs stays beside its label through PanelTemplates_TabResize (the
+--      template's OnShow and OnEvent), select and deselect: the three label options of DESIGN §17.2;
+--   c. SetClampRectInsets keeps that column on screen: the panel placed flush right by SetPoint without and with
+--      the insets, then every drag the player makes;
+--   d. the run card (HardCountersRunCard: MEDIUM, no SetToplevel) against HardCountersMain: frame levels when the
+--      card shows, on clicks on either, and whenever the order changes while this panel is open.
+-- Geometry only (sizes, offsets, frame levels), never names or where the player is.
+---------------------------------------------------------------------------
+local UI_SIDE_TABS, UI_ICON, UI_GAP, UI_ROOM = 12, 16, 3, 4
+local UI_W, UI_H = 640, 566          -- the Hard Counters window's size today (DESIGN §7.1)
+local UI_ICONS = {
+  "Interface\\Icons\\INV_Misc_Coin_01", "Interface\\Icons\\INV_Misc_Note_01", "Interface\\Icons\\Trade_Engineering",
+  "Interface\\Icons\\INV_Misc_Bag_07", "Interface\\Icons\\INV_Misc_PocketWatch_01", "Interface\\Icons\\INV_Misc_Book_09",
+  "Interface\\Icons\\INV_Misc_Map_01", "Interface\\Icons\\Spell_Nature_TimeStop", "Interface\\Icons\\INV_Misc_Gear_01",
+  "Interface\\Icons\\Ability_Hunter_Pathfinding", "Interface\\Icons\\Spell_Holy_BorrowedTime",
+  "Interface\\Icons\\INV_Misc_QuestionMark",
+}
+local UI_TABS = {     -- the bottom tabs, one per label option
+  { label = "Overview", icon = UI_ICONS[2], mode = "icon and title" },
+  { label = "Boards", icon = UI_ICONS[7], mode = "icon only" },
+  { label = "Trackers", mode = "title only" },
+  { label = "Runs", icon = UI_ICONS[5], mode = "icon and title" },
+}
+local TAB_RESIZE, TAB_SELECT, TAB_DESELECT = "PanelTemplates_TabResize", "PanelTemplates_SelectTab", "PanelTemplates_DeselectTab"
+local uiPanel
+
+local function hc65()
+  local p = P()
+  p.hc65 = type(p.hc65) == "table" and p.hc65 or {}
+  return p.hc65
+end
+
+local function num(v) return type(v) == "number" and v or nil end
+local function r1(v) return num(v) and math.floor(v * 10 + 0.5) / 10 or describe(v) end
+
+-- a method that may be missing or fail: its results, or nil
+local function m(obj, method, ...)
+  local fn = type(obj) == "table" and obj[method]
+  if type(fn) ~= "function" then return nil end
+  local r = { pcall(fn, obj, ...) }
+  if not r[1] then return nil end
+  return select(2, unpack(r))
+end
+
+local function keepLast(list, item, n)
+  list[#list + 1] = item
+  while #list > n do table.remove(list, 1) end
+end
+
+-- measure once the layout has settled (geometry is resolved on the next frame)
+local function later(fn)
+  C_Timer.After(0.2, function()
+    local ok, err = pcall(fn)
+    if not ok then B.Log("warn", "Diag", "HC-65 probe: %s", tostring(err)) end
+  end)
+end
+
+-- a. ---------------------------------------------------------------------
+
+local function buildSideTabs(f)
+  local a = { tabs = 0 }
+  hc65().a = a
+  f.sideTabs = {}
+  local okT, first = pcall(CreateFrame, "Frame", nil, f, "LargeSideTabButtonTemplate")
+  if not okT or type(first) ~= "table" then
+    a.created, a.error = false, tostring(first):sub(1, 160)
+    return
+  end
+  a.created = true
+  a.objectType = m(first, "GetObjectType")
+  a.mouseAtCreate = m(first, "IsMouseEnabled")
+  a.parts, a.methods = {}, {}
+  for _, k in ipairs({ "Background", "Icon", "Mask", "SelectedTexture", "TabGlow", "HighlightTexture" }) do
+    a.parts[k] = type(first[k]) == "table"
+  end
+  for _, k in ipairs({ "SetChecked", "SetFillToInterior", "SetCustomOnMouseUpHandler", "OnEnter" }) do
+    a.methods[k] = type(first[k]) == "function"
+  end
+  a.backgroundAtlas = m(first.Background, "GetAtlas")
+  local atlasInfo = G("C_Texture.GetAtlasInfo")
+  if type(atlasInfo) == "function" then
+    local ok, info = pcall(atlasInfo, "common-sidetab")
+    a.atlas = (ok and type(info) == "table") and { w = r1(info.width), h = r1(info.height) } or "none"
+  end
+  local tabs = { first }
+  for _ = 2, UI_SIDE_TABS do
+    local ok, t = pcall(CreateFrame, "Frame", nil, f, "LargeSideTabButtonTemplate")
+    if ok and type(t) == "table" then tabs[#tabs + 1] = t end
+  end
+  local function pick(tab)
+    for _, t in ipairs(tabs) do m(t, "SetChecked", t == tab) end
+    a.clicks = (a.clicks or 0) + 1
+    a.lastClicked = tab.hcIndex
+  end
+  for i, t in ipairs(tabs) do
+    t.hcIndex = i
+    t.tooltipText = (i == #tabs) and "Diagnostics" or ("Side tab " .. i)    -- the mixin's OnEnter shows it
+    if type(t.Icon) == "table" then m(t.Icon, "SetTexture", UI_ICONS[(i - 1) % #UI_ICONS + 1]) end
+    m(t, "SetFillToInterior", true)          -- as the profession window's tabs
+    t:ClearAllPoints()
+    if i == 1 then t:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, -60)
+    else t:SetPoint("TOPLEFT", tabs[i - 1], "BOTTOMLEFT", 0, -2) end
+    if not m(t, "IsMouseEnabled") then m(t, "EnableMouse", true) end
+    local onUp = function(self, button) if button == "LeftButton" then pick(self) end end
+    if type(t.SetCustomOnMouseUpHandler) == "function" then t:SetCustomOnMouseUpHandler(onUp)
+    else t:SetScript("OnMouseUp", onUp) end
+  end
+  m(first, "SetChecked", true)
+  a.tabs = #tabs
+  f.sideTabs = tabs
+end
+
+local function measureSide(f)
+  local a = hc65().a
+  local t = f.sideTabs and f.sideTabs[1]
+  if not (a and t) then return end
+  a.size = { w = r1(m(t, "GetWidth")), h = r1(m(t, "GetHeight")) }
+  a.visible = m(t, "IsVisible")
+  if type(t.Icon) == "table" then
+    a.icon = { w = r1(m(t.Icon, "GetWidth")), h = r1(m(t.Icon, "GetHeight")), texture = tostring(m(t.Icon, "GetTexture")),
+      visible = m(t.Icon, "IsVisible") }
+  end
+  -- how many sit beside the panel: tabs whose bottom is above the panel's bottom
+  local bottom, fit = num(m(f, "GetBottom")), 0
+  for _, x in ipairs(f.sideTabs) do
+    local b = num(m(x, "GetBottom"))
+    if bottom and b and b >= bottom then fit = fit + 1 end
+  end
+  a.fitBesidePanel, a.panelHeight = fit, r1(m(f, "GetHeight"))
+end
+
+-- b. ---------------------------------------------------------------------
+
+-- Blizzard's OnShow / OnEvent resize the tab with the parent's tabPadding (nil here); this runs after them, as the
+-- window host's sizeTab does, with room for the icon
+local function sizeIconTab(b)
+  local pad = UI_ROOM
+  if b.hcIcon then pad = pad + UI_ICON + (b.hcLabel ~= "" and UI_GAP or 0) end
+  pcall(G(TAB_RESIZE), b, pad)
+  if type(b.Text) == "table" then b.Text:SetWidth(0) end
+  b.hcResized = (b.hcResized or 0) + 1
+end
+
+local function selectBottom(f, pos)
+  for i, b in ipairs(f.bottomTabs) do
+    pcall(G(i == pos and TAB_SELECT or TAB_DESELECT), b)
+    if b.hcIcon and b.hcLabel == "" then          -- icon only: follow the label's own offsets (selected sits lower)
+      b.hcIcon:ClearAllPoints()
+      b.hcIcon:SetPoint("CENTER", b, "CENTER", 0, i == pos and -3 or 2)
+    end
+  end
+  f.bottomSelected = pos
+end
+
+local function measureBottom(f, when)
+  local b65 = hc65().b
+  if not (b65 and f.bottomTabs) then return end
+  local out = {}
+  for _, b in ipairs(f.bottomTabs) do
+    local t, icon = b.Text, b.hcIcon
+    local bl, br = num(m(b, "GetLeft")), num(m(b, "GetRight"))
+    local r = { mode = b.hcMode, selected = f.bottomSelected == b.hcPos, w = r1(m(b, "GetWidth")), resized = b.hcResized }
+    local ok = true
+    if type(t) == "table" and b.hcLabel ~= "" then
+      r.truncated = m(t, "IsTruncated")
+      local tl, tr = num(m(t, "GetLeft")), num(m(t, "GetRight"))
+      if tr and br then r.textToRight = r1(br - tr); ok = ok and br - tr >= 0 end
+      if icon then
+        local ir = num(m(icon, "GetRight"))
+        if ir and tl then r.gap = r1(tl - ir); ok = ok and math.abs(tl - ir - UI_GAP) <= 1 end
+      end
+      ok = ok and not r.truncated
+    end
+    if icon then
+      local il, ir = num(m(icon, "GetLeft")), num(m(icon, "GetRight"))
+      if il and ir and bl and br then
+        r.iconFromLeft, r.iconToRight = r1(il - bl), r1(br - ir)
+        ok = ok and il >= bl and ir <= br
+      end
+      r.iconVisible = m(icon, "IsVisible")
+    end
+    r.ok = ok
+    out[#out + 1] = r
+  end
+  b65[when] = out
+end
+
+local function buildBottomTabs(f)
+  local b65 = { created = 0 }
+  hc65().b = b65
+  f.bottomTabs = {}
+  if type(G(TAB_SELECT)) ~= "function" or type(G(TAB_RESIZE)) ~= "function" then
+    b65.error = "PanelTemplates functions missing"
+    return
+  end
+  local tabs = f.bottomTabs
+  for i, def in ipairs(UI_TABS) do
+    local ok, b = pcall(CreateFrame, "Button", "HardCountersDiagProbeTab" .. i, f, "PanelTabButtonTemplate")
+    if ok and type(b) == "table" then
+      local pos = #tabs + 1
+      b.hcPos, b.hcTitle, b.hcMode = pos, def.label, def.mode
+      b.hcLabel = def.mode == "icon only" and "" or def.label
+      b:SetText(b.hcLabel)
+      if def.icon then
+        local icon = b:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(UI_ICON, UI_ICON)
+        icon:SetTexture(def.icon)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        if b.hcLabel ~= "" then
+          -- the label moves right by half the icon, so icon and label stay centred together; Blizzard's
+          -- select and deselect read these offsets
+          icon:SetPoint("RIGHT", b.Text, "LEFT", -UI_GAP, 0)
+          b.selectedTextX, b.deselectedTextX = (UI_ICON + UI_GAP) / 2, (UI_ICON + UI_GAP) / 2
+        end
+        b.hcIcon = icon
+      end
+      b:HookScript("OnShow", sizeIconTab)
+      b:HookScript("OnEvent", sizeIconTab)
+      if def.mode == "icon only" then          -- the title as a tooltip
+        b:HookScript("OnEnter", function(self)
+          local tip = G("GameTooltip")
+          if type(tip) == "table" then tip:SetOwner(self, "ANCHOR_TOP"); tip:SetText(self.hcTitle); tip:Show() end
+        end)
+        b:HookScript("OnLeave", function()
+          local tip = G("GameTooltip")
+          if type(tip) == "table" then tip:Hide() end
+        end)
+      end
+      b:SetScript("OnClick", function()
+        selectBottom(f, pos)
+        later(function() measureBottom(f, "afterClick") end)
+      end)
+      b:ClearAllPoints()
+      if pos == 1 then b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 11, 2)
+      else b:SetPoint("LEFT", tabs[pos - 1], "RIGHT", 3, 0) end
+      tabs[pos] = b
+      sizeIconTab(b)
+    else
+      b65.error = format("tab %d: %s", i, tostring(b):sub(1, 160))
+    end
+  end
+  b65.created = #tabs
+  selectBottom(f, 1)
+end
+
+-- c. ---------------------------------------------------------------------
+
+local function clampState(f)
+  local tab = f.sideTabs and f.sideTabs[1]
+  local sr, fr, cr = num(m(UIParent, "GetRight")), num(m(f, "GetRight")), tab and num(m(tab, "GetRight"))
+  local insets = { m(f, "GetClampRectInsets") }
+  for i, v in ipairs(insets) do insets[i] = r1(v) end
+  local r = { screenRight = r1(sr), panelRight = r1(fr), columnRight = r1(cr), insets = insets }
+  if sr and cr then r.columnOnScreen = cr <= sr + 0.5 end
+  if sr and fr then r.panelAtRightEdge = math.abs(sr - fr) < 1.5 end
+  return r
+end
+
+local function flushRight(f)
+  f:ClearAllPoints()
+  f:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
+end
+
+local function runClampTest(f)
+  local c = hc65().c
+  local tab = f.sideTabs and f.sideTabs[1]
+  local colW = tab and num(m(tab, "GetWidth")) or 0
+  c.columnWidth = r1(colW)
+  m(f, "SetClampRectInsets", 0, 0, 0, 0)
+  flushRight(f)
+  later(function()
+    c.plain = clampState(f)                          -- no insets: the column should hang off the screen
+    m(f, "SetClampRectInsets", 0, colW, 0, 0)        -- the clamp rect reaches over the column
+    flushRight(f)
+    later(function()
+      c.inset = clampState(f)                        -- with insets: did SetPoint get clamped?
+      f:ClearAllPoints()
+      f:SetPoint("CENTER", UIParent, "CENTER", -120, 0)
+      -- hide and show: the tabs' OnShow resizes them again (ours after the template's own resize)
+      f:Hide()
+      f:Show()
+      later(function()
+        measureBottom(f, "afterReshow")
+        B.Log("info", "Diag", "HC-65 probe measured; drag the panel against the right edge, then /reload to save")
+      end)
+    end)
+  end)
+end
+
+-- d. ---------------------------------------------------------------------
+
+local function maxLevel(frame, depth)
+  local lvl = num(m(frame, "GetFrameLevel")) or 0
+  if depth > 0 and type(frame.GetChildren) == "function" then
+    for _, ch in ipairs({ frame:GetChildren() }) do
+      if type(ch) == "table" then lvl = math.max(lvl, maxLevel(ch, depth - 1)) end
+    end
+  end
+  return lvl
+end
+
+local function overlaps(a, b)
+  local al, ar, at, ab = num(m(a, "GetLeft")), num(m(a, "GetRight")), num(m(a, "GetTop")), num(m(a, "GetBottom"))
+  local bl, br, bt, bb = num(m(b, "GetLeft")), num(m(b, "GetRight")), num(m(b, "GetTop")), num(m(b, "GetBottom"))
+  if not (al and ar and at and ab and bl and br and bt and bb) then return nil end
+  return al < br and bl < ar and ab < bt and bb < at
+end
+
+-- where the card is against the window: above everything of the window, under the window frame itself, or between
+local function cardOrder()
+  local main, card = G("HardCountersMain"), G("HardCountersRunCard")
+  if type(main) ~= "table" or type(card) ~= "table" then return nil end
+  if not (m(main, "IsShown") and m(card, "IsShown")) then return nil end
+  local cl, ml, mm = num(m(card, "GetFrameLevel")) or 0, num(m(main, "GetFrameLevel")) or 0, maxLevel(main, 3)
+  local where = cl > mm and "card above window" or (cl < ml and "card under window" or "card between")
+  return where, { cardLevel = cl, mainLevel = ml, mainTopLevel = mm, overlap = overlaps(card, main),
+    cardToplevel = m(card, "IsToplevel"), cardStrata = m(card, "GetFrameStrata"), mainStrata = m(main, "GetFrameStrata") }
+end
+
+local function recordCard(why)
+  local d = hc65().d
+  local where, info = cardOrder()
+  if not where then return end
+  info.why, info.where, info.t = why, where, W.now()
+  keepLast(d.events, info, 12)
+  d.latest = where
+end
+
+-- hook the window and the card once each, when they exist (the card is made on the first click on a run)
+local function hookCard()
+  local d = hc65().d
+  local main, card = G("HardCountersMain"), G("HardCountersRunCard")
+  if type(main) == "table" and not main.hc65Hooked and type(main.HookScript) == "function" then
+    main.hc65Hooked = true
+    main:HookScript("OnMouseDown", function() later(function() recordCard("clicked the window") end) end)
+  end
+  if type(card) == "table" and not card.hc65Hooked and type(card.HookScript) == "function" then
+    card.hc65Hooked = true
+    card:HookScript("OnMouseDown", function() later(function() recordCard("clicked the card") end) end)
+    card:HookScript("OnShow", function() later(function() recordCard("card shown") end) end)
+  end
+  d.hookedWindow, d.hookedCard = main and main.hc65Hooked or false, card and card.hc65Hooked or false
+  -- any change of order while the panel is open (a click on the window's content raises it too)
+  local where = cardOrder()
+  if where and where ~= d.lastSeen then
+    d.lastSeen = where
+    recordCard("order changed")
+  end
+end
+
+-- the panel ------------------------------------------------------------------
+
+local function buildPanel()
+  local okP, f = pcall(CreateFrame, "Frame", "HardCountersDiagUIProbe", UIParent, "ButtonFrameTemplate")
+  local h = hc65()
+  h.panelTemplate = okP and type(f) == "table"
+  if not h.panelTemplate then
+    f = CreateFrame("Frame", "HardCountersDiagUIProbe", UIParent)
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.05, 0.05, 0.07, 0.92)
+  end
+  f:Hide()
+  f:SetSize(UI_W, UI_H)
+  f:SetFrameStrata("MEDIUM")
+  f:SetToplevel(true)
+  f:SetMovable(true)
+  f:EnableMouse(true)
+  f:RegisterForDrag("LeftButton")
+  f:SetClampedToScreen(true)
+  pcall(G("ButtonFrameTemplate_HidePortrait"), f)
+  local title = "HC-65 probe (Hard Counters Diagnostics)"
+  if type(f.SetTitle) ~= "function" or not pcall(f.SetTitle, f, title) then
+    local tc = f.TitleContainer
+    local tt = (type(tc) == "table" and tc.TitleText) or f.TitleText
+    if type(tt) == "table" then tt:SetText(title) end
+  end
+  if type(f.CloseButton) == "table" then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
+  tinsert(UISpecialFrames, "HardCountersDiagUIProbe")
+  local text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  text:SetPoint("TOPLEFT", 24, -72)
+  text:SetWidth(UI_W - 48)
+  text:SetJustifyH("LEFT")
+  text:SetText("1. Hover a tab on the right (a tooltip?) and click two of them.\n\n"
+    .. "2. Click each tab along the bottom. Hover the one with only an icon.\n\n"
+    .. "3. Drag this panel by its title, hard against the right edge of the screen, and let go.\n\n"
+    .. "4. With this panel still open: /hc, Runs tab, click a run (its card opens). Click the Hard Counters "
+    .. "window's title bar, then the card's top strip.\n\n"
+    .. "5. Take a screenshot (Print Screen), then /reload. The results are in the saved file.")
+  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    later(function()
+      local s = clampState(self)
+      s.t = W.now()
+      keepLast(hc65().c.drags, s, 6)
+    end)
+  end)
+  local acc = 0
+  f:SetScript("OnUpdate", function(_, elapsed)
+    acc = acc + (elapsed or 0)
+    if acc < 0.5 then return end
+    acc = 0
+    local ok, err = pcall(hookCard)
+    if not ok then B.Log("warn", "Diag", "HC-65 card probe: %s", tostring(err)) end
+  end)
+  buildSideTabs(f)
+  buildBottomTabs(f)
+  return f
+end
+
+--- /hc diag ui: open the HC-65 probe panel (or close it). Each opening measures again.
+function ns.ProbeUI()
+  if uiPanel and uiPanel:IsShown() then uiPanel:Hide(); return false end
+  local h = hc65()
+  local version, build = W.build()
+  h.t, h.client = W.now(), format("%s.%s", tostring(version), tostring(build))
+  h.screen = { w = r1(m(UIParent, "GetWidth")), h = r1(m(UIParent, "GetHeight")), scale = r1(m(UIParent, "GetEffectiveScale")) }
+  h.c = { drags = {} }
+  h.d = { events = {} }
+  h.opened = (h.opened or 0) + 1
+  if not uiPanel then uiPanel = buildPanel() end
+  uiPanel:ClearAllPoints()
+  uiPanel:SetPoint("CENTER", UIParent, "CENTER", -120, 0)
+  uiPanel:Show()
+  later(function()
+    measureSide(uiPanel)
+    measureBottom(uiPanel, "atBuild")
+    runClampTest(uiPanel)
+  end)
+  B.Log("info", "Diag", "HC-65 probe panel open (%s)", ns.contextLine())
+  return true
+end
+
+-- the probe's results at the end of the Probes tab
+local function dumpLines(v, ind, out, depth)
+  local keys = {}
+  for k in pairs(v) do keys[#keys + 1] = k end
+  table.sort(keys, function(x, y) return tostring(x) < tostring(y) end)
+  for _, k in ipairs(keys) do
+    local x = v[k]
+    if type(x) == "table" and depth < 5 then
+      out[#out + 1] = ind .. tostring(k) .. ":"
+      dumpLines(x, ind .. "  ", out, depth + 1)
+    else
+      out[#out + 1] = ind .. tostring(k) .. " = " .. tostring(x)
+    end
+  end
+end
+
+function ns.HC65Lines(out)
+  local h = HardCountersDiagDB.probes and HardCountersDiagDB.probes.hc65
+  out[#out + 1] = ""
+  out[#out + 1] = "HC-65 WINDOW PROBE (/hc diag ui)"
+  if type(h) ~= "table" then out[#out + 1] = "  not run"; return end
+  dumpLines(h, "  ", out, 0)
 end

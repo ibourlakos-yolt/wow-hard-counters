@@ -1514,3 +1514,19 @@ Probe in game first (HC-65): `LargeSideTabButtonTemplate` and an icon texture on
 without errors on Forever; `SetClampRectInsets` holds the side tabs on screen; the run card's stuck-under bug.
 Then: the tab chrome (HC-69) with the browser widget and the Trackers tab (HC-66); the tile collection and Overview
 (HC-67); the Boards tab, the New board dialog and the launcher (HC-68); the Diagnostics probes browser (HC-70).
+
+**As built (HC-65, the probe; results pending):** `/hc diag ui` (Diagnostics, `Probes.lua`) opens a test panel the
+size of today's window with the planned chrome: 12 `LargeSideTabButtonTemplate` tabs hanging off its right edge
+(anchored as on the Camelot profession window: `TOPLEFT` to the frame's `TOPRIGHT`, y -60, then 2 apart), and four
+`PanelTabButtonTemplate` tabs along the bottom, one per label option (icon and title, icon only, title only). Read
+from the Forever source before building: the side tab is a **Frame**, not a Button (clicks come through
+`SetCustomOnMouseUpHandler`; `SetChecked` shows the selected art; `tooltipText` feeds its own tooltip); its size
+comes from the `common-sidetab` atlas. The bottom tab's label is centred, so the icon is anchored to the label's left
+and the label is shifted right by half the icon through `selectedTextX` / `deselectedTextX`, which Blizzard's select
+and deselect read; the icon-only tab centres the icon and moves it with the select offsets. The panel measures
+itself into `HardCountersDiagDB.probes.hc65`: (a) what the side tab is made of and its size; (b) per bottom tab the
+gap between icon and label, icon and label inside the tab, truncation, after creation, a hide and show (the
+template's own `OnShow` resize, then ours) and each click; (c) the panel set flush right by `SetPoint` without and
+with `SetClampRectInsets(0, <column width>, 0, 0)`, then every drag; (d) the run card's frame level against the
+window's whole tree whenever their order changes, the card shows, or either is clicked.
+
