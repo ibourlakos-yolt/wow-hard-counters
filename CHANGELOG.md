@@ -8,6 +8,9 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 <!-- Renamed to "## <version> (<date>)" at the next cut: the release job looks for "## <version>". -->
 
 ### Fixed
+- **The run summary card opened behind the Hard Counters window.** Clicking a run in the Runs tab opened its card
+  under the window, so it looked as if nothing happened. The card now opens on top, and comes back on top when you
+  click it.
 - **Recent rates went negative after Reset.** Resetting a board's timer while it ran could leave its recent rates
   (e.g. "XP/h recent") hugely negative, with a trend like "1087% slower", for hours. Reset now starts them from
   zero, and boards already showing a negative rate correct themselves on their own.

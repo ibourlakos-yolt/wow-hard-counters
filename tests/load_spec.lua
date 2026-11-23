@@ -53,6 +53,14 @@ describe("load smoke test", function()
       B.RefreshAll(true)
       nsHC.ToggleRunList()
       nsHC.RefreshRunList()
+      -- HC-65: the run card opened under the Hard Counters window; it now raises on click and on every opening
+      local rec = HC:Runs()[1]
+      nsHC.ShowRunCard(rec)
+      local card = _G.HardCountersRunCard
+      assert.is_true(card:IsToplevel())
+      local raised = card._raised
+      nsHC.ShowRunCard(rec)
+      assert.are.equal(raised + 1, card._raised)
       nsHC.ShowCopyBox("t", nsHC.BuildReport({}))
       nsHC.UpdateBroker()
       nsHC.LauncherTooltip({ AddLine = function() end, AddDoubleLine = function() end })
@@ -150,7 +158,7 @@ describe("load smoke test", function()
       assert.is_table(h.c.plain)
       assert.is_table(h.c.inset)
       assert.are.equal(1, #h.c.drags)
-      assert.are.same({}, h.d.events)
+      assert.is_table(h.d.events)                          -- (a run card left by the smoke test may be recorded)
       assert.is_nil(D.LogText():find("HC-65 probe:", 1, true))      -- no measurement failed
       assert.truthy(D.ProbesText():find("HC-65 WINDOW PROBE", 1, true))
       _G.SlashCmdList.HCDIAG("ui")                         -- a second time closes it

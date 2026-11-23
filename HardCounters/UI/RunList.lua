@@ -122,7 +122,9 @@ local function showCard(rec)
   card.title:SetText(L["Run summary"])
   card.edit:SetText(card.text)
   card:Show()
+  card:Raise()          -- above the Hard Counters window that was just clicked (HC-65: it opened under it)
 end
+ns.ShowRunCard = showCard
 
 --- Rows that fit the current height, created on first use; they stretch with the width.
 local function visibleRows()

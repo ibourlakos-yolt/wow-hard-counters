@@ -1423,8 +1423,8 @@ reading the player placed, with its choices (§16.1); a board is a HUD stack of 
 - **Right-side icon tabs:** every pack's window (Ledger, Character Stats, any later pack) and **Diagnostics**, which
   stays in the main window (the user overrode HC-44(a): one-stop panel). Blizzard's `LargeSideTabButtonTemplate`, as
   on Forever's profession window (`Blizzard_Professions/Camelot/Blizzard_ProfessionsFrame.xml`); the title is the
-  tooltip. They hang off the frame's right edge (no width taken); about nine fit, then the column scrolls
-  vertically. `RegisterWindow` gains an `icon` field.
+  tooltip. They hang off the frame's right edge (no width taken); 8 fit beside today's 566-high panel (55 high,
+  2 apart, the first 60 down: HC-65), then the column scrolls vertically. `RegisterWindow` gains an `icon` field.
 - **Tab labels are an option:** icon only, title only, icon and title (the bottom tabs; side tabs are always
   icons). Icon only shows the title as a tooltip. `PanelTabButtonTemplate` has no icon slot: we add the texture.
 - **Overflow:** tab content scrolls vertically when taller than the panel; the side column scrolls when too long.
@@ -1496,8 +1496,9 @@ buttons follow the selection. One shared widget, so every tab behaves the same.
   panels open; opens and closes in combat; Escape closes it (`UISpecialFrames`); no secure templates inside it.
 - **Side tabs and clamping:** `SetClampRectInsets` extends the clamp to the tab column, so the tabs never leave the
   screen.
-- **Popups never open under the window:** the run card shares MEDIUM without `SetToplevel` and probably stays under
-  the window once the window is clicked (unverified). It gets `SetToplevel` until HC-15 removes it.
+- **Popups never open under the window:** the run card shared MEDIUM without `SetToplevel` and opened under the
+  window (HC-65, seen on the user's screenshot). Now every `Widgets.Window` popup is `SetToplevel` and the card
+  raises each time it opens, until HC-15 removes it.
 - Alt+Z, pet battles and cinematics hide everything under UIParent; positions are saved as top-left points.
 
 ### 17.6 The launcher (minimap button, AddOns menu, bar feed)
@@ -1515,7 +1516,7 @@ without errors on Forever; `SetClampRectInsets` holds the side tabs on screen; t
 Then: the tab chrome (HC-69) with the browser widget and the Trackers tab (HC-66); the tile collection and Overview
 (HC-67); the Boards tab, the New board dialog and the launcher (HC-68); the Diagnostics probes browser (HC-70).
 
-**As built (HC-65, the probe; results pending):** `/hc diag ui` (Diagnostics, `Probes.lua`) opens a test panel the
+**As built (HC-65, the probe; run in game 2026-11-23, client 1.60.1.71037):** `/hc diag ui` (Diagnostics, `Probes.lua`) opens a test panel the
 size of today's window with the planned chrome: 12 `LargeSideTabButtonTemplate` tabs hanging off its right edge
 (anchored as on the Camelot profession window: `TOPLEFT` to the frame's `TOPRIGHT`, y -60, then 2 apart), and four
 `PanelTabButtonTemplate` tabs along the bottom, one per label option (icon and title, icon only, title only). Read
@@ -1529,4 +1530,23 @@ gap between icon and label, icon and label inside the tab, truncation, after cre
 template's own `OnShow` resize, then ours) and each click; (c) the panel set flush right by `SetPoint` without and
 with `SetClampRectInsets(0, <column width>, 0, 0)`, then every drag; (d) the run card's frame level against the
 window's whole tree whenever their order changes, the card shows, or either is clicked.
+
+Results (the saved file and the user's screenshot; UI scale 0.8, screen 1707 × 960 in UI units):
+- **(a) Yes.** The side tab builds as a Frame with every part (background `common-sidetab`, icon, mask, selected,
+  glow, highlight) and the mixin's methods; mouse is on at creation. 55 × 55 (atlas 55 × 60); with
+  `SetFillToInterior(true)` the icon is 50 × 50. All 12 drew with their icons; clicks reached the handler (7), and
+  `SetChecked` shows the selected art (subtle: a lighter frame). 8 sit beside the 566-high panel.
+- **(b) Yes.** In all three label options the icon sits 3 from the label, inside the tab, nothing truncated, at
+  creation, after a hide and show (Blizzard's resize, then ours) and after clicks. Widths: Overview with icon 99,
+  Runs with icon 72.3, Trackers 73.3, icon only 72 (the side art's minimum).
+- **(c) Yes.** Flush right by `SetPoint` with no insets, the column hung 55 off screen; with
+  `SetClampRectInsets(0, 55, 0, 0)` the same `SetPoint` was clamped so the column ended exactly at the screen's
+  edge, and so did a drag pressed against it. Insets clamp both `SetPoint` and drags.
+- **(d) Stuck, as predicted.** The card opened under both the Hard Counters window and the probe panel (screenshot:
+  only its edge and "Select all" showed between them). On Forever frame levels don't show the raise order: the
+  window and the card both read level 1 after clicks (the window's tree reaches 515), so the probe's "card between"
+  was not the answer; the screenshot was. Fixed: `SetToplevel` on `Widgets.Window` popups and a `Raise` each time
+  the card opens; confirm by eye (checklist situation 12).
+- What the panel's tabs don't show: they switch nothing (the probe has no pages behind them), so a click only
+  changes the selected art.
 

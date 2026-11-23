@@ -116,6 +116,9 @@ function W.Window(name, width, height, title, posKey)
   local f = CreateFrame("Frame", name, UIParent)
   f:SetSize(width, height)
   f:SetFrameStrata("MEDIUM")
+  -- a popup shares MEDIUM with the Hard Counters window and Blizzard's panels: the one clicked last is on top
+  -- (DESIGN §17.5). Without it the run card stayed under the window (HC-65 probe, 2026-11-23).
+  f:SetToplevel(true)
   f:SetMovable(true)
   f:EnableMouse(true)
   f:RegisterForDrag("LeftButton")

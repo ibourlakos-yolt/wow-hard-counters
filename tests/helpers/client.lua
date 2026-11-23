@@ -52,6 +52,10 @@ local frameMethods = {
   GetFrameStrata = function(self) return self._strata or "MEDIUM" end,
   -- mouse: boards are click-through unless edited (v2 M5)
   EnableMouse = function(self, v) self._mouse = v and true or false end,
+  -- raise order: popups and windows come on top when clicked (DESIGN §17.5)
+  SetToplevel = function(self, v) self._toplevel = v and true or false end,
+  IsToplevel = function(self) return self._toplevel or false end,
+  Raise = function(self) self._raised = (self._raised or 0) + 1 end,
   IsMouseEnabled = function(self) return self._mouse or false end,
   GetStringWidth = function() return 50 end,
   GetEffectiveScale = function() return 1 end,
