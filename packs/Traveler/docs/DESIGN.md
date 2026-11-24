@@ -56,15 +56,24 @@ the zone key and, out of combat, the game's speed.
 
 Trackers **Distance** (all but flights) and **Flights**, off for a fresh install like every pack's.
 
-Readings: Distance travelled, Time moving, Average speed (yd/s and %), each with the tile's filter of modes (On
-foot, Under my own power, Everything but teleports: the default, Everything, or a checklist); Teleports and blinks
-(a filter of the jump modes); Jumps (jumps, falls); Time in the air; Top speed (yd/s and %), Farthest without
+Readings: Distance travelled, Time moving, Average speed (moving), each with the tile's filter of modes (On
+foot, Under my own power, Everything but teleports: the default, Everything, or a checklist); Instant travel
+(a filter of the jump modes); Jumps (jumps, falls); Time in the air; Top speed, Farthest without
 stopping, Longest time in the air, Longest flight (best single values: a board's timer and the history periods);
-Speed now (yd/s and %, from position, so it works in combat); Corpse runs, Spirit healer visits, Corpse (yards,
-while a ghost); Flights taken, Distance flown.
+Speed now (from position, so it works in combat); Corpse runs, Spirit healer resurrections, Distance to corpse
+(yards, while a ghost); Flights taken, Distance flown.
+
+**Names and units (2026-11-24; not seen in game; ids unchanged).** Renamed: Average speed (moving) (was Average
+speed: time standing still is left out), **Instant travel** (was Teleports and blinks: it also counts hearthstones,
+summons, releases, instance doors and boat crossings), Spirit healer resurrections (was Spirit healer visits: it
+counts taking the resurrection), Distance to corpse (was Corpse). "Jumps" keeps its name: its default counts jumps
+only. Average speed, Top speed and Speed now read yd/s; their % readings (`hctravel:avgspeedpct`, `topspeedpct`,
+`speednowpct`) are their **unit twins** (Hard Counters' `unitOf`): hidden from the lists, still readable, and a
+tile switches between yd/s and "% of run speed" in its menu's **Units**.
 
 Boards: **Trip** (Distance travelled as an odometer, Time moving as a mix, On foot, Mounted, Average and Top speed,
-Speed now, Flights taken) and **Flight log**.
+Speed now, Flights taken) and **Flight log**, both in the New board dialog's **Activity** group (`category =
+"activity"`, 2026-11-24).
 
 ## 3. Not in this edition
 

@@ -3,6 +3,53 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+**Saved data:** kept. Tiles on "Gold from ...", "Spent on ...", "... looted" and "... rep" move to the readings
+those were merged into, with the same choice, calc, look and name.
+
+**Updating:** `/reload` is enough (no new addon files).
+
+### New
+- **Hard Counters Basic.** The gold and XP numbers that come with Hard Counters are now a pack of their own name,
+  always on, listed with the other packs. Its trackers are called **Gold** and **Experience**. New reading:
+  **Level**.
+- **Gold out:** all the gold that left this character (repairs, purchases, training, flights, mail, ...), as a
+  total or per hour.
+- **Pick sources on the tile.** Gold in, Gold out and XP gained count everything by default; a tile's menu picks
+  which sources (loot and quests only, say). The sources come from the Farmer pack; without it they are all
+  "Unknown". Counting everything, Gold/h keeps its recent rate and trend.
+- **Items looted** and **Reputation gained** count everything by default, or one item or faction picked on the
+  tile. "... looted" and "... rep" are gone from the lists: these replace them.
+- **Character Stats:** main-hand, off-hand and ranged DPS and speed, spell penetration, resistances (one tile per
+  school), lowest durability, average item level, and a weapon skill of your choice (any weapon skill or Defense).
+  Spell damage and spell crit can show one school; without one they show your best school, as before. New trackers
+  **Resistances** and **Gear**.
+- **Boards for every role and class** (Character Stats): Tank (physical), Tank (spell), Melee DPS, Ranged DPS,
+  Caster DPS, Healer (direct), Healer (over time), and one board per class.
+- **Traveler's speeds** switch between yd/s and % of run speed in the tile's menu (**Units**), so the % readings no
+  longer fill the lists.
+
+### Changed
+- **The Hard Counters window's tabs swap places.** Overview, Boards, Trackers and Runs are icon tabs down the right
+  edge; the packs' windows and Diagnostics are the tabs along the bottom (the Tab labels option now applies to
+  them). The window's title names the open tab ("Hard Counters: Boards").
+- **The New board dialog groups the ready-made boards:** Activity, Roles, Your class, Other classes, then the rest,
+  then your own presets.
+- **Clearer names** (your tiles keep working): Gold in (was Gold earned), Loot vendor value (was Vendor value), Best
+  drop (vendor price), Standing progress: *faction*, In bags: *item*, Average speed (moving), Instant travel (was
+  Teleports and blinks), Spirit healer resurrections, Distance to corpse, Melee crit, Hit (melee and ranged), Mana
+  regen (casting) and (not casting), Armor, Block chance, and the Defense tracker.
+- **Character Stats:** a fist weapon now reads your Unarmed skill when you have no Fist Weapons skill. Its window
+  only scrolls when the rows you use don't fit.
+
+### Developer notes
+- Readings: `param.optional` (one member or none: none reads the whole total), `param.anyLabel`, `param.anyTitle`,
+  `param.members` for a single enum, `param.type = "skill"` with `param.filter`, `hidden`, `foldInto` / `foldArg`,
+  `unitOf` / `unitLabel`, `pickTitle`, formatters `seconds` and `decimal`. API §5.1.
+- `RegisterBoardPreset` takes `category` (`"activity"`, `"role"`, `"class"`), `class` and `tip`. API §7.
+- A pack's window is now a tab along the bottom of the Hard Counters window (API §9).
+
 ## 0.2.2-beta2 (2026-11-24)
 
 A small beta, **still experimental**: a clearer `/hc report`, so testers can send everything in one paste.

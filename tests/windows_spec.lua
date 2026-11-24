@@ -353,7 +353,7 @@ describe("windows", function()
       -- the open tab's name is in the title (its tab is an icon now)
       assert.truthy(main.hcTitleText:find("^Hard Counters: "))
       -- a window of ours sorts by its tabOrder down the side; a pack's window joins the bottom row before Diagnostics
-      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\Icons\INV_Misc_Map_01" }))
+      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
       assert.are.same({ "overview", "boards", "t:ours", "trackers", "runs" }, sideIds())
       bottom = bottomTitles()

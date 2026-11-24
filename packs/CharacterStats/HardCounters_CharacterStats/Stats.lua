@@ -225,8 +225,10 @@ ns.TRACKERS = {
   { id = "hcstats:attributes", title = "Attributes",
     description = "Strength, agility, stamina, intellect, spirit, health and mana, as the game reports them now." },
   { id = "hcstats:melee", title = "Melee", description = "Attack power, crit and hit chance, weapon damage, speed and skill." },
-  { id = "hcstats:ranged", title = "Ranged", description = "Ranged attack power and crit, ranged damage, speed and weapon skill, with a ranged weapon equipped." },
-  { id = "hcstats:spell", title = "Spell", description = "Spell damage and healing (by school too), spell crit and hit, spell penetration, mana regeneration." },
+  { id = "hcstats:ranged", title = "Ranged",
+    description = "Ranged attack power and crit, ranged damage, speed and weapon skill, with a ranged weapon equipped." },
+  { id = "hcstats:spell", title = "Spell",
+    description = "Spell damage and healing (by school too), spell crit and hit, spell penetration, mana regeneration." },
   -- (the id keeps the old spelling; the player sees the game's)
   { id = "hcstats:defence", title = "Defense", description = "Armor, dodge, parry and block, Defense skill." },
   -- (CS-14, 2026-11-24) one reading, the school picked on the tile
@@ -240,8 +242,8 @@ end
 
 ---------------------------------------------------------------------------
 -- More readers (2026-11-24, the user: "add any missing stats"): weapon damage and speed, spell power by school,
--- spell penetration, resistances (CS-14), gear. None of these calls is probed on Forever yet: each returns nil when
--- the call is missing, and Diagnostics probes them.
+-- spell penetration, resistances (CS-14), gear. Every call answered Diagnostics' CS-1 probes on Forever (numbers out
+-- of combat, 2026-11-24); each still returns nil when a call is missing.
 ---------------------------------------------------------------------------
 
 --- A weapon's damage per second: the average of its damage range (buffs and attack power included, as the game
@@ -441,16 +443,16 @@ local last, inCombat = {}, {}     -- key -> the last value read out of combat; k
 ns.last = last
 
 --- The cache key of a reading with its member (the school of a resistance): one value kept per member.
-local function key(id, arg)
+local function cacheKey(id, arg)
   if arg == nil then return id end
   return id .. "\0" .. tostring(arg)
 end
-ns.LastKey = key
+ns.LastKey = cacheKey
 
 --- The compute of a live reading: the game's value now, or the last one read while the game keeps it secret.
 local function liveCompute(id, read)
   return function(_, _, arg)
-    local k = key(id, arg)
+    local k = cacheKey(id, arg)
     local v = read(arg)
     if v == SECRET then
       inCombat[k] = true
@@ -502,7 +504,7 @@ for i, s in ipairs(ns.STATS) do
   HC:RegisterReading(id, { title = s[2], tracker = s[3], scopes = { "now" }, formatter = s[5], order = 300 + i,
     description = s[7], compute = liveCompute(id, s[4]), applies = s[6], refresh = REFRESH,
     param = o.param, pickTitle = o.pickTitle,
-    stale = function(arg) return inCombat[key(id, arg)] == true, "in combat" end, live = LIVE[s[1]],
+    stale = function(arg) return inCombat[cacheKey(id, arg)] == true, "in combat" end, live = LIVE[s[1]],
     target = o.target or TARGET[s[1]] })
   if o.rows then
     for _, row in ipairs(o.rows) do

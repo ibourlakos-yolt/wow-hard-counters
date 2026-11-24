@@ -953,6 +953,64 @@ declares `param = { dim, multi = true, members, presets, default }` (an `enum` p
 - **Names:** no set chosen shows the plain title; otherwise the preset it equals, up to three member labels joined
   with "+", else "n kinds".
 
+#### As built (2026-11-24): one reading with a choice on the tile; Hard Counters Basic
+
+The user's call (2026-11-24): fewer readings, each with a choice on the tile whose default reads the whole total,
+and names that say what is counted. **Reading ids never change:** a rename changes the title only, and a merged
+reading stays readable under its old id. Not seen in game.
+
+- **`param.optional = true`** (one member, any `type`; not with `multi`): no member reads the counter's whole total,
+  under the plain title, or `param.anyTitle` when the plain title isn't it ("Spell damage (best school)"). The
+  picker starts with an "Any" entry (`param.anyLabel`, e.g. "Any item"). Such a reading is added without a pick
+  (`ns.NeedsArg` is false) and never reads `noarg`.
+- **A fixed list for one member:** `param.members` without `multi` (an `enum`): the picker offers those, in that
+  order (a spell school, a resistance), instead of the members counted so far (`BoardModel.MemberChoices`).
+- **Recent and Trend for everything** (HC-60's leftover, in part): `ns.CalcFits(r, calc, scope, who, arg)` takes the
+  tile's argument. A set reading reading everything (no set chosen and no default), or an optional one with no
+  member, is the whole counter, so it keeps Recent and Trend; a set of some members still says "set". Changing a
+  tile's set re-fits its calc (`M.SetArg` calls `M.FitCalc`). Without this Gold/h would have lost its trend in the
+  merge.
+- **Run lists:** a reading with a parameter is listed when its choice defaults to the whole total
+  (`ns.ReadsWhole`: optional, or a set with no default). Hidden readings never are.
+- **`hidden = true`:** registered and readable (`HC:Reading`), but out of the catalog, the + menu, the Trackers tab
+  and the run lists.
+- **`foldInto = <id>`, `foldArg`:** a reading merged into another. It is hidden, and a saved tile (or a preset's
+  tile) on it moves to the target, keeping its calc, display, size and name: `foldArg = "same"` keeps the argument,
+  `"set"` makes it a one-member set, none drops it (`M.FoldAlias`, at each `Store()` and when readings change; no
+  board version bump).
+- **`unitOf = <id>`, `unitLabel`:** a unit twin, the same value in other units. It is hidden; the tile menu's
+  **Units** lists the main reading and its twins by `unitLabel` (`ns.ReadingUnits`), and `M.SetReading` switches the
+  tile's reading, keeping everything else.
+- **`pickTitle`** (HC-39 d): the list name of a reading that needs a pick ("In bags: pick an item"), instead of
+  "In bags: ...".
+- **`param.type = "skill"`** (HC-71): the member is a skill line id. The picker lists the character's skill lines
+  under the skill panel's headers (`ns.wow.skillLines`, from `C_SkillInfo.GetNumSkillLines` / `GetSkillLineInfo`),
+  narrowed by `param.filter(line)` (`line = { id, name, group }`); labels come by id (`GetSkillLineInfoByID`). Lines
+  under a header the player collapsed aren't listed, and the picker says so.
+- **Formatters** `seconds` ("2.60 s") and `decimal` (one decimal): weapon speed, DPS, item level.
+- Copies (`HC:GetReading`) carry `hidden`, `foldInto`, `unitOf`, `unitLabel` and `param.optional`.
+
+**The merges:**
+
+| Reading (id kept) | Title now | Absorbs (hidden, tiles moved) | The choice; default |
+|---|---|---|---|
+| `hc:gold` | Gold in (was Gold earned) | `hc:goldfrom`, "Gold from %s" (`"set"`) | source, a set: Loot, Quests, Vendor, Auction house, Mail, Trade, Your characters, Other, Unknown; presets "Loot and quests", "Not from your characters"; everything |
+| `hc:goldout` (new) | Gold out | `hc:spenton`, "Spent on %s" (`"set"`) | sink, a set: Repairs, Vendor, Training, Travel, Auction house, Mail, Trade, Your characters, Other, Unknown; preset "Not to your characters"; everything |
+| `hc:xpgained` | XP gained | | source, a set: Kills, Quests, Other, Unknown (kills and quests are booked by Farmer); everything |
+| `hcfarm:items` | Items looted | `hcfarm:looted`, "%s looted" (`"same"`) | item, optional; any item |
+| `hcfarm:rep` | Reputation gained | `hcfarm:repwith`, "%s rep" (`"same"`) | faction, optional; any faction |
+| `hctravel:avgspeed`, `topspeed`, `speednow` | yd/s | their `...pct` readings, as unit twins (not folded) | Units: yd/s or % of run speed |
+
+The aliases `hc:goldph`, `hc:netph`, `hc:xpph` still read their targets per hour, the whole total. Renames with no
+merge are in the packs' DESIGN files (Farmer §4.9, Traveler §2, Character Stats §8).
+
+**Hard Counters Basic.** Basics registers itself as the pack "Hard Counters Basic" (`ns.RegisterBuiltinPack`, a
+private call; `RegisterPack` still refuses `hc`): first in the pack list, the `hc` namespace and every id unchanged,
+always on (it ships inside Hard Counters and has no AddOns entry of its own). Its trackers are **Gold**
+(`hc:goldph`) and **Experience** (`hc:xpph`), category "Basic" (HC-39 a), never marked *New*. New reading **Level**
+(`hc:level`, `now`, in Experience). The core presets Run, Pocket and Leveling carry `pack = "hc"` and the category
+`activity` (§17.10). Specs: `tests/merges_spec.lua`, `tests/basics_spec.lua`.
+
 ### 16.5 Character or account, per tile (user, 2026-11-18)
 
 A tile setting next to scope and argument: **this character**, **whole account** (later maybe a named character).
@@ -1442,13 +1500,17 @@ reading the player placed, with its choices (§16.1); a board is a HUD stack of 
 
 ### 17.2 Tabs
 
-- **Bottom tabs, Hard Counters' own, in this order:** Overview, Boards, Trackers, Runs. A new player lands on
-  Overview, the casual tab (HC-38a).
-- **Right-side icon tabs:** every pack's window (Ledger, Character Stats, any later pack) and **Diagnostics**, which
-  stays in the main window (the user overrode HC-44(a): one-stop panel). Blizzard's `LargeSideTabButtonTemplate`, as
-  on Forever's profession window (`Blizzard_Professions/Camelot/Blizzard_ProfessionsFrame.xml`); the title is the
-  tooltip. They hang off the frame's right edge (no width taken); 10 fit beside the 640-high window (55 high,
-  2 apart, the first 60 down: HC-65), then the column scrolls vertically. `RegisterWindow` gains an `icon` field.
+> **Swapped 2026-11-24** (the user's call; "As built" below): Hard Counters' own tabs are now the right-side icon
+> tabs and the packs' windows and Diagnostics the bottom tabs. The bullets below say where each set is now; until
+> 2026-11-24 it was the other way round.
+
+- **Right-side icon tabs, Hard Counters' own, in this order:** Overview, Boards, Trackers, Runs. A new player lands
+  on Overview, the casual tab (HC-38a). Blizzard's `LargeSideTabButtonTemplate`, as on Forever's profession window
+  (`Blizzard_Professions/Camelot/Blizzard_ProfessionsFrame.xml`); the title is the tooltip. They hang off the
+  frame's right edge (no width taken); 10 fit beside the 640-high window (55 high, 2 apart, the first 60 down:
+  HC-65), then the column scrolls vertically.
+- **Bottom tabs:** every pack's window (Ledger, Character Stats, any later pack) and **Diagnostics**, which stays in
+  the main window (the user overrode HC-44(a): one-stop panel). `RegisterWindow` gains an `icon` field.
 - **Tab labels are an option:** icon only, title only, icon and title (the bottom tabs; side tabs are always
   icons). Icon only shows the title as a tooltip. `PanelTabButtonTemplate` has no icon slot: we add the texture.
 - **Overflow:** tab content scrolls vertically when taller than the panel; the side column scrolls when too long.
@@ -1457,6 +1519,22 @@ reading the player placed, with its choices (§16.1); a board is a HUD stack of 
 - The panel keeps one size for every tab (§7.1, 2026-11-23). With content scrolling, that size can become a design
   size (the browser layout needs about 780 wide) instead of the tallest tab's minimum; settled when the browser is
   built.
+
+#### As built (2026-11-24): the tabs swap places
+
+The user's call (2026-11-24). `UI/Windows.lua`; not seen in game.
+- **Which column now:** a window Hard Counters registers itself (`ns.Windows.Register`) is an icon tab down the
+  right edge, sorted by `def.tabOrder` (Overview 1, Boards 2, Trackers 3, Runs 4); one registered through
+  `HC:RegisterWindow` (every pack, and Diagnostics) is a tab along the bottom, in load order, Diagnostics last.
+  Templates, sizes, clamping and scrolling are as in §17.8; only which set goes where changed.
+- The **Tab labels** option now shapes the packs' tabs. Hard Counters' own are icons, the title as the tooltip.
+- With no tab selected yet the window opens on the first side tab, Overview.
+- **The frame's title names the open tab** ("Hard Counters: Boards"), since Hard Counters' own tabs carry no words
+  now. The welcome (HC-74) says the tabs are down the right edge.
+- Known costs, accepted: the casual player's main tabs lose their words (the title and the tooltips make up for it);
+  with no pack loaded and Diagnostics off, the bottom row is empty.
+- Character Stats' tab asks for the height of the rows this character shows (`minSize`) and lays out again when a
+  section is turned on; it asked for room for every row before, and scrolled.
 
 ### 17.3 The browser layout (one widget, used by Trackers and Diagnostics)
 
@@ -1481,7 +1559,8 @@ buttons follow the selection. One shared widget, so every tab behaves the same.
   Edit all, **Reset position** (centre of the screen, scale 1), Duplicate, Save as preset, Delete. Hovering a row
   flashes that board on screen, raised above the window (strata HIGH) until the pointer leaves. "Presets": the
   built-in presets grouped by pack plus "Your presets"; create a board from one, save a board as one (HC-22's
-  player presets), edit, delete. Categories beyond the pack stay HC-57 (proposed). Boards are clamped to the screen,
+  player presets), edit, delete. Categories beyond the pack stay HC-57 (proposed; built 2026-11-24, §17.10).
+  Boards are clamped to the screen,
   so they go missing by rules, mouse-over fade, a tiny scale, Blizzard frames on top or a UI scale change: the
   status column, Show now and Reset position cover those.
 - **New board dialog.** Every way to make a board opens it (Boards tab, the launcher, a board's [+] menu, Options;
@@ -1493,13 +1572,13 @@ buttons follow the selection. One shared widget, so every tab behaves the same.
   Rename enforces the same uniqueness, so `/hc board <name>` is never ambiguous. `/hc board new <name>` with a name
   creates directly.
 - **Trackers: the catalog and management** (the playtest's note #3; HC-39's words apply). Tree from each tracker's
-  `category` (Basics, Farming, Travel, Character, ...) plus "Not loaded"; columns Name, On, History, Size; filters
+  `category` (Basics, "Basic" since 2026-11-24; Farming, Travel, Character, ...) plus "Not loaded"; columns Name, On, History, Size; filters
   on or off, history on, used by this character, pack; the detail pane lists the tracker's readings, each with
   "Add tile" (HC-50's searchable reading list is the same catalog). Actions: turn on or off, History..., Delete data.
   Trackers this character can't use show greyed. HC-35 (no on/off switch) stays proposed: the tree suits it, but
   it is not decided here.
 - **Runs:** a list and a detail pane; HC-15's run details go in the pane, not a floating card.
-- **Diagnostics (side tab):** the browser layout for probes. Tree by kind (functions, events, strings, samplers);
+- **Diagnostics (side tab; a bottom tab since 2026-11-24, §17.2):** the browser layout for probes. Tree by kind (functions, events, strings, samplers);
   status column and filter (ok, missing, changed, error, never fired); actions Run selected (`ns.RunProbe` exists,
   no UI yet), Run all, Copy, Clear history; Log, Live and Storage stay. Probe definitions are file-local today: a
   `ns.ProbeList` accessor first. Note #7 (probe taxonomy and status) is still the user's to decide.
@@ -1583,7 +1662,8 @@ Results (the saved file and the user's screenshot; UI scale 0.8, screen 1707 × 
 
 **The tab chrome** (`UI/Windows.lua`):
 - **Which column.** A window registered by Hard Counters itself (`ns.Windows.Register`) is a bottom tab; one
-  registered through `HC:RegisterWindow` (every pack, and Diagnostics) is a side tab. Bottom tabs sort by
+  registered through `HC:RegisterWindow` (every pack, and Diagnostics) is a side tab. (Swapped 2026-11-24: §17.2
+  "As built".) Bottom tabs sort by
   `def.tabOrder` (Overview 1, Boards 2, Trackers 3, Runs 4; Overview and Boards arrive with HC-67 and HC-68); side
   tabs keep load order with Diagnostics (`hcdiag:`) always last.
 - **Bottom tabs** are `PanelTabButtonTemplate` with an icon texture, as the probe measured: the icon 16 square,
@@ -1730,6 +1810,16 @@ also Rename..., Delete. The tab refreshes once a second while shown (statuses fo
 editing boards, Options. Options ▸ Boards keeps Edit every board and gains New board... and Open Boards tab; its
 per-board Show and mini switches are gone (the Boards tab has them). The Trackers tab's "Edit boards" is gone (the
 Boards tab's Edit all; the playtest's note #4).
+
+**Presets by category (HC-57 a and c, 2026-11-24; not seen in game).** `RegisterBoardPreset` takes `category`
+(`"activity"`, `"role"` or `"class"`, a list Hard Counters owns: `M.CATEGORY_ORDER`), `class` (the class file name,
+`"MAGE"`; required with `"class"`, refused without it) and `tip` (a line shown on hover). `M.PresetGroups()` now
+returns **Activity**, **Roles**, **Your class** (the class board of this character's class, `ns.wow.playerClass`),
+**Other classes** (`more = true`: one submenu), then presets with no category under their pack's title, then **Your
+presets**; empty groups are left out. The New board dialog's Start from shows them in that order with the tips;
+the New board menu (`Boards.NewBoardItems`) has a submenu per group. Run, Pocket, Leveling
+(Hard Counters Basic) and Traveler's Trip and Flight log are Activity; Character Stats brings seven role boards and
+nine class boards (its DESIGN §6).
 
 ### 17.11 As built (HC-70, 2026-11-23): the probes browser in Diagnostics
 

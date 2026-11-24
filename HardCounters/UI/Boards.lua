@@ -110,7 +110,7 @@ end
 local function compareFor(board, i)
   local tile = board.tiles[i]
   if not (tile and tile.kind == "reading" and M.Footprint(tile) == "hero" and M.HasExtra(tile, "vsUsual")
-    and tile.scope == "run") or tile.arg ~= nil or M.HasSet(tile) or tile.who == "account" then return nil end
+    and tile.scope == "run") or M.ReadsPart(tile) or tile.who == "account" then return nil end
   local zone = HC:ZoneKey()
   local calc = M.TileCalc(tile)
   if calc == "recent" then calc = "perHour" end   -- past runs have no recent rate: their per hour
@@ -529,7 +529,7 @@ local function drawRow(w, board)
   elseif row.kind == "hero" then
     local st, v = drawReading(board, i, w.label, w.value)
     -- (HC-52) the recent rate at each of the last active minutes; until two are sampled, gains per minute
-    local vals = not st and tile.arg == nil and not M.HasSet(tile) and M.HasExtra(tile, "sparkline")
+    local vals = not st and not M.ReadsPart(tile) and M.HasExtra(tile, "sparkline")
       and (M.RecentSparkline(tile, board, SPARK_N, sparkBuf) or M.Sparkline(tile.reading, SPARK_N, 60, sparkBuf))
     w.spark:SetShown(vals and true or false)
     if vals then

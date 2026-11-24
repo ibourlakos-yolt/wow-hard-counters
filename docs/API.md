@@ -34,7 +34,7 @@ local today = HC:Query({ counter = "mypack:fish", grain = "day" }).total
 
 | Call | Notes |
 |---|---|
-| `HC:RegisterPack(name, { namespace, version, title })` → pack | Required before counters/sources. `hc` is reserved. The pack object has `:Log(level, fmt, ...)` (tagged `[Pack:<name>]`) and `:Count(name[, n])` (health counters in `/hc report`). |
+| `HC:RegisterPack(name, { namespace, version, title })` → pack | Required before counters/sources. `hc` is reserved (Hard Counters Basic, §4.2). The pack object has `:Log(level, fmt, ...)` (tagged `[Pack:<name>]`) and `:Count(name[, n])` (health counters in `/hc report`). |
 | `HC:RegisterCounter(def)` → id | LibGranaryDB fields (`id, version, kind, unit, measures, dimensions, aggregations, grains, retention, context, contextGrains, scope, maxGap, budget, onIncompatible`; see `../LibGranaryDB/docs/API.md` §3) plus Hard Counters fields below. Default grains: hour, day, week, resetweek, month, year, lifetime. May be called before Hard Counters has loaded its saved data: it attaches at `ADDON_LOADED`. |
 | `HC:RegisterSource(id, def)` → id | `mode = "event"` (`events`, `handler(event, ...)`), `"poll"` (`interval` ≥ 0.1 s, `read()`: the scheduler pauses it during loading screens), `"hook"` (`hook = "GlobalFunction"`, `handler(...)`, a secure post-hook). Handlers run isolated: an error is logged, counted and sent to BugSack; other handlers keep running. `feeds = { counterId, ... }`: the source runs only while one of those counters is active (§4.1; declare it). |
 | `HC:SetSourceInterval(id, seconds)` | Adaptive polling. |
@@ -44,7 +44,7 @@ local today = HC:Query({ counter = "mypack:fish", grain = "day" }).total
 | `HC:RegisterWindow(id, def)`, `HC:RegisterSlash(name, fn, help)` | A pack's windows and `/hc` subcommands; see §9. |
 
 **Hard Counters counter fields:** `title`, `category`, `icon`, `formatter` (`"money"`, `"duration"`, `"number"`,
-`"distance"`, `"speed"`, `"speedpct"`: as for readings, below),
+`"distance"`, `"speed"`, `"speedpct"`, `"seconds"`, `"decimal"`: as for readings, below),
 `capture = { mode, source }`, `accuracy` (`"exact"|"estimate"|"baseline"`),
 `feasibility = { status = "feasible"|"degraded"|"infeasible"|"unverified", note, ref }`,
 `runBreakdowns = { dim, ... }` (the counter's odometer keeps a total per member of these dimensions, so runs and
@@ -98,7 +98,8 @@ Every call is about the **logged-in character's** run: one open run per characte
 
 **Run readings:** see §5.1 (`HC:RegisterRunReading` was deleted by HC-49: `HC:RegisterReading` with
 `scopes = { "run" }`). `HC:RunReadings()` lists the readings that have a run
-scope, `HC:RunReading(id)` → value, text, settled is `HC:Reading(id, "run")` (nil when no run is open).
+scope (not hidden ones; a reading with a `param` only when its choice defaults to the whole total: `optional`, or a
+set with no `default`), `HC:RunReading(id)` → value, text, settled is `HC:Reading(id, "run")` (nil when no run is open).
 
 Totals are exact, with or without history: each active counter has an odometer (a running total per character,
 saved, kept across `/reload` and logout) and a run is a window over the odometers: what it banked at earlier
@@ -153,15 +154,29 @@ nil, nil, counterId). Players: `/hc track` lists trackers, `/hc track <n> on|off
 
 ## 4.2 Basics and attributors (HC-21)
 
-Hard Counters ships **Basics** (`HardCounters/Basics/Basics.lua`), written against this public API only: read it as
-the reference pack. Counters `hc:money.in` (`source`, `zone`), `hc:money.out` (`sink`, `zone`), `hc:money.owned`
-(stock), `hc:xp` (`source`, `zone`); trackers **Gold per hour** (`hc:goldph`: money in, out, owned) and **XP per
-hour** (`hc:xpph`), both on for a fresh install with history off; readings `hc:gold`, `hc:net`, `hc:xpgained` (total or
-per hour), `hc:owned`, `hc:ttl` (time to level, computed), `hc:rested` (rested XP, now), `hc:xplevel`, `hc:goldfrom`,
-`hc:spenton`; `hc:goldph`, `hc:netph`, `hc:xpph` are hidden aliases of the first three per hour (HC-51).
-Another pack's tracker may list Basics' counters (Farmer's Ledger lists the money counters and needs daily history).
+Hard Counters ships **Hard Counters Basic** (`HardCounters/Basics/Basics.lua`), written against this public API
+only: read it as the reference pack. It is a pack like the others for the player (pack lists, the New board dialog),
+always on, and keeps the `hc` namespace through a private call, so every id stays as it was. Counters `hc:money.in`
+(`source`, `zone`), `hc:money.out` (`sink`, `zone`), `hc:money.owned` (stock), `hc:xp` (`source`, `zone`); trackers
+**Gold** (`hc:goldph`: money in, out, owned) and **Experience** (`hc:xpph`), category "Basic", both on for a fresh
+install with history off and never marked *New*. Readings (2026-11-24):
 
-Basics measures money and XP as state diffs (`GetMoney`, `UnitXP`); their **source** is `"none"` ("Unknown")
+| Id | Title | Notes |
+|---|---|---|
+| `hc:gold` | Gold in | total or per hour ("Gold/h"); a set of sources, `param.dim = "source"` (loot, quest, vendor, ah, mail, trade, alts, other, none), default everything |
+| `hc:goldout` | Gold out | per hour "Gold out/h"; a set of sinks, `dim = "sink"` (repair, vendor, training, travel, ah, mail, trade, alts, other, none), default everything |
+| `hc:net` | Net gold | money in minus money out |
+| `hc:xpgained` | XP gained | per hour "XP/h"; a set of sources (kill, quest, other, none), default everything |
+| `hc:owned` | Gold owned | stock |
+| `hc:ttl`, `hc:rested`, `hc:xplevel` | Time to level, Rested XP, XP this level | computed |
+| `hc:level` | Level | `now` (`UnitLevel`) |
+
+Hidden, still readable: `hc:goldph`, `hc:netph`, `hc:xpph` (aliases of the first readings per hour, HC-51);
+`hc:goldfrom` ("Gold from %s", one source) and `hc:spenton` ("Spent on %s", one sink), folded into `hc:gold` and
+`hc:goldout` (`foldInto`, §5.1): `HC:Reading("hc:goldfrom", scope, "loot")` still answers.
+Another pack's tracker may list Basic's counters (Farmer's Ledger lists the money counters and needs daily history).
+
+Hard Counters Basic measures money and XP as state diffs (`GetMoney`, `UnitXP`); their **source** is `"none"` ("Unknown")
 unless a pack names it:
 
 | Call | Notes |
@@ -169,7 +184,7 @@ unless a pack names it:
 | `HC:SetAttributor(counterId, fn)` | `fn(amount, t, book)` is called at each change of `hc:money.in`, `hc:money.out` or `hc:xp` (`amount` > 0, `t` = `GetTime()`). Call `book(amount, source)` for all or part of it, now or later; whatever isn't booked within **5 s** is booked as `"none"`. `book` never counts more than it was handed. One attributor per counter (the last set wins; `nil` clears). An attributor that errors books the whole change as `"none"` |
 | `HC:GetAttributor(counterId)` | The function, or nil |
 
-Switching Gold or XP per hour back on takes a fresh reading: what changed while it was off is a gap, never a gain.
+Switching Gold or Experience back on takes a fresh reading: what changed while it was off is a gap, never a gain.
 
 ## 5.1 Readings (one number for boards, tooltips and windows; HC-17)
 
@@ -229,6 +244,10 @@ alias's calc when the alias is registered. Basics' `hc:goldph`, `hc:netph`, `hc:
 | `recentTitle` | The title shown with `recent` ("Time to level (current pace)"); default the rate title .. " recent" (HC-52) |
 | `per = "activeHour"` | Before HC-51: the default calc is `perHour` (and the only one without `rateTitle`, see above). Per hour is `nil` ("-") under one active minute; `settled` is false under 5 active minutes (the built-in displays grey it) |
 | `aliasOf`, `calc` | An alias of another reading, read with `calc` by default and hidden from the catalog (HC-51, see above) |
+| `hidden` | `true`: registered and readable (`HC:Reading`), but out of the catalog (`HC:Readings()` without `{ aliases = true }`, the + menu, the Trackers tab) and the run lists (2026-11-24). Implied by `foldInto` and `unitOf` |
+| `foldInto`, `foldArg` | `foldInto = "<reading id>"`: this reading was merged into that one (2026-11-24). It is hidden; saved tiles and preset tiles on it move to the target, keeping their calc, display, size and name. `foldArg`: `"same"` (the argument carries over: "%s looted" with an item → "Items looted" with that item), `"set"` (it becomes a one-member set of a `multi` target: "Gold from %s" with `loot` → "Gold in" with `{ "loot" }`), or nil (dropped). The old id keeps answering `HC:Reading` |
+| `unitOf`, `unitLabel` | `unitOf = "<reading id>"`: a unit twin, the same value in other units (Traveler's speeds in yd/s and % of run speed). It is hidden; a tile on either has **Units** in its menu, listing the main reading and its twins by `unitLabel` (default their titles), and switching keeps everything else about the tile. Give the main reading a `unitLabel` too ("yd/s") |
+| `pickTitle` | The list name of a reading that needs a member picked, shown until one is ("In bags: pick an item"; default the title with "..." for `%s`) |
 | `scopes` | Any of `run`, `session`, `today`, `week` (the player's week choice), `month`, `year`, `lifetime`, `now`. Default `{ "run", "session" }`. `login` was renamed `session` by HC-49 (2026-11-19), with no alias: a pack listing `login` gets an error |
 | `best` | The run's best single value (from the counter's `runLive.max`); run scope only |
 | `target` | A natural target for the value: a number, or `function(arg) return n end` (XP to level, the next standing). `HC:ReadingTarget(id[, arg])` reads it. The `bar` and `gauge` displays draw the value toward it, for the `total` calc only (XP to level is no per-hour goal); a tile may set its own, for any calc (DESIGN §16.6) |
@@ -236,8 +255,8 @@ alias's calc when the alias is registered. Basics' `hc:goldph`, `hc:netph`, `hc:
 | `applies` | `function() return bool end` (HC-28): is the reading used by this character (class, talents, level)? Asked at every read. When false the reading has no value (state `"inapplicable"`, text "n/a"), and the + menu and the Trackers window list it last, under "Not used by this character". A rule that errors counts as `readingErrors` and leaves the reading listed. `HC:ReadingApplies(id)`; copies carry `applies` (evaluated now) |
 | `stale` | `function(arg) return isStale, word end` (HC-28): the value is the last one read, not the current one (a stat that is secret in combat). The value is still returned, with state `"stale"` and `word` as a fifth return ("in combat"); tiles show it greyed with the word after the title. Asked only when there is a value. The pack keeps the last value itself (a `compute` returns it); a stock's `now` is its last observation anyway |
 | `live` | `function(arg) return <the game's value> end` (CS-9, check `HC:Supports("livePassThrough")`): for a reading that goes `stale` because the game keeps the value secret, the raw value. Boards hand it straight to a plain tile's font string (`SetFormattedText(format, value)`) while the reading is stale, so the tile stays live in combat with no mark; bars, gauges, account tiles and other scopes keep the stale value. `liveFormat` (default `"%.1f%%"` for `percent`, `"%.0f"` for `number`; none for money and durations: no thousands separators either way). `HC:ReadingLive(id[, arg])` → value, format for a pack's own display: pass both to a widget and do nothing else with the value. `HC:Reading` never returns it |
-| `param` | `{ dim = "faction", type = "enum"\|"zone"\|"item"\|"faction", label = function(member) return text end }`: the reading shows **one member** of that dimension, chosen by whoever asks: `HC:Reading(id, scope, arg)`, or the tile's `arg` (DESIGN §16.4). Put `%s` in `title` for the member's label ("%s rep"). `minus` reads the same member; `per = "activeHour"` divides by all active time, or by the time in that zone when `dim = "zone"`. A `compute` gets the argument as its third parameter. v1: sums only. **A set instead of one member (HC-60):** `multi = true` (an `enum` parameter of a small dimension), with optional `members = { ... }` (the checklist the tile's menu offers, in this order; else the members counted so far), `presets = { { name = "On foot", members = { ... } }, ... }` and `default` (a preset's name or a list; absent: everything). The reading reads the sum of the set: pass it as `HC:Reading(id, scope, { arg = { "walk", "run" } })` (never as a bare third argument: a table there is the options); no set means the default, no default means the counter's whole total. No member is picked before adding it. A `compute` with the same `param` gets the set and passes it to the readings it `get`s (a filtered ratio). Recent and Trend are not offered for a set (DESIGN §16.4 "As built (HC-60)") |
-| `formatter` | `"money"`, `"duration"`, `"number"`, `"percent"`, `"distance"` (yards: "1,234 yd"), `"speed"` (yards a second: "7.0 yd/s"), `"speedpct"` (a value in yards a second shown as a percentage of the 100% run speed, 7 yd/s, the character sheet's convention: 8.05 reads "115%"; a tile's target is typed as a percentage). For a speed in both forms, register two readings on the same value. Per-hour readings get "/h". Live pass-through formats: `"%.0f yd"` for distance, `"%.1f yd/s"` for speed, none for speedpct (TR-10) |
+| `param` | `{ dim = "faction", type = "enum"\|"zone"\|"item"\|"faction"\|"skill", label = function(member) return text end }`: the reading shows **one member** of that dimension, chosen by whoever asks: `HC:Reading(id, scope, arg)`, or the tile's `arg` (DESIGN §16.4). Put `%s` in `title` for the member's label ("%s rep"). `minus` reads the same member; `per = "activeHour"` divides by all active time, or by the time in that zone when `dim = "zone"`. A `compute` gets the argument as its third parameter. v1: sums only. **One member or none (2026-11-24):** `optional = true` (not with `multi`): no member reads the counter's whole total (a `compute` gets `nil`), under the plain title, or `anyTitle` when the plain title isn't it ("Spell damage (best school)"); the picker's first entry is "Any" (`anyLabel`, e.g. "Any item"); the reading is added without a pick and never reads `noarg`. **A fixed list:** `members = { ... }` on a single `enum` (no `multi`): the picker offers those, in that order, instead of the members counted so far (a spell school). **A skill line (HC-71):** `type = "skill"`, the member is the skill line id; the picker lists the character's skill lines under the skill panel's headers (lines under a header the player collapsed aren't listed), and `filter = function(line) return bool end` (`line = { id, name, group }`, skill readings only) narrows it; labels come from the game by id. **A set instead of one member (HC-60):** `multi = true` (an `enum` parameter of a small dimension), with optional `members = { ... }` (the checklist the tile's menu offers, in this order; else the members counted so far), `presets = { { name = "On foot", members = { ... } }, ... }` and `default` (a preset's name or a list; absent: everything). The reading reads the sum of the set: pass it as `HC:Reading(id, scope, { arg = { "walk", "run" } })` (never as a bare third argument: a table there is the options); no set means the default, no default means the counter's whole total. No member is picked before adding it. A `compute` with the same `param` gets the set and passes it to the readings it `get`s (a filtered ratio). Recent and Trend are not offered for a set of some members (DESIGN §16.4 "As built (HC-60)"); a set reading reading everything, or an optional reading with no member, is the whole counter and keeps them (2026-11-24) |
+| `formatter` | `"money"`, `"duration"`, `"number"`, `"percent"`, `"distance"` (yards: "1,234 yd"), `"speed"` (yards a second: "7.0 yd/s"), `"speedpct"` (a value in yards a second shown as a percentage of the 100% run speed, 7 yd/s, the character sheet's convention: 8.05 reads "115%"; a tile's target is typed as a percentage), `"seconds"` (two decimals: "2.60 s", a weapon's speed), `"decimal"` (one decimal: "45.3", a weapon's DPS, an average item level). For a speed in both forms, register two readings on the same value, the second with `unitOf` (above). Per-hour readings get "/h". Live pass-through formats: `"%.0f yd"` for distance, `"%.1f yd/s"` for speed, `"%.2f s"` for seconds, `"%.1f"` for decimal, none for speedpct (TR-10) |
 | `tracker`, `title`, `description`, `headline`, `order` | `description` is one line shown in tooltips and the Trackers window: say what the number counts |
 
 | Scope | Where the number comes from | Needs history |
@@ -266,9 +285,13 @@ open run knows every member of its `runLive` dimension. Storage scopes ask by `f
 **Pickers (HC-34):** `param.type` chooses how the player picks the member, with no code from the pack. `"item"`:
 an item dragged from the bags onto a board (the member is its numeric item id), or one of the last 20 members
 written to that dimension of the reading's `counter`; `"faction"`: the game's reputation list (the member is the
-faction id); `"enum"` and `"zone"`: the members counted so far. A `compute` reading with `param` can name a
-`counter` only to supply that list (Farmer's "%s in bags"). Key such dimensions by item id and faction id, and
-give `param.label` so tiles show names. `HC:GetReading(id)`, `HC:Readings({ scope, tracker })` return copies.
+faction id); `"enum"` and `"zone"`: the members counted so far, or the reading's own `param.members` in their
+order; `"skill"` (HC-71, 2026-11-24): the character's skill lines from the game (`C_SkillInfo`), narrowed by
+`param.filter`. An `optional` reading's picker starts with "Any" (no member). A `compute` reading with `param` can
+name a `counter` only to supply that list (Farmer's "In bags: %s"). Key such dimensions by item id and faction id,
+and give `param.label` so tiles show names. `HC:GetReading(id)`, `HC:Readings({ scope, tracker })` return copies;
+since 2026-11-24 they carry `hidden`, `foldInto`, `unitOf`, `unitLabel` and `param.optional`.
+`HC:Readings({ aliases = true })` includes aliases and hidden readings.
 Run, session and now are allocation-free apart from the text; storage scopes run one small query on open buckets.
 
 ## 6. Callbacks
@@ -295,14 +318,20 @@ survives `/reload`), `HC:IsActive()`, `HC:FormatMoney(c)`, `HC:FormatDuration(s)
 `HC:Phases()`, `HC:CurrentPhase()`, `HC:ToggleRunPanel()`, `HC:ToggleRunList()`.
 
 **Board presets (packs, 2026-11-19).** `HC:RegisterBoardPreset(key, def)` (check `HC:Supports("boardPresets")`): `key`
-namespaced (`"hcstats:caster"`), `def = { name, mini, tiles = { { reading, scope, calc, display, size, extras, arg },
-... } }` (HC-51, DESIGN §16.9): `scope` defaults to `"run"`, the board's timer; `calc` to the reading's default;
+namespaced (`"hcstats:caster"`), `def = { name, mini, category, class, tip, tiles = { { reading, scope, calc, display,
+size, extras, arg }, ... } }` (HC-51, DESIGN §16.9): `scope` defaults to `"run"`, the board's timer; `calc` to the reading's default;
 `display` (`"number"`, `"bar"`, `"gauge"`, `"odometer"` for a count or distance total, `"mix"` for a reading with a small `enum` parameter: HC-63) to `"number"`; `size` (`"large"`, `"half"`, `"line"`) to `"line"`; a large
 number gets `extras = { sparkline = true, vsUsual = true }` unless the tile lists its own (`{ "sparkline" }`). Bars and
 gauges are drawn as lines whatever the size. A tile's `style` of before HC-51 is still read: hero = large number with
 both extras, grid = half number, row = line number, bar = line bar, gauge = line gauge. A tile naming an alias
-(`hc:goldph`) is made on its target with the alias's calc. Offered in the New board dialog and the Boards tab under your pack's title (after Hard Counters' own), and as
-`/hc board new <key>`; tiles whose reading isn't registered are left out when a board is made.
+(`hc:goldph`) is made on its target with the alias's calc, and one naming a folded reading (`foldInto`) on the
+reading it was merged into. **Categories (HC-57, 2026-11-24):** `category` is one of `"activity"`, `"role"`,
+`"class"` (a list Hard Counters owns; anything else is an error); a class board also names its class, `class =
+"MAGE"` (the class file name; required with `"class"`, an error without it); `tip` is a line shown when the preset is
+hovered. The New board dialog, the Boards tab and the New board menu group the presets: **Activity**, **Roles**,
+**Your class** (the board whose `class` is this character's), **Other classes** (a submenu), then presets with no
+category under their pack's title, then **Your presets**. Also `/hc board new <key>`; tiles whose reading isn't
+registered are left out when a board is made.
 
 **Your characters and account-wide values (FM-16).** `HC:IsOwnCharacter(name)`: true for a character of this account
 that has loaded Hard Counters ("Name" on this realm, or "Name-Realm" with the realm's spaces dropped, as mail
@@ -329,8 +358,10 @@ Hard Counters owns the window chrome, so every pack window behaves the same: Bli
 close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, raise on click, Escape, BlizzMove
 (Ctrl+mouse wheel scales it when BlizzMove is installed), and its position and scale saved per profile. Every
 window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). A
-pack's window is an **icon tab down the window's right edge** (since 0.2.1; Hard Counters' own tabs run along the
-bottom): give it an `icon`, and its `title` is the tab's tooltip. A column too long for the window scrolls.
+pack's window is a **tab along the bottom** of the window, with Diagnostics last (since 2026-11-24; in 0.2.1 and
+0.2.2 it was an icon tab down the right edge, where Hard Counters' own Overview, Boards, Trackers and Runs are now).
+Give it an `icon` and a `title`: the player's Tab labels option shows the icon, the title or both, and an icon-only
+tab shows the title as its tooltip. The frame's title names the open tab ("Hard Counters: Ledger").
 
 The shared window is not resizable and is one size for every tab: a design size of 780 × 640 (the body inside is
 about 762 × 568), wider only when a tab's `minWidth` needs more, capped at the screen. A tab whose `minHeight` (or
@@ -341,7 +372,7 @@ width makes the panel wider for every tab, a large height makes yours scroll. On
 
 | Call | Notes |
 |---|---|
-| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's tooltip), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
+| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's label or tooltip, and the frame's title while it is open), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
 | `HC:ShowWindow(id[, show])` | `show` nil toggles. A tab is shown by opening the shared frame on it. |
 | `HC:ToggleWindow(id)`, `HC:IsWindowShown(id)` | Shown = on screen (a tab counts only while it is the selected one). |
 | `HC:RelayoutWindow(id)` | Re-reads `minSize()` / `fixedHeight()` after the content changed shape. |

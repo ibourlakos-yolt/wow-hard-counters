@@ -1,7 +1,7 @@
 # WoW API used by Hard Counters and Farmer (HC-5)
 
 What the code actually calls, per file group. **Source of truth:** the `read_globals` lists in `.luacheckrc` here and
-in `packs/Farmer/.luacheckrc`; lint fails on any game global not listed. When you add one there, add it here.
+in each pack's (`packs/Farmer/.luacheckrc`, `packs/CharacterStats/.luacheckrc`, ...); lint fails on any game global not listed. When you add one there, add it here.
 Behaviour verdicts live in [`api-surface.md`](api-surface.md); this file is the inventory.
 Status: first in-game run read 2026-11-14 (outdoors only): Farmer's events and strings behave as expected, except
 `MAIL_CLOSED`, which never fires; run 2's first session added dungeons (chat lines arrive). Verdicts per call are in [`api-surface.md`](api-surface.md). The LibGranaryDB adapter's own calls are verified: see
@@ -28,6 +28,8 @@ Status: first in-game run read 2026-11-14 (outdoors only): Farmer's events and s
 | `GetCursorInfo`, `ClearCursor` | the item the cursor carries, dropped on a board (HC-34; ✅ probed 2026-11-18: `"item"`, id, link) |
 | `C_Reputation.GetNumFactions`, `C_Reputation.GetFactionDataByIndex` | the faction picker's list (HC-34; ✅ probed 2026-11-18) |
 | `C_Item.GetItemInfoInstant` (with a name) | an item name typed in "Other..." becomes its id (HC-47; ❓ on Forever, and only for items the client has seen) |
+| `C_SkillInfo.GetNumSkillLines`, `C_SkillInfo.GetSkillLineInfo`, `C_SkillInfo.GetSkillLineInfoByID` | the skill picker (`param.type = "skill"`, HC-71, 2026-11-24): the character's skill lines under their headers, and a line's name by id (✅ the functions exist and return line tables, CS-8 probe 2026-11-19; the picker's list itself ❓ until seen in game) |
+| `UnitClass("player")` (class file name) | the New board dialog lists this character's class board first (HC-57, 2026-11-24) |
 | `CreateFrame` (`Core/Events.lua`) | the one event frame |
 | Events | `ADDON_LOADED`, `PLAYER_ENTERING_WORLD` (login vs reload), `PLAYER_LOGOUT`, `LOADING_SCREEN_ENABLED/DISABLED`, `PLAYER_FLAGS_CHANGED`, `ZONE_CHANGED`, `ZONE_CHANGED_NEW_AREA`, `ZONE_CHANGED_INDOORS` |
 
@@ -83,10 +85,10 @@ right-click menu opens at the cursor.
 | API | Used for |
 |---|---|
 | `GetMoney` | the money truth (diff), gold owned |
-| `UnitXP`, `UnitXPMax`, `UnitLevel` | the XP truth (diff across one level-up); time to level |
+| `UnitXP`, `UnitXPMax`, `UnitLevel` | the XP truth (diff across one level-up); time to level; the Level reading (`hc:level`, 2026-11-24) |
 | `GetXPExhaustion` | rested XP (probed in the Probes tab since v2 M0) |
 | `GetTime`, `C_Timer.After` | the attributor timeout (5 s) |
-| Events | `PLAYER_MONEY`, `PLAYER_XP_UPDATE`, `PLAYER_ENTERING_WORLD` (through `RegisterSource`) |
+| Events | `PLAYER_MONEY`, `PLAYER_XP_UPDATE`, `PLAYER_ENTERING_WORLD` (through `RegisterSource`); `PLAYER_LEVEL_UP` (the Level reading's `refresh`) |
 
 ## Farmer (`packs/Farmer/HardCounters_Farmer/`)
 
@@ -104,3 +106,21 @@ right-click menu opens at the cursor.
 | Hooks | `RepairAllItems`, `TakeInboxMoney`, `AutoLootMailItem`, `SendMail` (post-hooks through `RegisterSource`) |
 | Events | `PLAYER_MONEY`, `CHAT_MSG_MONEY`, `CHAT_MSG_LOOT`, `GET_ITEM_INFO_RECEIVED`, `PLAYER_XP_UPDATE`, `CHAT_MSG_COMBAT_XP_GAIN`, `QUEST_TURNED_IN`, `CHAT_MSG_COMBAT_FACTION_CHANGE`, `PLAYER_ENTERING_WORLD`, `PLAYER_INTERACTION_MANAGER_FRAME_SHOW/HIDE` (with `Enum.PlayerInteractionType`), `MERCHANT_SHOW/CLOSED`, `MAIL_SHOW/CLOSED`, `AUCTION_HOUSE_SHOW/CLOSED`, `TRAINER_SHOW/CLOSED`, `TAXIMAP_OPENED/CLOSED`, `TRADE_SHOW/CLOSED` |
 | UI | `CreateFrame` (the Ledger's content; Hard Counters hosts the window), `SlashCmdList` (the `/hcf` alias) |
+
+## Character Stats (`packs/CharacterStats/HardCounters_CharacterStats/`)
+
+The calls added on 2026-11-24 (the pack's full list is the `read_globals` in `packs/CharacterStats/.luacheckrc`; the
+earlier ones are not inventoried here yet). Each is guarded: a missing call gives no value. ✅ means it exists and
+returns numbers out of combat in Diagnostics' CS-1 probes on Forever (2026-11-24); in combat a stat comes back
+secret and the reading shows its last value (Character Stats DESIGN §5).
+
+| API | Used for |
+|---|---|
+| `UnitDamage("player")` | Main-hand and Off-hand DPS: the average of the damage range over the speed (✅) |
+| `UnitAttackSpeed("player")` | Main-hand and Off-hand speed, and the DPS above (✅) |
+| `UnitRangedDamage("player")` | Ranged DPS and Ranged speed (✅) |
+| `GetSpellPenetration` | Spell penetration (✅) |
+| `UnitResistance("player", school)` | Resistance, one school picked (2 fire, 3 nature, 4 frost, 5 shadow, 6 arcane), the buffed total (✅; never secret, CS-1 run 3) |
+| `GetInventoryItemDurability(slot)` | Lowest durability: slots 1 to 18, the lowest current / max in % (✅) |
+| `GetAverageItemLevel` | Average item level: the equipped value, else the overall one (✅; never secret, CS-1 run 3) |
+| Events | `UNIT_RANGEDDAMAGE`, `UPDATE_INVENTORY_DURABILITY` (refresh, with the pack's earlier stat events) |

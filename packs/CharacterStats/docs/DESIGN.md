@@ -1,6 +1,7 @@
 # Hard Counters: Character Stats — design document
 
-> **Status:** concept (2026-11-15). Nothing built. Asked for by the user on 2026-11-15 as a new pack "for a detailed
+> **Status:** phase 1 built (2026-11-19, live readings; more stats, resistances, gear and role and class boards
+> 2026-11-24, §8). The concept below dates from 2026-11-15. Asked for by the user on 2026-11-15 as a new pack "for a detailed
 > collection of character stats tracking", to be **really detailed**, in the spirit of the "Forever Extended Character
 > Stats" addon (§2.1).
 >
@@ -70,13 +71,13 @@ Sources: [Forever Extended Character Stats](https://www.curseforge.com/wow/addon
 Every row is a reading the player can put on a board. **Source:** *API* = read directly; *derived* = computed from
 API values with a formula (an estimate until the formula is verified on Forever, CS-7; labelled "≈" per the
 feasibility policy). Derived values are **never stored**: history keeps the API values they come from, so a
-corrected formula fixes the past too.
+corrected formula fixes the past too. **Built** in a row means it is a reading now (§8, with the reading's name).
 
 ### 3.1 General
 
 | Stat | Source |
 |---|---|
-| Level, movement speed (% of run speed) | API (`UnitLevel`, `GetUnitSpeed`) |
+| Level, movement speed (% of run speed) | API (`UnitLevel`, `GetUnitSpeed`). Not in this pack: Level is Hard Counters Basic's (`hc:level`, 2026-11-24), movement speed Traveler's Speed now |
 | Max health, max mana / rage / energy | API (`UnitHealthMax`, `UnitPowerMax`) |
 | Health regeneration out of combat | derived (spirit) |
 
@@ -91,11 +92,11 @@ corrected formula fixes the past too.
 | Stat | Source |
 |---|---|
 | Attack power (base, bonus) | API (`UnitAttackPower`) |
-| Damage range and DPS, main hand and off hand | API (`UnitDamage`) |
-| Attack speed, main hand and off hand (off hand only when dual-wielding) | API (`UnitAttackSpeed`) |
-| Weapon skill, main hand and off hand | **no source:** `UnitAttackBothHands` (CS-1) and the skill-line API (CS-8) are absent on Forever; §9.6 |
-| Crit chance | API (`GetCritChance`) |
-| Hit bonus | API (`GetHitModifier`) |
+| Damage range and DPS, main hand and off hand | API (`UnitDamage`). **Built** 2026-11-24: Main-hand DPS, Off-hand DPS (the range's average ÷ speed; the range itself isn't shown) |
+| Attack speed, main hand and off hand (off hand only when dual-wielding) | API (`UnitAttackSpeed`). **Built** 2026-11-24: Main-hand speed, Off-hand speed |
+| Weapon skill, main hand and off hand | ~~no source~~ API (`C_SkillInfo`, CS-8 answered 2026-11-19; §9.6). **Built:** Main-hand skill, Off-hand skill (2026-11-19); Weapon skill: pick a skill, any weapon skill or Defense (CS-13, 2026-11-24). A fist weapon reads Unarmed when there is no Fist Weapons line (CS-12) |
+| Crit chance | API (`GetCritChance`). **Built:** Melee crit |
+| Hit bonus | API (`GetHitModifier`). **Built:** Hit (melee and ranged) |
 | Miss chance vs same level, vs boss (level + 3); dual-wield penalty applied | derived (hit bonus, weapon skill) |
 | Glancing blow chance and damage, vs same level and vs boss | derived (weapon skill) |
 | Dodge and parry chance of the target, vs boss | derived (weapon skill) |
@@ -107,8 +108,8 @@ corrected formula fixes the past too.
 | Stat | Source |
 |---|---|
 | Ranged attack power | API (`UnitRangedAttackPower`) |
-| Damage range, DPS, speed | API (`UnitRangedDamage`) |
-| Ranged weapon skill | **no source** (CS-8); §9.6 |
+| Damage range, DPS, speed | API (`UnitRangedDamage`). **Built** 2026-11-24: Ranged DPS, Ranged speed |
+| Ranged weapon skill | ~~no source~~ API (`C_SkillInfo`, CS-8); §9.6. **Built:** Ranged skill (2026-11-19) |
 | Crit chance | API (`GetRangedCritChance`) |
 | Hit bonus | API (`GetHitModifier`; ranged-specific if Forever splits it) |
 | Miss chance vs same level, vs boss; hit cap vs boss | derived |
@@ -118,16 +119,16 @@ corrected formula fixes the past too.
 | Stat | Source |
 |---|---|
 | Base spell damage, bonus healing | API (`GetSpellBonusDamage`, `GetSpellBonusHealing`) |
-| **Per school** (arcane, fire, frost, holy, nature, shadow, and physical where it applies): damage bonus, crit chance | API (`GetSpellBonusDamage(school)`, `GetSpellCritChance(school)`) |
+| **Per school** (arcane, fire, frost, holy, nature, shadow, and physical where it applies): damage bonus, crit chance | API (`GetSpellBonusDamage(school)`, `GetSpellCritChance(school)`). **Built** 2026-11-24: Spell damage and Spell crit take an optional school (the six, not physical); none is the best school |
 | Spell hit bonus (global, and per school if talents differ) | API (`GetSpellHitModifier`) |
 | Miss chance per school vs same level, vs boss; spell hit cap vs boss | derived |
-| Spell penetration, haste (only if the API returns them) | API (`GetSpellPenetration`, `UnitSpellHaste`) |
+| Spell penetration, haste (only if the API returns them) | API (`GetSpellPenetration`, `UnitSpellHaste`). **Built** 2026-11-24: Spell penetration (casters, when the call exists); haste not |
 
 ### 3.6 Regeneration (mana users)
 
 | Stat | Source |
 |---|---|
-| Mana regen while casting and not casting | API (`GetManaRegen`) |
+| Mana regen while casting and not casting | API (`GetManaRegen`). **Built:** Mana regen (casting), Mana regen (not casting) |
 | MP5 from gear, from spirit, from buffs | derived (gear from item stats or the API split; spirit from the formula) |
 | Five-second-rule state (live) | derived from `UNIT_SPELLCAST_SUCCEEDED`, live only |
 
@@ -135,9 +136,9 @@ corrected formula fixes the past too.
 
 | Stat | Source |
 |---|---|
-| Armour; physical damage reduction vs same level and vs boss | API (`UnitArmor`); reduction derived |
-| Defence skill | **no source:** `UnitDefense` (CS-1) and the skill-line API (CS-8) are absent on Forever; §9.6 |
-| Dodge, parry, block chance (parry and block only for classes that can) | API (`GetDodgeChance`, `GetParryChance`, `GetBlockChance`) |
+| Armour; physical damage reduction vs same level and vs boss | API (`UnitArmor`); reduction derived. **Built:** Armor |
+| Defence skill | ~~no source~~ API (`C_SkillInfo`, CS-8); §9.6. **Built:** Defense (2026-11-19) |
+| Dodge, parry, block chance (parry and block only for classes that can) | API (`GetDodgeChance`, `GetParryChance`, `GetBlockChance`). **Built:** Dodge, Parry, Block chance |
 | Block value | API (`GetShieldBlock`) |
 | Crit reduction (melee, ranged, spell); **crit immune vs boss: yes / short by x defence** | derived (defence) |
 | Avoidance total, vs same level and vs boss; enemy miss chance, vs same level and vs boss | derived |
@@ -147,15 +148,15 @@ corrected formula fixes the past too.
 
 | Stat | Source |
 |---|---|
-| Fire, frost, nature, shadow, arcane: base and buffed | API (`UnitResistance`) |
+| Fire, frost, nature, shadow, arcane: base and buffed | API (`UnitResistance`). **Built** 2026-11-24 (CS-14): one reading, Resistance, the school picked on the tile; the buffed total only |
 | Average resist % vs same level and vs boss, per school | derived |
 
 ### 3.9 Gear
 
 | Stat | Source |
 |---|---|
-| Average item level (equipped), if Forever returns it | API (`GetAverageItemLevel`) |
-| Lowest durability % and the slot | API (`GetInventoryItemDurability`) |
+| Average item level (equipped), if Forever returns it | API (`GetAverageItemLevel`). **Built** 2026-11-24: Average item level (equipped, else overall) |
+| Lowest durability % and the slot | API (`GetInventoryItemDurability`). **Built** 2026-11-24: Lowest durability, in %; the slot isn't named yet |
 | Set pieces worn per set (tooltip-free where the API allows) | API, later |
 
 ### 3.10 What applies to whom
@@ -169,15 +170,15 @@ free: a stat is shown where the player puts it (boards) and in the pack's own wi
 
 ## 4. Trackers and counters
 
-| Tracker | Catalog sections | Default |
-|---|---|---|
-| **Attributes** | 3.1 (health, power, level), 3.2 | off (*New*) |
-| **Melee** | 3.3 | off |
-| **Ranged** | 3.4 | off |
-| **Spell** | 3.5, 3.6 | off |
-| **Defence** | 3.7 | off |
-| **Resistances** | 3.8 | off |
-| **Gear** | 3.9 | off |
+| Tracker | Catalog sections | Default | Built (live readings, §8) |
+|---|---|---|---|
+| **Attributes** | 3.1 (health, power, level), 3.2 | off (*New*) | 2026-11-19 (no level: Hard Counters Basic has it) |
+| **Melee** | 3.3 | off | 2026-11-19; weapon DPS, speed and Weapon skill: pick a skill 2026-11-24 |
+| **Ranged** | 3.4 | off | 2026-11-19; DPS and speed 2026-11-24 |
+| **Spell** | 3.5, 3.6 | off | 2026-11-19; by school and spell penetration 2026-11-24 |
+| **Defense** (id `hcstats:defence`; shown "Defence" until 2026-11-24) | 3.7 | off | 2026-11-19 |
+| **Resistances** (`hcstats:resist`) | 3.8 | off | 2026-11-24: Resistance, one school picked |
+| **Gear** (`hcstats:gear`) | 3.9 | off | 2026-11-24: Lowest durability, Average item level |
 
 ### 4.1 One stock counter per API stat (decided 2026-11-18)
 
@@ -272,7 +273,25 @@ stat is one small stock (one tuple per level per bucket), far below the root bud
   school, spell crit, spell hit and miss vs boss, mana regen while casting), *Melee* (attack power, crit, hit and
   miss vs boss, glancing, speed), *Hunter* (ranged equivalents), *Tank* (armour reduction vs boss, defence and crit
   immunity, dodge, parry, block, avoidance vs boss).
-- **A Character Stats window** (an icon tab down the right edge of the Hard Counters window, since HC-69): the full catalog grouped as §3, values
+- **Built 2026-11-24: role and class boards** (the user; Hard Counters HC-57). Offered under New board, grouped by
+  category; no derived rows (CS-7), so a tank board shows Defense as a bar toward its cap, not "crit immune". The
+  first tile of each is large.
+  - **Roles** (`category = "role"`): Tank (physical) `hcstats:tank`: Armor, Defense, Dodge, Parry, Block chance,
+    Block value, Max health. Tank (spell) `hcstats:spelltank`: Max health, a Resistance tile per school, Stamina,
+    Armor. Melee DPS `hcstats:melee`: Attack power, Melee crit, Hit, Main-hand DPS and speed, Strength, Agility,
+    Main-hand skill. Ranged DPS `hcstats:ranged`: Ranged attack power, Ranged crit, Hit, Ranged DPS, Agility, Ranged
+    speed, Ranged skill. Caster DPS `hcstats:caster`: Spell damage, Spell crit, Spell hit, Intellect, Spell
+    penetration, Mana regen (casting), Max mana. Healer (direct) `hcstats:healdirect`: Bonus healing, Spell crit,
+    Intellect, Max mana, Mana regen (casting). Healer (over time) `hcstats:healhot`: Bonus healing, Spirit, both
+    Mana regens, Max mana, Intellect (heals over time don't crit; long fights reward mana).
+  - **Classes** (`category = "class"`, with the class): one board per class, `hcstats:warrior` to `hcstats:druid`,
+    covering the stats of the class's usual roles; Priest and Warlock read Spell damage for Shadow, Shaman and Druid
+    for Nature. Their tip says a role board fits better while playing one role. The New board dialog lists your
+    class's board under "Your class" and the other eight under "Other classes".
+  - **Old keys stay** (boards remember the preset they came from): Tank, Melee and Caster are now Tank (physical),
+    Melee DPS and Caster DPS; `hcstats:hunter` is the Hunter class board.
+- **A Character Stats window** (an icon tab down the right edge of the Hard Counters window, since HC-69; a tab
+  along the bottom since 2026-11-24): the full catalog grouped as §3, values
   coloured against thresholds (hit cap, crit immunity), with each row's description as its tooltip. Phase 2 can
   anchor it to the Character window like the reference addons; it isn't the selling point.
 - **Display rules:** units shown (%, rating, skill), "≈" on derived values, an arrow for change since login, grey in
@@ -336,13 +355,47 @@ history keeps API values only.
   value (stale) only on a secret. Unprobed: whether the equipped item id or its subclass turn secret in combat (the
   weapon rows would then read "n/a" mid-fight). A line under a collapsed header isn't found when the client has no
   by-id call.
-- Not built: derived rows (CS-7), resistances and gear trackers, upgrade deltas, thresholds.
+- Not built: derived rows (CS-7), resistances and gear trackers (built 2026-11-24, below), upgrade deltas,
+  thresholds.
+
+**As built (2026-11-24; not seen in game).** The user asked for the stats still missing, role and class boards, and
+names that say what each number is. Now 38 `now` readings in seven trackers.
+
+- **New readings**, live only like the rest, each guarded (a missing call gives no value):
+  - Melee: **Main-hand DPS**, **Main-hand speed**, **Off-hand DPS**, **Off-hand speed** (the off hand only with a
+    weapon there). DPS is the average of `UnitDamage`'s range ÷ `UnitAttackSpeed`, attack power and buffs included
+    as the game reports them. Hard Counters' formatters `decimal` ("45.3") and `seconds` ("2.60 s").
+  - Melee: **Weapon skill: pick a skill** (CS-13), on Hard Counters' skill picker (HC-71), narrowed to the weapon
+    skills and Defense: rank + modifier, the line's cap as the target. It needs a pick, so it has no row in the
+    window.
+  - Ranged: **Ranged DPS**, **Ranged speed** (`UnitRangedDamage`), with a ranged weapon equipped.
+  - Spell: **Spell penetration** (`GetSpellPenetration`), for casters when the call exists.
+  - Resistances (new tracker): **Resistance**, one reading with the school picked on the tile (fire, frost, nature,
+    shadow, arcane; CS-14): `UnitResistance`'s buffed total. Until a school is picked its list name is "Resistance:
+    pick a school"; the window shows one row per school.
+  - Gear (new tracker): **Lowest durability** (the worn item that breaks first, in %) and **Average item level**
+    (equipped, else overall; only when the call exists).
+- **Spell damage and Spell crit** take an optional school (the six as a fixed list): none is the best school, as
+  before, shown as "Spell damage (best school)"; with one, "Spell damage: Fire".
+- **Names** (titles only; ids unchanged): Melee crit (was Crit), Hit (melee and ranged), Mana regen (not casting),
+  Mana regen (casting), Armor, Block chance. The tracker shows as **Defense**; its id stays `hcstats:defence`.
+- **CS-12:** a fist weapon reads the Unarmed skill when the character has no Fist Weapons line (seen on the
+  character sheet); a client that has the line keeps it.
+- **In combat:** the new single-value stats declare `live` (weapon and ranged speed, spell penetration, a
+  resistance, spell damage and crit for one school), so a plain tile stays live. DPS, the best school, durability and
+  item level need arithmetic or a loop and keep the last value read out of combat.
+- **Probes:** every new call answered in Diagnostics' CS-1 probes on Forever (2026-11-24): it exists and returns
+  numbers out of combat.
+- **Presets:** seven role boards and nine class boards (§6).
+- **The window** asks for the height of the rows this character uses (and again when a section is turned on), so it
+  no longer scrolls for rows it doesn't show.
+- Specs: `tests/stats_spec.lua`.
 
 **Phase 2: counters, history and records,** when a player wants history for a stat: one stock counter per API stat
 (§4.1), the `level` dimension, `login` (now "session", HC-49) min and max (HC-27), records of buffed maxima with
 context (HC-26), upgrade deltas as a tile.
 
-Later: Ranged, Resistances and Gear trackers; the `form` dimension; the upgrade log; progression charts (Hard
+Later: the `form` dimension; the upgrade log; progression charts (Hard
 Counters' chart display, HC-12, parked); anchoring the window to the Character pane.
 
 ## 9. Open questions

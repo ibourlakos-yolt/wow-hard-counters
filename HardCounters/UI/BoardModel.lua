@@ -1858,6 +1858,14 @@ end
 -- (nil: the reading's default). Small dimensions only.
 ---------------------------------------------------------------------------
 
+--- (2026-11-24) Does the tile read part of its counter: one member, or a set of some kinds (its own or the reading's
+--- default)? Gold in reading every source is the whole counter: it keeps the sparkline and "vs your average here".
+function M.ReadsPart(tile)
+  if tile.arg ~= nil then return true end
+  local r = tile.kind == "reading" and ns.readings[tile.reading]
+  return r and r.param and r.param.multi and ns.ReadingSet(r, nil) ~= nil or false
+end
+
 --- Does the tile show a set reading?
 function M.HasSet(tile)
   local r = tile and tile.kind == "reading" and ns.readings[tile.reading]

@@ -243,6 +243,20 @@ Hard Counters v2 changed what Farmer owns ([`../../../docs/TRACKERS_AND_BOARDS.m
   counts money or XP. The Ledger window shows "The Ledger is off" and a button instead of numbers while it is off.
 - **Old data:** `hcfarm:money.in/out/owned` and `hcfarm:xp` are no longer registered; their saved data (only the
   developer's test runs) shows in Hard Counters' Trackers window under "Not loaded", with Delete.
+- **Merges and names (2026-11-24; Hard Counters DESIGN §16.4 "As built (2026-11-24)"; not seen in game).** Ids are
+  unchanged.
+  - **Items looted** (`hcfarm:items`) takes an optional item (`param.optional`, "Any item"): none counts every item,
+    as before; one item counts from when its tile is placed. "%s looted" (`hcfarm:looted`) is folded into it: hidden,
+    its tiles move there with their item, and `HC:Reading("hcfarm:looted", scope, item)` still answers.
+  - **Reputation gained** (`hcfarm:rep`) takes an optional faction ("Any faction"); "%s rep" (`hcfarm:repwith`) is
+    folded into it the same way.
+  - Renamed: **Loot vendor value** (was Vendor value; per hour "Loot vendor value/h"), **Best drop (vendor price)**,
+    **Standing progress: %s** (was "%s standing": the reputation inside the current standing, not the standing),
+    **In bags: %s** (was "%s in bags"). The last two read "Standing progress: pick a faction" and "In bags: pick an
+    item" in lists until one is picked. The view `hcfarm:gold.today` is titled "Gold in today".
+  - The money and XP readings Farmer's attributors feed are Hard Counters Basic's: **Gold in** (was Gold earned) and
+    **Gold out** (new) take a set of sources or sinks on the tile, which replaces "Gold from %s" and "Spent on %s";
+    **XP gained** takes a set of sources (kills and quests are what Farmer books).
 
 ## 5. Rules
 

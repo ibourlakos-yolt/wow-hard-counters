@@ -107,8 +107,9 @@ The probe records types, never values, so whether a stat is non-zero for the cha
 | `GetDodgeChance`, `GetParryChance`, `GetBlockChance`, `GetShieldBlock` | ✅ out of combat / ⛔ in combat | Same |
 | `GetAverageItemLevel`, `UnitHealthMax`, `UnitPowerMax`, `UnitResistance` | ✅ in and out of combat | Never secret |
 | `UnitDefense`, `UnitAttackBothHands` | ⛔ absent | "not a function" at every run |
-| `GetNumSkillLines`, `GetSkillLineInfo` (CS-8) | ⛔ absent | nil at five runs in run 3's third session (outdoors, in combat, in a dungeon), though `SKILL_LINES_CHANGED` fires. No `C_` replacement looked for yet. Weapon skill and Defence can't be read from skill lines |
-| `GetInventoryItemDurability(1)` | ❓ | Returned nothing in and out of combat (no head item, or none with durability) |
+| `GetNumSkillLines`, `GetSkillLineInfo` (CS-8), as globals | ⛔ absent | nil at five runs in run 3's third session (outdoors, in combat, in a dungeon), though `SKILL_LINES_CHANGED` fires |
+| `C_SkillInfo` (CS-8 b) | ✅ | Found 2026-11-19: every skill line as a table (name, rank, maxRank, modifier, skillID); Character Stats reads weapon skill and Defense from it. Walking the visible list for a picker (HC-71) is unseen in game |
+| `GetInventoryItemDurability(1)` | ✅ out of combat | Two numbers on 2026-11-24 (a dungeon, out of combat); earlier sessions returned nothing (no head item with durability) |
 | `UNIT_STATS`, `UNIT_AURA`, `UNIT_ATTACK_POWER`, `UNIT_RANGED_ATTACK_POWER`, `UNIT_ATTACK_SPEED`, `UNIT_DAMAGE`, `UNIT_RESISTANCES`, `UNIT_MAXHEALTH`, `UNIT_MAXPOWER`, `COMBAT_RATING_UPDATE`, `SPELL_POWER_CHANGED`, `PLAYER_EQUIPMENT_CHANGED`, `SKILL_LINES_CHANGED`, `UPDATE_INVENTORY_DURABILITY`, `PLAYER_LEVEL_UP` | ✅ fire | 60, 526, 38, 164, 43, 160, 48, 43, 11, 6, 30, 6, 184, 395, 11 fires since each was added to the probe, all outdoors; no secret argument |
 
 ## Social and data movement
