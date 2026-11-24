@@ -217,7 +217,8 @@ describe("a tile's filter (sets of members)", function()
     travel(HC)
     env:fire("PLAYER_LOGOUT")
     local sv = { HardCountersDB = Env.svCopy(env.sv.HardCountersDB) }
-    local r = start(Env.new({ t = env.t, guid = env.guid, sv = sv, settings = Env.svCopy(env.ns.settings) }), nil, true)
+    local r = start(Env.new({ t = env.t, guid = env.guid, sv = sv, settings = Env.svCopy(env.ns.settings),
+      chars = Env.svCopy(env.chars) }), nil, true)
     local t2 = r.M.Store().list[#r.M.Store().list].tiles[1]
     assert.are.same({ "run" }, t2.arg)
     assert.are.equal("Distance travelled: run", r.M.TileTitle(t2))

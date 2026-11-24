@@ -2,8 +2,11 @@
 -- present) under the permissive fake client, and log in. Used by the load smoke test and the window tests.
 --
 --   require("ui_boot").with(function(ctx) ... end, { settings = <HardCountersSettings SavedVariable>,
---     client = { templates = false } })   -- client options: a client without Blizzard's panel templates
+--     client = { templates = false },     -- client options: a client without Blizzard's panel templates
+--     newCharacter = true, db = <HardCountersDB> })
 --   ctx = { env, client, hc = <HC namespace>, diag, farm, HC = <public API>, farmer = <Farmer loaded?> }
+-- The character has loaded Hard Counters before (it is in HardCountersDB.chars), so it starts with the Pocket board
+-- as before HC-74; newCharacter = true logs in a character Hard Counters never saw (the Leveling board, the welcome).
 local Env = require("env")
 local Client = require("client")
 local F = require("files")
@@ -14,6 +17,11 @@ B.STATS = "packs/CharacterStats/HardCounters_CharacterStats/HardCounters_Charact
 
 local function boot(opts)
   local env = Env.new()
+  env.sv.HardCountersDB = opts.db
+  if not opts.newCharacter then
+    env.sv.HardCountersDB = env.sv.HardCountersDB or {}
+    env.sv.HardCountersDB.chars = env.sv.HardCountersDB.chars or { [env.guid] = { name = "Main", realm = "Realm" } }
+  end
   env:installGlobals()                      -- clock, timers, frames for events
   local client = Client.install(env, opts.client)
   local ctx = { env = env, client = client, hc = {}, diag = {}, farm = {}, stats = {} }

@@ -35,7 +35,8 @@
    (`packs/CharacterStats/docs/DESIGN.md`).
 8. **Counters that no tracker needs are switched off** to save resources, and so are their sources (§2.2).
 9. **Runs stay,** as a scope the player opens and closes on the same window mechanism as `login` (§5.2). A fresh
-   install shows the Pocket board; the Run board appears with the first run.
+   install shows the Pocket board; the Run board appears with the first run. (Since HC-74, 2026-11-24: boards are
+   each character's own, and a new character starts with the Leveling board; DESIGN §17.12.)
 
 ## 1. Words
 

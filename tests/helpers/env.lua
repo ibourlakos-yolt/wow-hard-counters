@@ -72,6 +72,7 @@ function E.new(opts)
     secret = setmetatable({}, { __mode = "k" }),
     afk = false, zone = 1429, guid = opts.guid or "Player-1-00000001",
     sv = opts.sv or {}, settings = opts.settings,
+    chars = opts.chars, global = opts.global, legacyBoards = opts.legacyBoards,
     errors = {},
   }, E)
   return env
@@ -214,6 +215,16 @@ function E:load()
   end
   ns.InitSettings = function()
     ns.settings = self.settings or ns.DefaultProfile()
+    -- AceDB's char and global namespaces (HC-74), keyed here by GUID. Shorthand: boards passed in the settings are
+    -- this character's (unless opts.legacyBoards: then they stay where 0.2 kept them, the shared profile).
+    self.chars = self.chars or {}
+    local key = self.guid
+    self.chars[key] = self.chars[key] or {}
+    if not self.legacyBoards and ns.settings.boards ~= nil and self.chars[key].boards == nil then
+      self.chars[key].boards, ns.settings.boards = ns.settings.boards, nil
+    end
+    self.global = self.global or {}
+    ns.charSettings, ns.allCharSettings, ns.globalSettings, ns.charKey = self.chars[key], self.chars, self.global, key
   end
   ns.Print = function() end
   self.HC = ns.HC
@@ -255,7 +266,8 @@ function E:reload(opts)
   opts = opts or {}
   self:fire("PLAYER_LOGOUT")
   local sv = { HardCountersDB = svCopy(self.sv.HardCountersDB) }
-  local env = E.new({ t = self.t + (opts.offline or 0), guid = opts.guid or self.guid, sv = sv, settings = svCopy(self.settings) })
+  local env = E.new({ t = self.t + (opts.offline or 0), guid = opts.guid or self.guid, sv = sv, settings = svCopy(self.settings),
+    chars = svCopy(self.chars), global = svCopy(self.global) })
   env.zone = self.zone
   env:boot({ reload = not opts.login })
   return env

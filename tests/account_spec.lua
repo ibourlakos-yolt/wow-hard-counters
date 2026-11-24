@@ -39,11 +39,15 @@ end
 
 local function boot(history) return start(Env.new({ guid = MAIN }), history) end
 
---- Log out and log in as `guid`, some time later.
+--- Log out and log in as `guid`, some time later. Boards are each character's own (HC-74): a character with none
+--- gets a copy of the one logging out's, as a copy of 0.2's shared boards gives it (same boards, same timer numbers,
+--- so the account's windows are the same ones).
 local function login(env, guid, offline)
   env:fire("PLAYER_LOGOUT")
   local sv = { HardCountersDB = Env.svCopy(env.sv.HardCountersDB) }
-  local r = Env.new({ t = env.t + (offline or 60), guid = guid, sv = sv, settings = Env.svCopy(env.ns.settings) })
+  local chars = Env.svCopy(env.chars)
+  chars[guid] = chars[guid] or { boards = Env.svCopy(env.chars[env.guid].boards) }
+  local r = Env.new({ t = env.t + (offline or 60), guid = guid, sv = sv, settings = Env.svCopy(env.ns.settings), chars = chars })
   r.zone = env.zone
   return start(r, env.history)
 end

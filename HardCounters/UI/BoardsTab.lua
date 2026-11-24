@@ -5,7 +5,8 @@
 -- (whatever its rules, for a while), Edit on screen, Reset position (centre, scale 1), Duplicate (the New board
 -- dialog, a copy), Save as preset, Delete; right-click adds Mini mode and Rename. At the top: New board..., Show all,
 -- Hide all, Edit all. A preset: New board from it...; one of yours: Rename, Delete. Categories beyond the pack stay
--- HC-57 (proposed).
+-- HC-57 (proposed). "Other characters" (HC-74: every character has its own boards): each other character's boards
+-- and 0.2's shared ones, to look at and Copy to this character... (the New board dialog).
 local ADDON, ns = ...
 
 local HC, L = ns.HC, ns.L
@@ -46,11 +47,48 @@ local function nodes()
   for _, g in ipairs(groups) do total = total + #g.keys end
   out[#out + 1] = { key = "presets", text = L["Presets"], count = total }
   for _, g in ipairs(groups) do out[#out + 1] = { key = "pg:" .. g.title, text = L[g.title], count = #g.keys, indent = 1 } end
+  local others, n = M.OtherBoards(), 0
+  if #others > 0 then
+    for _, o in ipairs(others) do n = n + #o.boards end
+    out[#out + 1] = { key = "others", text = L["Other characters"], count = n }
+    for _, o in ipairs(others) do
+      out[#out + 1] = { key = "oc:" .. tostring(o.key), text = o.shared and L[o.name] or o.name, count = #o.boards, indent = 1 }
+    end
+  end
+  return out
+end
+
+--- A tile of another store, in words: its name, else its reading's title (as a preset's tiles are shown).
+local function rawLabel(t, store)
+  local ref = type(t) == "table" and rawget(t, "ref")
+  local raw = ref and type(store.tiles) == "table" and store.tiles[ref] or t
+  if type(raw) ~= "table" then return "?" end
+  if raw.kind == "label" then return "[" .. (raw.text or "") .. "]" end
+  if raw.kind == "splits" then return L["Splits"] end
+  if type(raw.name) == "string" and raw.name ~= "" then return raw.name end
+  local r = ns.readings[raw.reading]
+  return r and ns.ReadingTitle(r, raw.arg, raw.calc) or tostring(raw.reading)
+end
+
+local function otherRows(node, search, out)
+  for _, o in ipairs(BM().OtherBoards()) do
+    if node == "others" or node == "oc:" .. tostring(o.key) then
+      local who = o.shared and L[o.name] or o.name
+      for i, b in ipairs(o.boards) do
+        if type(b) == "table" and type(b.name) == "string" and (matches(search, b.name) or matches(search, who)) then
+          out[#out + 1] = { key = "o:" .. tostring(o.key) .. ":" .. i, other = { board = b, store = o.store, who = who },
+            cells = { name = b.name, status = "|cff808080" .. who .. "|r", tiles = tostring(#(b.tiles or {})),
+              mini = b.mini and L["mini"] or "" } }
+        end
+      end
+    end
+  end
   return out
 end
 
 local function rows(node, search)
   local M, out = BM(), {}
+  if node == "others" or tostring(node):sub(1, 3) == "oc:" then return otherRows(node, search, out) end
   if node == "boards" then
     for _, b in ipairs(M.Store().list) do
       if matches(search, b.name) then
@@ -81,6 +119,15 @@ local RULE_WORD = { show = "shows", fade = "fades", hide = "hides" }
 
 local function detail(row)
   local M = BM()
+  if row.other then
+    local o = row.other
+    local items = { { text = L["Its tiles"], head = true } }
+    for _, t in ipairs(o.board.tiles or {}) do items[#items + 1] = { text = "  " .. rawLabel(t, o.store) } end
+    return { title = o.board.name .. "   |cff808080" .. o.who .. "|r",
+      lines = { L["Another character's board. Copy it to this character to use it here: the copy is yours to change,"
+        .. " with its own timer."] },
+      items = items }
+  end
   if row.board then
     local b = row.board
     local show = b.show or {}
@@ -162,6 +209,11 @@ end
 local function actions(row)
   if not row then return {} end
   if row.board then return boardActions(row.board) end
+  if row.other then
+    local o = row.other
+    return { { text = L["Copy to this character..."], tip = L["A board of this character's own with the same tiles and rules."],
+      func = function() Bo().OpenNewBoard({ copy = o.board, from = o.store, who = o.who }) end } }
+  end
   local key = row.preset
   local acts = { { text = L["New board from it..."], func = function() Bo().OpenNewBoard({ preset = key }) end } }
   if row.user then

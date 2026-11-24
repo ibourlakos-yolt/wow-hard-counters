@@ -1084,7 +1084,7 @@ function Boards.SetEditing(on, noTrackers)
   if ns.Menu then ns.Menu.Hide() end
   Boards.SyncEscape()
   Boards.RefreshAll(true)
-  if on and not noTrackers and ns.ShowTrackers and not (ns.settings.boards and ns.settings.boards.noTrackersWithEdit) then
+  if on and not noTrackers and ns.ShowTrackers and not (ns.charSettings and ns.charSettings.boards and ns.charSettings.boards.noTrackersWithEdit) then
     ns.ShowTrackers(true)                             -- the Trackers window opens beside them (§6.2)
   end
 end
@@ -1789,7 +1789,7 @@ ns.AddSlash("board", function(rest)
     local b = findBoard(arg ~= "" and arg or "1")
     if b then b.mini = not b.mini; Boards.Refresh(b.id, true) end
   elseif cmd == "reset" then
-    confirm(L["Delete every board and start again from the Pocket board?"], function()
+    confirm(L["Delete every board of this character and start again?"], function()
       local B = M.Store()
       while B.list[1] do M.Delete(B.list[1].id, true) end   -- their windows and their tiles go with them
       B.list, B.seeded, B.runBoard, B.lastEdited = {}, nil, nil, nil   -- lastEdited: an old field (HC-36)
@@ -1847,13 +1847,13 @@ HC.RegisterCallback(owner, "HC_TRACKERS_CHANGED", function() Boards.RefreshAll()
 local previousReadings = ns.OnReadingsChanged
 function ns.OnReadingsChanged()
   if previousReadings then previousReadings() end
-  if ns.ready and ns.settings and ns.settings.boards then
+  if ns.ready and ns.charSettings and ns.charSettings.boards then
     M.FoldAliases()          -- a pack's alias (HC-51): its saved tiles read the target with the alias's calc
     Boards.RefreshAll(true)
   end
 end
 
--- a profile switch replaces ns.settings: other boards
+-- a profile switch replaces ns.settings (boards are the character's, HC-74: only your presets and options change)
 local previous = ns.OnSettingsChanged
 function ns.OnSettingsChanged()
   if previous then previous() end
@@ -1865,7 +1865,7 @@ end
 
 -- BlizzMove (Ctrl+wheel) scales are kept
 ns.On("PLAYER_LOGOUT", function()
-  if not ns.settings or type(ns.settings.boards) ~= "table" then return end
+  if not ns.charSettings or type(ns.charSettings.boards) ~= "table" then return end
   for id, f in pairs(frames) do
     local b = M.Get(id)
     if b and f.GetScale then b.scale = f:GetScale() end

@@ -319,7 +319,8 @@ no tabs); `/hc help` lists them, with the pack each one comes from.
 `/hc run start [label] | stop | pause | resume | split [label] | status`, `/hc runs`, `/hc board [n | new <preset> | mini <n> | reset]`,
 `/hc edit` (edit boards), `/hc panel [compact|full]` (the Run board), `/hc live` (the Pocket board), `/hc trackers`
 (the Trackers window), `/hc track` (the same from the chat line),
-`/hc windows`, `/hc options`, `/hc report [addons]`; `/hc diag [mark|snap|probes]` (Diagnostics);
+`/hc windows`, `/hc options`, `/hc welcome` (the introduction a new character gets), `/hc report [addons]`;
+`/hc diag [mark|snap|probes]` (Diagnostics);
 `/hc ledger` (Farmer). The older `/hcdiag` still works as an alias (`/hcf` and `/farmer` were deleted by HC-49).
 
 ## 9. Windows and subcommands (packs)

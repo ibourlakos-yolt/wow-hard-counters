@@ -656,12 +656,18 @@ function Windows.Get(key, make, account)
   return w, made
 end
 
---- Forget a key's windows on every character (its board was deleted).
-function Windows.Drop(key)
+--- Forget a key's windows on every character (its board was deleted). onlyMine (HC-74: another character still has a
+--- copy of the board, with the same timer number): only the logged-in character's window goes.
+function Windows.Drop(key, onlyMine)
   unwatch(mine[key])
-  unwatch(shared[key])
-  mine[key], shared[key] = nil, nil
   local all = ns.SV and ns.SV.windows
+  mine[key] = nil
+  if onlyMine then
+    if all and ns.guid then all[key .. "@" .. ns.guid] = nil end
+    return
+  end
+  unwatch(shared[key])
+  shared[key] = nil
   if not all then return end
   local prefix = key .. "@"
   for k in pairs(all) do

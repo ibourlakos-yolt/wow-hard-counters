@@ -61,7 +61,8 @@ local function again(env, opts)
   opts = opts or {}
   env:fire("PLAYER_LOGOUT")
   local sv = { HardCountersDB = Env.svCopy(env.sv.HardCountersDB) }
-  local r = Env.new({ t = env.t + (opts.offline or 0), guid = env.guid, sv = sv, settings = Env.svCopy(env.ns.settings) })
+  local r = Env.new({ t = env.t + (opts.offline or 0), guid = env.guid, sv = sv, settings = Env.svCopy(env.ns.settings),
+    chars = Env.svCopy(env.chars) })
   r.zone = env.zone
   return start(r, opts.login and true or false, opts.history, opts.ui)
 end

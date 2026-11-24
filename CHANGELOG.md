@@ -5,9 +5,22 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 
 ## Unreleased
 
-**Saved data:** kept. The Overview tab's sections are gone (see below); your tiles and boards don't change.
+**Saved data:** kept. Boards become each character's own: every character that ran Hard Counters before gets a copy
+of the boards they all shared, the first time it logs in, timers included. The Overview tab's sections are gone
+(see below); your tiles don't change. Your presets stay shared by all your characters.
 
-**Updating:** quit and restart the game after installing (a new texture; `/reload` is not enough).
+**Updating:** quit and restart the game after installing (new files; `/reload` is not enough).
+
+### New
+- **Each character has its own boards.** What you change on one character's boards no longer changes another's.
+- **Copy another character's board:** New board... > Start from > Copy of a board lists your other characters'
+  boards (and the boards your characters shared before this version); the Boards tab has an **Other characters**
+  list with **Copy to this character...**. The copy is this character's own, with its own timer: change it as you
+  like.
+- **A new character starts with the Leveling board** in front of it (XP/h, the XP bar, time to level, rested XP,
+  gold), instead of the Pocket board. The first new character on your account also gets a short **welcome**: what
+  the Hard Counters window holds (Overview, Boards, Trackers, Runs) and how to copy boards; later new characters
+  get one chat line. `/hc welcome` shows it again.
 
 ### Changed
 - **Overview groups your tiles by board.** Each board is a framed panel with its name, its status as in the Boards

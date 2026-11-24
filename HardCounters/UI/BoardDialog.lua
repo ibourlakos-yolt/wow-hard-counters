@@ -1,7 +1,8 @@
 -- The New board dialog (DESIGN §17.4, HC-68). Every way to make a board opens it: the Boards tab, the launcher, a
 -- board's [+] menu, Options, `/hc board new` without a name. Fields: Name (required, at most 24 letters, unique
 -- ignoring case: a taken name suggests "<name> 2"; it shows the `/hc board` command that will toggle it), Start from
--- (presets by pack, your presets, Empty board, Copy of a board: its own tiles, not shared), Show it (in combat, in
+-- (presets by pack, your presets, Empty board, Copy of a board: its own tiles, not shared; this character's boards,
+-- then each other character's and 0.2's shared ones, HC-74), Show it (in combat, in
 -- instances, only during runs: the board's own rules). Create puts the board at the centre of the screen with one
 -- flash; an empty board opens in edit mode. Enter creates, Escape cancels. DIALOG strata, above everything of ours
 -- but menus.
@@ -14,7 +15,9 @@ local Dialog = {}
 ns.BoardDialog = Dialog
 
 local f
-local choice = { kind = "empty" }      -- { kind = "preset", key } | { kind = "empty" } | { kind = "copy", board }
+-- { kind = "preset", key } | { kind = "empty" } | { kind = "copy", board, from = its store, who = its character }
+-- (from and who only for another character's board or 0.2's shared ones)
+local choice = { kind = "empty" }
 local nameTouched = false               -- the player typed a name: picking a start no longer replaces it
 local rules = { combat = true, instance = true, runOnly = false }
 
@@ -30,7 +33,10 @@ local function trim(s) return ((s or ""):match("^%s*(.-)%s*$")) end
 
 local function startText()
   if choice.kind == "empty" then return L["Empty board"] end
-  if choice.kind == "copy" then return format(L["Copy of %s"], choice.board.name) end
+  if choice.kind == "copy" then
+    local s = format(L["Copy of %s"], choice.board.name)
+    return choice.who and (s .. " (" .. choice.who .. ")") or s
+  end
   local p = BM().Preset(choice.key)
   return p and p.name or "?"
 end
@@ -88,9 +94,21 @@ local function startItems()
   items[#items + 1] = { text = "  " .. L["Empty board"], checked = choice.kind == "empty",
     tip = L["Opens for editing: add numbers with its [+]"], func = function() setChoice({ kind = "empty" }) end }
   local copies = {}
+  local function isChosen(b) return choice.kind == "copy" and choice.board == b end
   for _, b in ipairs(BM().Store().list) do
-    copies[#copies + 1] = { text = b.name, checked = choice.kind == "copy" and choice.board == b,
-      func = function() setChoice({ kind = "copy", board = b }) end }
+    copies[#copies + 1] = { text = b.name, checked = isChosen(b), func = function() setChoice({ kind = "copy", board = b }) end }
+  end
+  -- (HC-74) another character's boards, or 0.2's shared ones: a copy of your own, to change as you like
+  for _, o in ipairs(BM().OtherBoards()) do
+    local who = o.shared and L[o.name] or o.name
+    local sub = {}
+    for _, b in ipairs(o.boards) do
+      if type(b) == "table" and type(b.name) == "string" then
+        sub[#sub + 1] = { text = b.name, checked = isChosen(b),
+          func = function() setChoice({ kind = "copy", board = b, from = o.store, who = who }) end }
+      end
+    end
+    if #sub > 0 then copies[#copies + 1] = { text = who, sub = sub } end
   end
   if #copies > 0 then
     items[#items + 1] = { text = "  " .. L["Copy of a board"], sub = copies,
@@ -124,7 +142,7 @@ local function create()
   local name = trim(f.name:GetText())
   local M = BM()
   local b
-  if choice.kind == "copy" and choice.board then b = M.Duplicate(choice.board, name)
+  if choice.kind == "copy" and choice.board then b = M.Duplicate(choice.board, name, choice.from)
   else b = M.Create(choice.kind == "preset" and choice.key or nil, { name = name }) end
   b.show = b.show or {}
   local fade = b.show.combat == "fade"
@@ -206,8 +224,8 @@ local function build()
   f:SetScript("OnHide", function() if ns.Menu then ns.Menu.Hide() end end)
 end
 
---- Open the dialog. opts: { preset = key } or { copy = board } to start from; nil: the first of Hard Counters'
---- presets. The name starts as the start's name, made free.
+--- Open the dialog. opts: { preset = key } or { copy = board, from = its store, who = its character's name } to start
+--- from; nil: the first of Hard Counters' presets. The name starts as the start's name, made free.
 function Dialog.Open(opts)
   opts = opts or {}
   if not f then build() end
@@ -215,7 +233,7 @@ function Dialog.Open(opts)
   rules.combat, rules.instance, rules.runOnly = true, true, false
   for _, c in ipairs(f.checks) do c:SetChecked(rules[c.key]) end
   if opts.copy then
-    setChoice({ kind = "copy", board = opts.copy })
+    setChoice({ kind = "copy", board = opts.copy, from = opts.from, who = opts.who })
   elseif opts.empty then
     setChoice({ kind = "empty" })
   else

@@ -408,8 +408,8 @@ Nothing from a deeper layer leaks into a shallower one: no setting has to be tou
 Boards replace the run panel and the live number (user, 2026-11-15). `UI/BoardModel.lua` holds the model and every
 decision (pure, tested); `UI/Boards.lua` draws; `UI/Menu.lua` is a small popup menu of our own (the client's
 dropdown templates differ between clients).
-- **Model:** `settings.boards = { list, nextId, seeded, runBoard, v, tiles, tileOrder, nextTile }`, per
-  profile; since v6 (HC-67, §17.9) a board's reading tiles live in the collection (`tiles`) and the board keeps
+- **Model:** `charSettings.boards = { list, nextId, seeded, runBoard, v, tiles, tileOrder, nextTile }`, per
+  character (HC-74, §17.12; per profile before, which every character shared); since v6 (HC-67, §17.9) a board's reading tiles live in the collection (`tiles`) and the board keeps
   placements (`{ ref, size }`); v7 (HC-73) dropped v6's `sections` (`lastEdited` is gone since HC-36;
   old saved files keep it, unread). A board: name, preset,
   shown, mini, pos, scale, width, visibility rules, tiles. Tile kinds `reading` (styles hero, grid, row, bar, gauge;
@@ -466,8 +466,9 @@ dropdown templates differ between clients).
 - **Presets** (tiles on the board's timer except `now`, HC-41): Run (Gold/h hero, XP/h, Net gold/h, Gold
   earned, Items, Vendor value/h, time to level, splits, best drop; Farmer's tiles only when Farmer is loaded),
   Pocket (mini; Gold/h hero, XP/h, Net gold/h), Leveling (XP/h hero, the XP bar, time to level, rested XP, XP gained, Gold/h).
-- **First use and migration (once, `M.Seed`):** a fresh install gets the Pocket board; the Run board appears with
-  the first run started. A player of the old run panel (its window state exists) gets a Run board in its place,
+- **First use and migration (once, `M.Seed`):** a new character gets the Leveling board and, once per account, the
+  welcome (HC-74, §17.12; before, a fresh install got the Pocket board, as a returning character with no boards
+  still does). A player of the old run panel (its window state exists) gets a Run board in its place,
   width and scale, compact as mini, its headline as the hero (Farmer's old reading ids mapped to Basics'), and a
   Pocket board shown if the live number was. `/hc panel` and `/hc live` toggle those boards.
 - The run panel and the live number (`UI/RunPanel.lua`, `UI/LiveNumber.lua`) were deleted 2026-11-15 (HC-24), once the
@@ -1740,3 +1741,39 @@ Filters by status and feature; actions Run (functions and strings), Copy (the pr
 Clear history (confirmed); at the top Run all, Copy all (the old text page, for pasting to Claude), Clear all
 (confirmed). Log, Live and Storage stay text; the bottom row's Copy copies the probes' text on the Probes view.
 Without the browser (an older Hard Counters) the Probes view stays text.
+
+### 17.12 As built (HC-74, 2026-11-24): each character's own boards, copying, a new character's start
+
+The user (2026-11-24): "each character must have their own boards ... new characters [could] copy (and adjust)
+another character's board. When a new character joins they could have only one board (the levelling one) spawned in
+front of them with a one-off introduction message about the central panel and its capabilities."
+- **Where boards live.** `boards` moved from the AceDB profile (every character shares the "Default" profile) to
+  AceDB's per-character table, `ns.charSettings` (`HardCountersSettings.char["Name - Realm"]`). `ns.allCharSettings`
+  is every character's (AceDB's `sv.char`), `ns.globalSettings` the account's, `ns.charKey` this character's key.
+  The other options (and trackers) stay in the profile. **Your presets** stay the account's: `settings.boardPresets`
+  (moved once from 0.2's `boards.presets`). Board windows were already per character (`b<wid>@<guid>`).
+- **Migration.** 0.2's shared boards stay in the profile, untouched, as a source. At a character's first load on this
+  build `M.Store()` gives it a deep copy of them when it is a **returning character** (`ns.knownCharacter`: it is in
+  `HardCountersDB.chars` before this login adds it, which every release has written), `fromShared = true`: same
+  boards, same tiles, same timer numbers, so the board timers carry on per character as before. A character Hard
+  Counters never saw gets an empty store. Deleting a board drops only this character's window while another
+  store still has a board with that timer number (`M.WidElsewhere`; `SavedWindows.Drop(key, onlyMine)`), else every
+  character's as before.
+- **Copying.** `M.OtherBoards()`: `{ key, name, store, boards }` per other character with boards (sorted by key; the
+  name before " - " of the AceDB key), then 0.2's shared boards as "Shared boards (0.2)". `M.Duplicate(board, name,
+  from)` copies from another store: tiles resolved through that store's collection (placements there are plain
+  `{ ref, size }`), shapes of older stores brought up to date (`style`, the "login" scope, `section`, `wid` dropped),
+  aliases folded; a fresh timer. The New board dialog's **Copy of a board** lists this character's boards, then a
+  submenu per other character (and the shared boards); its Start from reads "Copy of Farm (Alt)". The Boards tab has
+  **Other characters** (a node per character): rows Name, the character, Tiles, Mini; the detail lists the tiles;
+  one action, **Copy to this character...**, opens the dialog on it.
+- **A new character's start.** `M.Seed()` for a character that is not returning (and never used the old run panel):
+  the **Leveling** preset (`M.STARTER`; all its readings are on the two trackers on by default) at `M.STARTER_POS`
+  (centre, 280 right, 40 up: beside the character, in sight), and `boards.welcome = true`. `UI/Welcome.lua`, two
+  seconds after the login's `PLAYER_ENTERING_WORLD` (past the loading screen): the account's first such character
+  gets the **welcome window** (`ns.globalSettings.introSeen`), a 400 × 300 dialog left of the board: the board is
+  this character's own; the Hard Counters window (minimap button or `/hc`) holds Overview, Boards, Trackers, Runs,
+  one line each; each character has its own boards, and how to copy one. Buttons **Open the window** (the Overview
+  tab) and **Got it**; Escape closes it. Later new characters get one chat line. `/hc welcome` shows it again.
+- **Not done:** a character renamed or moved to another realm gets a new AceDB key, so it starts as new (its old
+  boards are listed under its old name, to copy). AceDB's Profiles page no longer affects boards.

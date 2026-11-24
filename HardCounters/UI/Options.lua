@@ -56,10 +56,17 @@ function ns.InitSettings()
   local AceDB = LibStub("AceDB-3.0", true)
   if not AceDB then
     ns.settings = ns.DefaultProfile()
+    ns.charSettings, ns.globalSettings, ns.allCharSettings, ns.charKey = {}, {}, {}, "?"
     return
   end
   ns.settingsDB = AceDB:New("HardCountersSettings", ns.SETTINGS_DEFAULTS, true)
   ns.settings = ns.settingsDB.profile
+  -- (HC-74) boards are the character's own: AceDB's per-character table ("Name - Realm"), every character's
+  -- (for copying a board from another one) and the account's (one-time notes)
+  ns.charSettings = ns.settingsDB.char
+  ns.globalSettings = ns.settingsDB.global
+  ns.allCharSettings = ns.settingsDB.sv.char or {}
+  ns.charKey = ns.settingsDB.keys and ns.settingsDB.keys.char or "?"
   ns.settingsDB.RegisterCallback(ns, "OnProfileChanged", refresh)
   ns.settingsDB.RegisterCallback(ns, "OnProfileCopied", refresh)
   ns.settingsDB.RegisterCallback(ns, "OnProfileReset", refresh)

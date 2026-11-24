@@ -2,9 +2,14 @@
 -- the comparison line and sparklines. The frames are UI/Boards.lua (load smoke test; seen in game by the user).
 local Env = require("env")
 
-local function boot(settings)
+--- opts (HC-74): legacyBoards = the settings' boards stay in the shared profile, as 0.2 saved them; known = this
+--- character loaded Hard Counters before (it is in HardCountersDB.chars); chars = other characters' settings.
+local function boot(settings, opts)
+  opts = opts or {}
   Env.BASICS = true
-  local env = Env.new({ settings = settings })
+  local sv = {}
+  if opts.known then sv.HardCountersDB = { chars = { ["Player-1-00000001"] = { name = "Main", realm = "R" } } } end
+  local env = Env.new({ settings = settings, legacyBoards = opts.legacyBoards, chars = opts.chars, sv = sv })
   local game = { money = 100000, xp = 100, xpMax = 1000, level = 20 }
   env.game = game
   _G.GetMoney = function() return game.money end
@@ -34,10 +39,27 @@ local function ids(board)
 end
 
 describe("boards", function()
-  it("start a fresh install with the Pocket board only, in mini mode; the Run board is a preset to add", function()
+  it("start a new character with the Leveling board only, in front of it, and the introduction pending (HC-74)", function()
     local env = boot()
     local M = env.M
+    assert.is_false(env.ns.knownCharacter)
     assert.is_true(M.Seed())
+    assert.is_false(M.Seed())                         -- once
+    local B = M.Store()
+    assert.are.equal(1, #B.list)
+    assert.are.equal("Leveling", B.list[1].name)
+    assert.is_true(B.list[1].shown)
+    assert.are.same(M.STARTER_POS, B.list[1].pos)
+    assert.are_not.equal(M.STARTER_POS, B.list[1].pos)
+    assert.is_true(B.welcome)
+  end)
+
+  it("start a returning character with no boards with the Pocket board only, in mini mode; Run is a preset", function()
+    local env = boot()
+    local M = env.M
+    env.ns.knownCharacter = true                      -- (it loaded Hard Counters before, with no boards anywhere)
+    assert.is_true(M.Seed())
+    assert.is_nil(M.Store().welcome)
     assert.is_false(M.Seed())                         -- once
     local list = M.Store().list
     assert.are.equal(1, #list)
@@ -203,7 +225,8 @@ describe("the board's timer", function()
     env:fire("PLAYER_LOGOUT")
     local sv = { HardCountersDB = Env.svCopy(env.sv.HardCountersDB) }
     Env.BASICS = true
-    local r = Env.new({ t = env.t + (opts.offline or 0), guid = opts.guid or env.guid, sv = sv, settings = Env.svCopy(env.ns.settings) })
+    local r = Env.new({ t = env.t + (opts.offline or 0), guid = opts.guid or env.guid, sv = sv, settings = Env.svCopy(env.ns.settings),
+      chars = Env.svCopy(env.chars), global = Env.svCopy(env.global) })
     r.game = env.game
     r:boot({ reload = opts.reload })
     Env.BASICS = nil
@@ -401,7 +424,7 @@ describe("the board's timer", function()
     assert.are.equal(180, l.ns.Win.Active(w))
   end)
 
-  it("is per character: an alt gets its own, the main's waits for the main; deleting the board forgets them", function()
+  it("is per character (HC-74): an alt has its own boards and copies the main's; the copy has its own timer", function()
     local env = boot()
     local M, HC = env.M, env.HC
     local b = M.Create(nil, { name = "Mine" })
@@ -409,20 +432,79 @@ describe("the board's timer", function()
     HC:Emit("hc:money.in", 40, "none", 1429)
     env:advance(100)
     local alt = relog(env, { guid = "Player-1-00000002", offline = 60 })
-    local ba = alt.M.Store().list[#alt.M.Store().list]
-    assert.are.equal(b.wid, ba.wid)                   -- the same board (one profile) ...
-    assert.are.equal(0, (alt.M.TileValue(ba.tiles[1], ba)))   -- ... its own window on this character
+    assert.is_false(alt.ns.knownCharacter)            -- a new character: none of the main's boards
+    assert.are.equal(0, #alt.M.Store().list)
+    -- the main's board, to copy: its own tiles and a fresh timer on the alt
+    local from
+    for _, o in ipairs(alt.M.OtherBoards()) do if o.key == "Player-1-00000001" then from = o end end
+    assert.truthy(from)
+    assert.are.equal("Mine", from.boards[1].name)
+    local ba = alt.M.Duplicate(from.boards[1], nil, from.store)
+    assert.are.equal("Mine", ba.name)
+    assert.are.equal(1, #ba.tiles)
+    assert.are.equal("hc:gold", ba.tiles[1].reading)
+    assert.is_true(alt.M.IsPlacement(ba.tiles[1]))
+    assert.are_not.equal(b.wid, ba.wid)
+    ba.tiles[1].name = "Alt gold"                       -- adjusting the copy leaves the main's alone
+    assert.is_nil(from.store.tiles[rawget(from.boards[1].tiles[1], "ref")].name)
+    alt.M.BoardWindows(ba)                              -- (drawn at once in game: its timer starts)
     alt.HC:Emit("hc:money.in", 7, "none", 1429)
     alt:advance(500)
     assert.are.equal(7, (alt.M.TileValue(ba.tiles[1], ba)))
     local main = relog(alt, { guid = "Player-1-00000001", offline = 60 })
-    local bm = main.M.Store().list[#main.M.Store().list]
+    assert.is_true(main.ns.knownCharacter)
+    assert.are.equal(1, #main.M.Store().list)         -- the main's own boards, as they were
+    local bm = main.M.Store().list[1]
+    assert.are.equal("Mine", bm.name)
     assert.are.equal(40, (main.M.TileValue(bm.tiles[1], bm)))
     assert.are.equal(100, main.ns.Win.Elapsed(main.M.BoardWindow(bm)))   -- the alt's session is not on its clock
     main.M.RemoveTile(bm, 1)                          -- a tile owns no window: the board's stays
-    assert.truthy(main.sv.HardCountersDB.windows["b" .. b.wid .. "@Player-1-00000002"])
+    assert.truthy(main.sv.HardCountersDB.windows["b" .. b.wid .. "@Player-1-00000001"])
     main.M.Delete(bm.id)
     for k in pairs(main.sv.HardCountersDB.windows) do assert.is_nil(tostring(k):match("^b" .. b.wid .. "@")) end
+    assert.are.equal(1, #main.M.OtherBoards()[1].boards)    -- the alt's copy stays the alt's
+  end)
+
+  it("copies 0.2's shared boards to a returning character once, timers and all; a new character only sees them (HC-74)", function()
+    local shared = { boards = { v = 7, nextId = 3, seeded = true, nextTile = 1, tileOrder = { "t1" },
+      tiles = { t1 = { kind = "reading", reading = "hc:gold", scope = "run", follow = true, display = "number", id = "t1" } },
+      presets = { list = { { key = "user:1", name = "Mine", tiles = {} } }, next = 2 },
+      list = { { id = "b1", name = "Farm", wid = 5, shown = true, show = {}, tiles = { { ref = "t1", size = "large" } } } } } }
+    -- a returning character: a copy of its own, the same timer number; the shared boards stay for the others
+    local env = boot(Env.svCopy(shared), { legacyBoards = true, known = true })
+    local M, ns = env.M, env.ns
+    assert.is_true(ns.knownCharacter)
+    local B = M.Store()
+    assert.is_true(B.fromShared)
+    assert.are.equal("Farm", B.list[1].name)
+    assert.are.equal(5, B.list[1].wid)
+    assert.are.equal("hc:gold", B.list[1].tiles[1].reading)
+    assert.are_not.equal(ns.settings.boards, B)
+    assert.are.equal("Farm", ns.settings.boards.list[1].name)
+    assert.is_false(M.Seed())                         -- seeded already: no Leveling board on top
+    -- your presets are the account's: moved out of the shared boards, kept for every character
+    assert.are.equal("Mine", M.UserPresets()[1].name)
+    assert.is_nil(ns.settings.boards.presets)
+    assert.is_nil(B.presets)
+    -- deleting the copy: only this character's window, the shared boards still use number 5
+    ns.SV.windows = ns.SV.windows or {}
+    ns.SV.windows["b5@Player-1-00000009"] = { char = "Player-1-00000009" }
+    assert.is_true(M.WidElsewhere(5))
+    M.Delete(B.list[1].id)
+    assert.truthy(ns.SV.windows["b5@Player-1-00000009"])
+    -- a new character: its own (empty) store; the shared boards are a source to copy, last in the list
+    local fresh = boot(Env.svCopy(shared), { legacyBoards = true })
+    local FM = fresh.M
+    assert.is_false(fresh.ns.knownCharacter)
+    assert.are.equal(0, #FM.Store().list)
+    local others = FM.OtherBoards()
+    assert.is_true(others[#others].shared)
+    local copy = FM.Duplicate(others[#others].boards[1], nil, others[#others].store)
+    assert.are.equal("Farm", copy.name)
+    assert.are.equal("large", rawget(copy.tiles[1], "size"))
+    assert.is_nil(copy.wid)
+    assert.is_true(FM.Seed())                         -- (a new character still gets its starter board)
+    assert.are.equal("Leveling", FM.Store().list[2].name)
   end)
 
   it("drops the tile windows of builds before HC-41, on every character, once", function()

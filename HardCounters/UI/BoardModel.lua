@@ -1,7 +1,7 @@
 -- Boards, the model (TRACKERS_AND_BOARDS §6, HC-18): data and decisions only, no frames (UI/Boards.lua draws).
 -- A board is a vertical stack of tiles the player builds; it replaces the run panel and the live number.
 --
---   settings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 7,
+--   charSettings.boards = { list = { <board>, ... }, nextId = n, seeded = true, runBoard = true, v = 7,
 --                       tiles = { [tileId] = <reading tile> }, tileOrder = { tileId, ... }, nextTile = n }
 -- Since v6 (HC-67, DESIGN §17.4) every reading tile lives in the collection (`tiles`) with an `id` (v7, HC-73: the
 -- Overview tab groups tiles by their board, so they carry no section any more); a board's `tiles` list holds
@@ -85,7 +85,7 @@ M.WIDTH = 260
 M.MIN_WIDTH, M.MAX_WIDTH = 160, 600
 
 ---------------------------------------------------------------------------
--- The tile collection (DESIGN §17.4, HC-67). Every reading tile lives in settings.boards.tiles; a board holds
+-- The tile collection (DESIGN §17.4, HC-67). Every reading tile lives in charSettings.boards.tiles; a board holds
 -- placements, { ref = <tile id>, size = <size> }. The user's rule (2026-11-23): "all of the tiles will be present
 -- there and some of them will also be in the HUD": a tile is shared, never copied (copies drift apart), so edited
 -- anywhere it shows the same on its board. A tile is on one board at most ("On HUD: <board>"); on none it is
@@ -95,7 +95,7 @@ M.MIN_WIDTH, M.MAX_WIDTH = 160, 600
 
 local PLACEMENT = {}
 local function liveTile(p)
-  local B = ns.settings and ns.settings.boards
+  local B = ns.charSettings and ns.charSettings.boards
   local tiles = type(B) == "table" and B.tiles
   return type(tiles) == "table" and tiles[rawget(p, "ref")] or nil
 end
@@ -162,9 +162,34 @@ end
 -- Settings
 ---------------------------------------------------------------------------
 
+-- Each character has its own boards (HC-74, the user 2026-11-24): `boards` lives in the character's settings
+-- (AceDB's char namespace, ns.charSettings), no longer in the profile every character shared. 0.2's shared boards stay
+-- in the profile, read only: a character that ran Hard Counters before (ns.knownCharacter) gets a copy of them at its
+-- first load on this build, timers and all; a new character gets the Leveling board (M.Seed) and can copy any other
+-- character's board, or those shared ones, from the New board dialog.
+
+--- The shared boards of 0.2 (the profile's), or nil.
+function M.SharedBoards()
+  local legacy = ns.settings and ns.settings.boards
+  if type(legacy) == "table" and type(legacy.list) == "table" then return legacy end
+  return nil
+end
+
+local function firstStore()
+  local legacy = M.SharedBoards()
+  if legacy and ns.knownCharacter then
+    local c = U.deepcopy(legacy)       -- (no metatables: placements are plain { ref, size } again)
+    c.presets = nil                    -- your presets stay the account's (M.UserPresets)
+    c.fromShared = true
+    return c
+  end
+  return {}
+end
+
 function M.Store()
-  local s = ns.settings
-  if type(s.boards) ~= "table" then s.boards = {} end
+  if type(ns.charSettings) ~= "table" then ns.charSettings = {} end
+  local s = ns.charSettings
+  if type(s.boards) ~= "table" then s.boards = firstStore() end
   local B = s.boards
   if type(B.list) ~= "table" then B.list = {} end
   B.nextId = B.nextId or 1
@@ -728,14 +753,20 @@ end
 
 ---------------------------------------------------------------------------
 -- Presets of the player's own (HC-22, HC-68): a board saved as a preset, the same data a board's tiles are, kept in
--- settings.boards.presets = { list = { { key = "user:3", name, mini, scope, show, tiles } }, next = n }.
+-- settings.boardPresets = { list = { { key = "user:3", name, mini, scope, show, tiles } }, next = n }: the profile's,
+-- so every character has them (HC-74; 0.2 kept them in the shared boards, `boards.presets`, moved here once).
 ---------------------------------------------------------------------------
 
 local function userPresets()
-  local B = M.Store()
-  if type(B.presets) ~= "table" then B.presets = { list = {}, next = 1 } end
-  if type(B.presets.list) ~= "table" then B.presets.list = {} end
-  return B.presets
+  local s = ns.settings
+  if type(s.boardPresets) ~= "table" then
+    local legacy = M.SharedBoards()
+    s.boardPresets = legacy and type(legacy.presets) == "table" and legacy.presets or { list = {}, next = 1 }
+    if legacy then legacy.presets = nil end
+  end
+  if type(s.boardPresets.list) ~= "table" then s.boardPresets.list = {} end
+  s.boardPresets.next = s.boardPresets.next or (#s.boardPresets.list + 1)
+  return s.boardPresets
 end
 
 --- The player's presets, in order (their entries: change them through the calls below).
@@ -753,15 +784,25 @@ function M.Preset(key)
   return M.PRESETS[key] or userPreset(key)
 end
 
---- A board's tiles as preset data: every field of its tiles (copies), the placements' sizes, no ids.
-local function tileSpecs(board)
+--- A board's tiles as preset data: every field of its tiles (copies), the placements' sizes, no ids. from: the board's
+--- own store when it is another character's (or 0.2's shared boards), whose placements are plain { ref, size }.
+local function tileSpecs(board, from)
   local out = {}
+  local tiles = (from or M.Store()).tiles
   for _, t in ipairs(board.tiles) do
-    local raw = M.TileOf(t)
-    local c = U.deepcopy(raw)
-    c.id, c.lastSize = nil, nil
-    if getmetatable(t) == PLACEMENT then c.size = rawget(t, "size") end
-    out[#out + 1] = c
+    local ref = type(t) == "table" and rawget(t, "ref") or nil
+    local raw = ref and type(tiles) == "table" and tiles[ref] or (ref == nil and t) or nil
+    if type(raw) == "table" then
+      local c = U.deepcopy(raw)
+      c.id, c.lastSize, c.section, c.wid = nil, nil, nil, nil
+      if ref then c.size = rawget(t, "size") end
+      -- a store older than this build (0.2's shared boards, saved by beta1): the tile shapes migrations change
+      if c.kind == "reading" then
+        if c.style ~= nil then M.ApplyStyle(c, c.style) end
+        if c.scope == "login" then c.scope = "session" end
+      end
+      out[#out + 1] = c
+    end
   end
   return out
 end
@@ -864,7 +905,9 @@ function M.Delete(id, withTiles)
   local B = M.Store()
   for i, b in ipairs(B.list) do
     if b.id == id then
-      if b.wid then ns.SavedWindows.Drop(winKey(b.wid)) end   -- its windows, on every character
+      -- its windows, on every character; only this character's while another character's copy of the board (made
+      -- from 0.2's shared boards, HC-74) still uses that timer number
+      if b.wid then ns.SavedWindows.Drop(winKey(b.wid), M.WidElsewhere(b.wid)) end
       table.remove(B.list, i)
       for _, p in ipairs(b.tiles) do
         if getmetatable(p) == PLACEMENT then
@@ -879,22 +922,67 @@ end
 
 --- A copy of a board (HC-68: Duplicate, and the New board dialog's "Copy of a board"): its look, rules and scope,
 --- and tiles of its own (new collection tiles, never shared: copies that edit together were rejected), a fresh
---- timer, placed at the centre. Returns it.
-function M.Duplicate(board, name)
+--- timer, placed at the centre. from: the store the board is in when it is another character's or 0.2's shared
+--- boards (HC-74, M.OtherBoards). Returns it.
+function M.Duplicate(board, name, from)
   local B = M.Store()
+  if from == B then from = nil end
   local b = { id = newId(), name = M.FreeName(name or board.name), shown = true, mini = board.mini and true or false,
     width = board.width or M.WIDTH, scale = 1, show = U.copy(board.show or defaultShow()), scope = board.scope, tiles = {} }
-  for _, s in ipairs(tileSpecs(board)) do
-    if s.kind == "reading" then b.tiles[#b.tiles + 1] = adopt(B, s) else b.tiles[#b.tiles + 1] = s end
+  for _, s in ipairs(tileSpecs(board, from)) do
+    if s.kind == "reading" then
+      if from then M.FoldAlias(s) end
+      b.tiles[#b.tiles + 1] = adopt(B, s)
+    else
+      b.tiles[#b.tiles + 1] = s
+    end
   end
   B.list[#B.list + 1] = b
   return b
 end
 
 ---------------------------------------------------------------------------
--- First use and migration (§6.4): a fresh install shows the Pocket board; a player of the old run panel or live
--- number gets the Run / Pocket boards seeded from those settings, once. The Run board appears with the first run.
+-- Other characters' boards (HC-74): each character's own, and 0.2's shared ones, to copy from.
 ---------------------------------------------------------------------------
+
+local function storeOk(B) return type(B) == "table" and type(B.list) == "table" and #B.list > 0 end
+
+--- The boards this character can copy from: { { key, name (the character, or "Shared boards (0.2)"), store,
+--- boards = { board, ... } } }, the other characters by name, then 0.2's shared boards when there are any.
+function M.OtherBoards()
+  local out = {}
+  for key, cs in pairs(ns.allCharSettings or {}) do
+    if key ~= ns.charKey and type(cs) == "table" and storeOk(cs.boards) then
+      local name = type(key) == "string" and key:match("^(.-) %- ") or tostring(key)
+      out[#out + 1] = { key = key, name = name ~= "" and name or tostring(key), store = cs.boards, boards = cs.boards.list }
+    end
+  end
+  table.sort(out, function(a, b) return tostring(a.key) < tostring(b.key) end)
+  local legacy = M.SharedBoards()
+  if storeOk(legacy) then
+    out[#out + 1] = { key = "shared", name = "Shared boards (0.2)", shared = true, store = legacy, boards = legacy.list }
+  end
+  return out
+end
+
+--- Does another character's store (or 0.2's shared boards) hold a board with this window number? Copies made from
+--- the shared boards keep their timer's number, so the account's window may still be someone else's.
+function M.WidElsewhere(wid)
+  for _, o in ipairs(M.OtherBoards()) do
+    for _, b in ipairs(o.boards) do if type(b) == "table" and b.wid == wid then return true end end
+  end
+  return false
+end
+
+---------------------------------------------------------------------------
+-- First use and migration (§6.4): a new character gets the Leveling board, in front of them, and the account's
+-- one-time introduction to the Hard Counters window (HC-74, the user 2026-11-24; before, every fresh install got the
+-- Pocket board); a player of the old run panel or live number gets the Run / Pocket boards seeded from those
+-- settings, once.
+---------------------------------------------------------------------------
+
+M.STARTER = "leveling"
+M.STARTER_POS = { "CENTER", 280, 40, "CENTER" }   -- right of the character, in sight
 
 function M.Seed()
   local B = M.Store()
@@ -905,6 +993,12 @@ function M.Seed()
   local rpw = type(wins) == "table" and wins.runPanel or nil
   -- a run panel that was used: its window state exists (UI/Windows.lua wrote it), or the old position keys do
   local usedPanel = type(rpw) == "table" or s.runPanelPos ~= nil
+  if not usedPanel and not ns.knownCharacter then
+    local b = M.Create(M.STARTER)
+    b.pos = U.copy(M.STARTER_POS)
+    B.welcome = true                    -- UI/Welcome.lua shows the introduction once per account
+    return true
+  end
   if usedPanel then
     local b = M.Create("run")
     B.runBoard = true

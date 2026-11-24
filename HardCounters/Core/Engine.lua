@@ -54,6 +54,9 @@ local function attach()
   local ro, why = db:IsReadOnly()
   if ro then ns.Log("warn", "HC", "storage is read-only: %s", tostring(why)) end
   ns.guid = W.playerGUID()
+  -- (HC-74) has this character loaded Hard Counters before? Read before this login adds it to the list: a new
+  -- character gets the starter board and no copy of 0.2's shared boards (UI/BoardModel.lua)
+  ns.knownCharacter = type(SV.chars) == "table" and type(SV.chars[ns.guid]) == "table"
   db:SetEntity(ns.guid, W.entityInfo())
   ns.BindOdometers()
 

@@ -1301,3 +1301,93 @@ describe("the Boards tab and the New board dialog", function()
     end)
   end)
 end)
+
+-- HC-74 (the user, 2026-11-24): each character its own boards; a new one gets the Leveling board and, once per
+-- account, the introduction; another character's boards can be copied
+describe("a new character", function()
+  -- another character of the account, as AceDB saved it: one board, a reading tile and a heading
+  local function altSettings(global)
+    return { global = global, char = { ["Alt - Elsewhere"] = { boards = { v = 7, nextId = 2, seeded = true, nextTile = 1,
+      tileOrder = { "t1" },
+      tiles = { t1 = { id = "t1", kind = "reading", reading = "hc:gold", scope = "session", display = "number", name = "Alt gold" } },
+      list = { { id = "b1", name = "Farm", wid = 77, shown = true, mini = false, show = {},
+        tiles = { { kind = "label", text = "Money" }, { ref = "t1", size = "half" } } } } } } } }
+  end
+
+  it("gets the Leveling board in front of it and the introduction once; copies another character's board", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local BM = ns.BoardModel
+      assert.is_false(ns.knownCharacter)
+      local list = BM.Store().list
+      assert.are.equal(1, #list)
+      assert.are.equal("Leveling", list[1].name)
+      assert.is_true(list[1].shown)
+      assert.are.same(BM.STARTER_POS, list[1].pos)
+      assert.is_nil(ns.WelcomeFrame())                                 -- not behind the loading screen
+      ctx.env:advance(3)
+      local w = ns.WelcomeFrame()
+      assert.truthy(w)
+      assert.is_true(w:IsShown())
+      local body = w.body:GetText()
+      for _, s in ipairs({ "Overview", "Boards", "Trackers", "Runs", "/hc", "Copy of a board" }) do
+        assert.truthy(body:find(s, 1, true), s)
+      end
+      assert.is_true(ns.globalSettings.introSeen)                     -- once per account
+      assert.is_nil(BM.Store().welcome)
+      w.open:GetScript("OnClick")(w.open)
+      assert.is_false(w:IsShown())
+      assert.is_true(ns.Windows.IsShown("overview"))
+      -- the other character's board, in the Boards tab, copied to this one
+      ns.ShowBoardsTab(true)
+      ns.Windows.Content("boards"):SetSize(762, 568)
+      ns.RefreshBoardsTab()
+      local br = ns.BoardsBrowser
+      local nodes = {}
+      for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
+      assert.truthy(table.concat(nodes, "|"):find("Other characters", 1, true))
+      assert.truthy(table.concat(nodes, "|"):find("Alt", 1, true))
+      br:Select("o:Alt - Elsewhere:1", "others")
+      local copyBtn
+      for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Copy to this character..." then copyBtn = b end end
+      assert.truthy(copyBtn)
+      copyBtn:GetScript("OnClick")(copyBtn)
+      local choice = ns.BoardDialog.Choice()
+      assert.are.equal("copy", choice.kind)
+      assert.are.equal("Alt", choice.who)
+      assert.truthy(ns.BoardDialog.Frame().start:GetText():find("(Alt)", 1, true))
+      local b = ns.BoardDialog.Create()
+      assert.are.equal("Farm", b.name)
+      assert.are.equal(2, #BM.Store().list)
+      assert.are.equal("label", b.tiles[1].kind)
+      assert.are.equal("Alt gold", b.tiles[2].name)
+      assert.is_nil(b.wid)                                             -- a timer of its own
+      b.tiles[2].name = "My gold"                                     -- adjusted here, the alt's stays
+      assert.are.equal("Alt gold", ns.allCharSettings["Alt - Elsewhere"].boards.tiles.t1.name)
+      assert.are.same({}, ctx.env.errors)
+    end, { newCharacter = true, settings = altSettings() })
+  end)
+
+  it("after the account's first one, gets the Leveling board and a chat line, no window", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local printed
+      ns.Print = function(fmt) printed = fmt end
+      ctx.env:advance(3)
+      assert.is_nil(ns.WelcomeFrame())
+      assert.truthy(printed and printed:find("Leveling board", 1, true))
+      assert.are.equal("Leveling", ns.BoardModel.Store().list[1].name)
+      assert.are.same({}, ctx.env.errors)
+    end, { newCharacter = true, settings = altSettings({ introSeen = true }) })
+  end)
+
+  it("a character Hard Counters knew keeps its boards and sees no introduction", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      assert.is_true(ns.knownCharacter)
+      ctx.env:advance(3)
+      assert.is_nil(ns.WelcomeFrame())
+      assert.are.equal("Pocket", ns.BoardModel.Store().list[1].name)
+    end)
+  end)
+end)
