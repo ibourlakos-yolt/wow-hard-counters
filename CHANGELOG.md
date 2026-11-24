@@ -3,7 +3,10 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.4-beta1 (2026-11-25)
+
+A beta, **still experimental**: Hard Counters now shows you around. A tutorial opens at your first login, with a
+first board for your class, and the window gains a Guide tab, the manual inside the game.
 
 **Saved data:** kept.
 
