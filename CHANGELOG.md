@@ -3,7 +3,13 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.2-beta2 (2026-11-24)
+
+A small beta, **still experimental**: a clearer `/hc report`, so testers can send everything in one paste.
+
+**Saved data:** kept; nothing in it changes.
+
+**Updating:** `/reload` is enough (no new files).
 
 ### New
 - **A clearer `/hc report`.** The report window now says what the report is for and lists what is in it before you

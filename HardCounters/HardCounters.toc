@@ -2,7 +2,7 @@
 ## Title: Hard Counters
 ## Notes: Counters for anything you care about: periods, records, runs and displays, with a public API for packs.
 ## Author: Ioannis (John) Bourlakos
-## Version: 0.2.2-beta1
+## Version: 0.2.2-beta2
 ## X-License: MIT
 ## X-AI-Assisted: Claude (Anthropic), via Claude Code
 ## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters
