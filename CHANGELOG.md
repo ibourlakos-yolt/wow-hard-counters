@@ -3,7 +3,11 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.3-beta1 (2026-11-24)
+
+A beta, **still experimental**: gold and XP become the Hard Counters Basic pack, related numbers merge into one
+with a choice on the tile, Character Stats gains the stats it lacked and a board for every role and class, the main
+window's tabs swap places, and names say what they count.
 
 **Saved data:** kept. Tiles on "Gold from ...", "Spent on ...", "... looted" and "... rep" move to the readings
 those were merged into, with the same choice, calc, look and name.
