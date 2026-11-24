@@ -32,7 +32,7 @@ files["HardCounters/Core/WoW.lua"] = {
     "UnitGUID", "UnitClass", "UnitName", "GetRealmName", "UnitFactionGroup", "GetBuildInfo", "GetCurrentRegion",
     "UnitIsAFK", "Enum", "C_Map", "IsInInstance", "GetInstanceInfo", "InCombatLockdown", "C_AddOns",
     "C_EncodingUtil",
-    "hooksecurefunc", "GetCursorInfo", "ClearCursor", "C_Reputation", "C_Item",
+    "hooksecurefunc", "GetCursorInfo", "ClearCursor", "C_Reputation", "C_Item", "C_SkillInfo",
   },
 }
 

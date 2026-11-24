@@ -83,11 +83,19 @@ end
 local function startItems()
   local items = {}
   for _, g in ipairs(BM().PresetGroups()) do
-    items[#items + 1] = { text = L[g.title], title = true }
-    for _, key in ipairs(g.keys) do
+    local function entry(key, indent)
       local p = BM().Preset(key)
-      items[#items + 1] = { text = "  " .. p.name, checked = choice.kind == "preset" and choice.key == key,
+      return { text = indent .. p.name, checked = choice.kind == "preset" and choice.key == key, tip = p.tip and L[p.tip] or nil,
         func = function() setChoice({ kind = "preset", key = key }) end }
+    end
+    if g.more then
+      -- (HC-57, 2026-11-24) a long group, such as the other classes' boards: one submenu
+      local sub = {}
+      for _, key in ipairs(g.keys) do sub[#sub + 1] = entry(key, "") end
+      items[#items + 1] = { text = "  " .. L[g.title], sub = sub }
+    else
+      items[#items + 1] = { text = L[g.title], title = true }
+      for _, key in ipairs(g.keys) do items[#items + 1] = entry(key, "  ") end
     end
   end
   items[#items + 1] = { text = L["Other"], title = true }

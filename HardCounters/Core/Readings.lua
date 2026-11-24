@@ -76,7 +76,8 @@ end
 -- min, max: a stock's lowest and highest level over the scope, or a flow's smallest and largest single value where
 -- something keeps it; avg: a flow's sum / count (HC-27)
 local MEASURES = { sum = true, count = true, last = true, min = true, max = true, avg = true }
-local PARAM_TYPES = { enum = true, zone = true, item = true, faction = true }
+-- skill (HC-71): a skill line of the character (C_SkillInfo), member = the skill line id
+local PARAM_TYPES = { enum = true, zone = true, item = true, faction = true, skill = true }
 local DEFAULT_SCOPES = { "run", "session" }
 local TIME = ns.TIME_ID
 
@@ -101,9 +102,11 @@ local function sortOrder()
   local all, runs = {}, {}
   for _, id in ipairs(allIds) do
     local r = ns.readings[id]
-    if not r.aliasOf then all[#all + 1] = id end
-    -- (a reading with a parameter has no single run value: it is left out of the run lists)
-    if r.scopeSet.run and not r.param then runs[#runs + 1] = id end
+    -- hidden (a reading merged into another, a unit twin): readable, not offered
+    if not r.aliasOf and not r.hidden then all[#all + 1] = id end
+    -- (a reading with a parameter has no single run value, unless its choice defaults to the whole total: an
+    -- optional member, or a set with no default)
+    if r.scopeSet.run and not r.hidden and (not r.param or ns.ReadsWhole(r)) then runs[#runs + 1] = id end
   end
   ns.allReadingOrder = all
   ns.readingOrder = runs
@@ -131,13 +134,25 @@ end
 --- Does a calc the reading allows fit where it is asked? `recent` needs a window with its own clock (the board's
 --- timer, the open run, the session), this character, and no zone argument (its rate would need the time in that
 --- zone weighted the same way). Returns true, or false and why: "scope", "account", "zone".
-function ns.CalcFits(r, calc, scope, who)
+--- arg: the tile's member or set (a set reading reading everything, or an optional one with no member, keeps
+--- recent: it is the whole counter).
+function ns.CalcFits(r, calc, scope, who, arg)
   if calc ~= "recent" and calc ~= "trend" then return true end   -- (trend is made of recent)
   if not CLOCK_SCOPES[scope] then return false, "scope" end
   if who == "account" then return false, "account" end
   if r and r.param and r.param.dim == "zone" then return false, "zone" end
-  if r and r.param and r.param.multi then return false, "set" end   -- (HC-60: a set's recent rate, later)
+  -- (HC-60: a set's recent rate, later; everything is the whole counter's)
+  if r and r.param and r.param.multi and ns.ReadingSet(r, arg) ~= nil then return false, "set" end
   return true
+end
+
+--- Does the reading, with no member or set chosen, read its counter's whole total? (An optional single member, or
+--- a set reading with no default: DESIGN §16.4 as built 2026-11-24.)
+function ns.ReadsWhole(r)
+  local p = r and r.param
+  if not p then return true end
+  if p.multi then return p.defaultSet == nil end
+  return p.optional == true
 end
 
 ---------------------------------------------------------------------------
@@ -170,7 +185,7 @@ end
 
 --- Does a reading need one member picked before it can be read? (A set reading reads its default without one.)
 function ns.NeedsArg(r)
-  return r ~= nil and r.param ~= nil and not r.param.multi
+  return r ~= nil and r.param ~= nil and not r.param.multi and not r.param.optional
 end
 
 --- The members a set reading reads with this argument: the argument (a set), its default, or nil for everything.
@@ -289,6 +304,20 @@ function HC:RegisterReading(id, def)
     if p.label ~= nil and type(p.label) ~= "function" then misuse("RegisterReading('%s'): param.label must be a function", id) end
     if def.best then misuse("RegisterReading('%s'): a best reading takes no param", id) end
     param = { dim = p.dim, type = p.type or "enum", label = p.label }
+    if p.optional ~= nil then
+      -- (2026-11-24) one member or none: none reads the whole total ("Items looted", or "Items looted: Linen Cloth")
+      if p.optional ~= true then misuse("RegisterReading('%s'): param.optional must be true", id) end
+      if p.multi then misuse("RegisterReading('%s'): a set (param.multi) already reads everything without a choice", id) end
+      param.optional = true
+      if p.anyLabel ~= nil and type(p.anyLabel) ~= "string" then misuse("RegisterReading('%s'): param.anyLabel must be a string", id) end
+      param.anyLabel = p.anyLabel
+    end
+    if p.filter ~= nil then
+      -- (HC-71) a skill reading narrows the picker: filter(line) with line = { id, name, group }
+      if type(p.filter) ~= "function" then misuse("RegisterReading('%s'): param.filter must be a function", id) end
+      if param.type ~= "skill" then misuse("RegisterReading('%s'): param.filter is for a skill parameter", id) end
+      param.filter = p.filter
+    end
     if p.multi ~= nil then
       -- (HC-60) a set of members instead of one: a tile's filter
       if p.multi ~= true then misuse("RegisterReading('%s'): param.multi must be true", id) end
@@ -320,6 +349,15 @@ function HC:RegisterReading(id, def)
       end
     end
   end
+  -- (2026-11-24) merges and twins: a reading folded into another (its saved tiles move there, it leaves the
+  -- catalog), and a unit twin (the same value in other units: the tile menu's Units switches between them)
+  if def.foldInto ~= nil and type(def.foldInto) ~= "string" then misuse("RegisterReading('%s'): foldInto must be a reading id", id) end
+  if def.foldArg ~= nil and def.foldArg ~= "same" and def.foldArg ~= "set" then
+    misuse("RegisterReading('%s'): foldArg must be \"same\" or \"set\"", id)
+  end
+  if def.unitOf ~= nil and type(def.unitOf) ~= "string" then misuse("RegisterReading('%s'): unitOf must be a reading id", id) end
+  if def.unitLabel ~= nil and type(def.unitLabel) ~= "string" then misuse("RegisterReading('%s'): unitLabel must be a string", id) end
+  if def.pickTitle ~= nil and type(def.pickTitle) ~= "string" then misuse("RegisterReading('%s'): pickTitle must be a string", id) end
   if def.rateTitle ~= nil and type(def.rateTitle) ~= "string" then misuse("RegisterReading('%s'): rateTitle must be a string", id) end
   if def.recentTitle ~= nil and type(def.recentTitle) ~= "string" then misuse("RegisterReading('%s'): recentTitle must be a string", id) end
   local calcs
@@ -342,6 +380,9 @@ function HC:RegisterReading(id, def)
     param = param, target = def.target, refresh = def.refresh and U.copy(def.refresh) or nil,
     applies = def.applies, stale = def.stale, live = def.live, liveFormat = def.liveFormat,
     rateTitle = def.rateTitle, recentTitle = def.recentTitle, calcs = calcs,
+    hidden = (def.hidden or def.foldInto ~= nil or def.unitOf ~= nil) and true or nil,
+    foldInto = def.foldInto, foldArg = def.foldArg, unitOf = def.unitOf, unitLabel = def.unitLabel,
+    pickTitle = def.pickTitle,
     -- `per = "activeHour"` (before HC-51): per hour by default; with no rateTitle its title is the rate's, so it
     -- offers only perHour
     defaultCalc = per and "perHour" or nil, legacyPer = per and not calcs and def.rateTitle == nil or nil,
@@ -364,10 +405,27 @@ local function publicCopy(r)
     calc = def, calcs = U.copy(ns.ReadingCalcs(r)), rateTitle = ns.RateTitle(r), aliasOf = r.aliasOf,
     scopes = U.copy(r.scopes), best = r.best, formatter = r.formatter, headline = r.headline,
     order = r.order, description = r.description, computed = r.compute ~= nil, inputs = r.inputs and U.copy(r.inputs),
-    param = r.param and { dim = r.param.dim, type = r.param.type, multi = r.param.multi,
+    param = r.param and { dim = r.param.dim, type = r.param.type, multi = r.param.multi, optional = r.param.optional,
       members = r.param.members and U.copy(r.param.members), presets = r.param.presets and U.copy(r.param.presets),
       default = r.param.defaultName or (r.param.defaultSet and U.copy(r.param.defaultSet)) } or nil,
+    hidden = r.hidden, foldInto = r.foldInto, unitOf = r.unitOf, unitLabel = r.unitLabel,
     applies = ns.ReadingApplies(r) }   -- (evaluated now: HC-28's rule for this character)
+end
+
+--- A reading's unit twins, the reading itself included, main first: { { id, label }, ... }, or nil when it has
+--- none (2026-11-24: Traveler's speeds in yd/s or % of run speed).
+function ns.ReadingUnits(r)
+  if not r then return nil end
+  local main = r.unitOf or r.id
+  local m = ns.readings[main]
+  if not m then return nil end
+  local out = { { id = main, label = m.unitLabel or m.title } }
+  for _, id in ipairs(allIds) do
+    local t = ns.readings[id]
+    if t.unitOf == main then out[#out + 1] = { id = id, label = t.unitLabel or t.title } end
+  end
+  if #out < 2 then return nil end
+  return out
 end
 
 function HC:GetReading(id)
@@ -683,12 +741,19 @@ end
 function ns.MemberLabel(r, arg)
   local p = r and r.param
   if p and p.multi and (arg == nil or type(arg) == "table") then return ns.SetLabel(r, arg) end
-  if arg == nil then return "?" end
+  if arg == nil then
+    if p and p.optional then return p.anyLabel or (ns.L and ns.L["any"]) or "any" end
+    return "?"
+  end
   if p and p.label then
     local ok, text = pcall(p.label, arg)
     if ok and type(text) == "string" and text ~= "" then return text end
   end
   if p and p.type == "zone" then return HC:ZoneName(arg) end
+  if p and p.type == "skill" and ns.wow and ns.wow.skillName then
+    local name = ns.wow.skillName(arg)
+    if name then return name end
+  end
   return tostring(arg)
 end
 
@@ -724,7 +789,13 @@ function ns.ReadingTitle(r, arg, calc)
   if not r.param then return title end
   -- (HC-60) a set reading with no set chosen reads its default: the plain title says what it is
   if r.param.multi and arg == nil and not title:find("%%s") then return title end
-  if arg == nil and not r.param.multi then return (title:gsub("%%s", "...")) end
+  -- (2026-11-24) an optional member, none chosen: the whole total, under the plain title
+  if r.param.optional and arg == nil and not title:find("%%s") then return title end
+  if arg == nil and not r.param.multi then
+    -- (HC-39 d) the list name says what is picked ("In bags: pick an item")
+    if r.pickTitle and (calc == nil or calc == ns.DefaultCalc(r)) then return r.pickTitle end
+    return (title:gsub("%%s", "..."))
+  end
   local label = ns.MemberLabel(r, arg)
   if title:find("%%s") then return (title:gsub("%%s", (label:gsub("%%", "%%%%")))) end
   return title .. ": " .. label
@@ -748,9 +819,9 @@ end
 --- state "stale" (readValue: the reading's `stale` says it is the last value read, not the current one).
 local function readInner(r, scope, w, arg, calc)
   if not r.scopeSet[scope] then return nil, true, "scope" end
-  if not ns.CalcAllowed(r, calc) or not ns.CalcFits(r, calc, scope, curWho) then return nil, true, "calc" end
+  if not ns.CalcAllowed(r, calc) or not ns.CalcFits(r, calc, scope, curWho, arg) then return nil, true, "calc" end
   if r.applies and not ns.ReadingApplies(r) then return nil, true, "inapplicable" end
-  if r.param and arg == nil and not r.param.multi then return nil, true, "noarg" end
+  if r.param and arg == nil and not r.param.multi and not r.param.optional then return nil, true, "noarg" end
   -- switched off (HC-19): its tracker is off, or nothing keeps its counter running. Shown as "off", never 0.
   if r.tracker and ns.trackers and ns.trackers[r.tracker] and not HC:IsTrackerOn(r.tracker) then return nil, true, "off" end
   if r.counter then
@@ -783,6 +854,8 @@ local function readInner(r, scope, w, arg, calc)
   local c = ns.counters[r.counter]
   local measure = r.measure or (c and c.kind == "stock" and "last" or "sum")
   local dim = r.param and r.param.dim
+  -- the whole counter: an optional member with none chosen, or a set reading reading everything
+  if r.param and arg == nil and (r.param.optional or (r.param.multi and not r.param.defaultSet)) then dim = nil end
   if calc == "trend" then
     -- (HC-53) recent against per hour over the same scope, in %: not a derivative (that amplifies the noise).
     -- Shown only when both are settled.

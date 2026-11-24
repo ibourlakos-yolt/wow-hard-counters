@@ -276,6 +276,17 @@ local TWINS = { ["hc:goldph"] = "hc:gold", ["hc:netph"] = "hc:net", ["hc:xpph"] 
 function M.FoldAlias(t)
   if type(t) ~= "table" or t.kind ~= "reading" then return false end
   local r = ns.readings[t.reading]
+  if r and r.foldInto and ns.readings[r.foldInto] then
+    -- (2026-11-24) a reading merged into another: "Gold from Loot" is "Gold in" with the set { loot }, "Linen Cloth
+    -- looted" is "Items looted" with the item. The tile's calc, display, size and name stay.
+    t.reading = r.foldInto
+    if r.foldArg == "set" then
+      if t.arg ~= nil and type(t.arg) ~= "table" then t.arg = { t.arg } end
+    elseif r.foldArg ~= "same" then
+      t.arg = nil
+    end
+    return true
+  end
   local target, calc
   if r and r.aliasOf then target, calc = r.aliasOf, r.defaultCalc
   elseif TWINS[t.reading] then target, calc = TWINS[t.reading], "perHour" end
@@ -639,7 +650,7 @@ end
 
 local PH = "perHour"
 M.PRESETS = {
-  run = { name = "Run", mini = false, tiles = {
+  run = { name = "Run", mini = false, category = "activity", pack = "hc", tiles = {
     reading("hc:gold", "run", "large", PH),
     reading("hc:xpgained", "run", "half", PH), reading("hc:net", "run", "half", PH),
     reading("hc:gold", "run", "half"), reading("hcfarm:items", "run", "half"),
@@ -647,11 +658,11 @@ M.PRESETS = {
     { kind = "splits" },
     reading("hcfarm:best", "run", "line"),
   } },
-  pocket = { name = "Pocket", mini = true, tiles = {
+  pocket = { name = "Pocket", mini = true, category = "activity", pack = "hc", tiles = {
     reading("hc:gold", "run", "large", PH),
     reading("hc:xpgained", "run", "half", PH), reading("hc:net", "run", "half", PH),
   } },
-  leveling = { name = "Leveling", mini = false, tiles = {
+  leveling = { name = "Leveling", mini = false, category = "activity", pack = "hc", tiles = {
     reading("hc:xpgained", "run", "large", PH), reading("hc:xplevel", "now", "line", nil, "bar"),
     reading("hc:ttl", "run", "half"), reading("hc:rested", "now", "half"),
     reading("hc:xpgained", "run", "half"), reading("hc:gold", "run", "half", PH),
@@ -699,10 +710,30 @@ function HC:RegisterBoardPreset(key, def)
     tile.arg = type(t.arg) == "table" and ns.NormalizeSet(t.arg) or t.arg   -- (HC-60: a set, the pack's own copy)
     tiles[i] = tile
   end
+  if def.category ~= nil and not M.CATEGORY_TITLE[def.category] then
+    error("HardCounters: RegisterBoardPreset('" .. key .. "'): category must be activity, role or class", 2)
+  end
+  if def.class ~= nil and (type(def.class) ~= "string" or def.category ~= "class") then
+    error("HardCounters: RegisterBoardPreset('" .. key .. "'): class (\"MAGE\", ...) goes with category = \"class\"", 2)
+  end
+  if def.category == "class" and def.class == nil then
+    error("HardCounters: RegisterBoardPreset('" .. key .. "'): a class board names its class (\"MAGE\", ...)", 2)
+  end
+  if def.tip ~= nil and type(def.tip) ~= "string" then error("HardCounters: RegisterBoardPreset('" .. key .. "'): tip must be a string", 2) end
   if not M.PRESETS[key] then M.PRESET_ORDER[#M.PRESET_ORDER + 1] = key end
   M.PRESETS[key] = { name = type(def.name) == "string" and def.name:sub(1, 32) or key, mini = def.mini and true or false,
-    tiles = tiles, pack = U.namespace(key) }
+    tiles = tiles, pack = U.namespace(key), category = def.category, class = def.class, tip = def.tip }
   return key
+end
+
+--- (HC-57 a, 2026-11-24) The categories of presets Hard Counters owns, in menu order. A preset without one is
+--- listed under its pack's title.
+M.CATEGORY_ORDER = { "activity", "role", "class" }
+M.CATEGORY_TITLE = { activity = "Activity", role = "Roles", class = "Classes" }
+
+--- The character's class file name ("MAGE"), or nil.
+function M.PlayerClass()
+  return ns.wow and ns.wow.playerClass and ns.wow.playerClass() or nil
 end
 
 ---------------------------------------------------------------------------
@@ -831,24 +862,36 @@ function M.DeletePreset(key)
   return false
 end
 
---- The presets in groups for the Boards tab and the New board dialog: Hard Counters' own, each pack's (by its
---- title), then "Your presets". { { title, keys = { key, ... } } }; empty groups left out.
+--- The presets in groups for the Boards tab and the New board dialog (HC-57 a, 2026-11-24): by category, Activity,
+--- Roles, "Your class" (this character's class board), "Other classes" (`more = true`: a submenu); then presets
+--- with no category under their pack's title; then "Your presets". { { title, keys = { key, ... }, more } }; empty
+--- groups left out.
 function M.PresetGroups()
   local groups, byTitle = {}, {}
   local function group(title)
     if not byTitle[title] then byTitle[title] = { title = title, keys = {} }; groups[#groups + 1] = byTitle[title] end
     return byTitle[title]
   end
+  local myClass = M.PlayerClass()
+  -- the fixed groups first, in order (left out below when empty)
+  for _, t in ipairs({ "Activity", "Roles", "Your class", "Other classes" }) do group(t) end
+  byTitle["Other classes"].more = true
   for _, key in ipairs(M.PRESET_ORDER) do
     local p = M.PRESETS[key]
-    local title = "Hard Counters"
-    if p.pack then
-      title = p.pack
-      for _, pk in pairs(ns.packs or {}) do if pk.namespace == p.pack then title = pk.title or pk.name end end
+    local title
+    if p.category == "class" then title = (myClass and p.class == myClass) and "Your class" or "Other classes"
+    elseif p.category then title = p.category == "role" and "Roles" or "Activity"
+    else
+      title = "Hard Counters"
+      if p.pack then
+        title = p.pack
+        for _, pk in pairs(ns.packs or {}) do if pk.namespace == p.pack then title = pk.title or pk.name end end
+      end
     end
     local g = group(title)
     g.keys[#g.keys + 1] = key
   end
+  for i = #groups, 1, -1 do if #groups[i].keys == 0 then byTitle[groups[i].title] = nil; table.remove(groups, i) end end
   local mine = userPresets().list
   if #mine > 0 then
     local g = group("Your presets")
@@ -1231,6 +1274,20 @@ function M.SetScope(tile, scope, board)
   return true
 end
 
+--- (2026-11-24) Show one of the reading's unit twins instead (Traveler's speed in yd/s or % of run speed): the same
+--- value, other units. Everything else about the tile stays. Returns true when it changed.
+function M.SetReading(tile, readingId, board)
+  if tile.kind ~= "reading" or tile.reading == readingId then return false end
+  local ok = false
+  for _, u in ipairs(ns.ReadingUnits(ns.readings[tile.reading]) or {}) do if u.id == readingId then ok = true end end
+  if not ok then return false end
+  tile.reading = readingId
+  M.FitCalc(tile)
+  board = board or M.BoardOf(tile)
+  if ns.ready and board and M.TileWindow(tile, board) then watchTiles(board) end
+  return true
+end
+
 ---------------------------------------------------------------------------
 -- Calc, display and size (DESIGN §16.9, HC-51). The tile menu's "Show as", Display and Size.
 ---------------------------------------------------------------------------
@@ -1258,7 +1315,7 @@ function M.CalcChoices(tile)
   if not r then return out end
   local accepts = M.DISPLAYS[M.TileDisplay(tile)].calcs
   for _, c in ipairs(ns.ReadingCalcs(r)) do
-    local ok, why = ns.CalcFits(r, c, tile.scope, tile.who)
+    local ok, why = ns.CalcFits(r, c, tile.scope, tile.who, tile.arg)
     if ok and not accepts[c] then ok, why = false, "display" end
     out[#out + 1] = { calc = c, ok = ok, why = why }
   end
@@ -1271,7 +1328,7 @@ function M.FitCalc(tile)
   if tile.calc == nil then return false end
   local r = ns.readings[tile.reading]
   local function fits(c)
-    return ns.CalcAllowed(r, c) and ns.CalcFits(r, c, tile.scope, tile.who) and M.DISPLAYS[M.TileDisplay(tile)].calcs[c]
+    return ns.CalcAllowed(r, c) and ns.CalcFits(r, c, tile.scope, tile.who, tile.arg) and M.DISPLAYS[M.TileDisplay(tile)].calcs[c]
   end
   if not r or fits(tile.calc) then return false end
   tile.calc = fits("perHour") and "perHour" or nil
@@ -1286,7 +1343,7 @@ end
 function M.SetCalc(tile, calc)
   local r = ns.readings[tile.reading]
   if tile.kind ~= "reading" or not ns.CalcAllowed(r, calc) then return false end
-  if not M.DISPLAYS[M.TileDisplay(tile)].calcs[calc] or not ns.CalcFits(r, calc, tile.scope, tile.who) then return false end
+  if not M.DISPLAYS[M.TileDisplay(tile)].calcs[calc] or not ns.CalcFits(r, calc, tile.scope, tile.who, tile.arg) then return false end
   tile.calc = calc
   return true
 end
@@ -1330,7 +1387,7 @@ function M.TrendBadgeFits(tile)
   local c = M.TileCalc(tile)
   if M.Footprint(tile) ~= "hero" or (c ~= "perHour" and c ~= "recent") then return false end
   local r = ns.readings[tile.reading]
-  return ns.CalcAllowed(r, "trend") and ns.CalcFits(r, "trend", tile.scope, tile.who) and true or false
+  return ns.CalcAllowed(r, "trend") and ns.CalcFits(r, "trend", tile.scope, tile.who, tile.arg) and true or false
 end
 
 --- The trend badge's value (a %) and state ("up", "down", "flat"), or nil (off, doesn't fit, not settled yet).
@@ -1755,6 +1812,7 @@ function M.SetArg(tile, arg, board)
     end
   end
   tile.arg = arg
+  M.FitCalc(tile)        -- (a set of some kinds has no recent rate: everything has)
   board = board or M.BoardOf(tile)
   if ns.ready and board and M.TileWindow(tile, board) then watchTiles(board) end
   return true
@@ -1880,6 +1938,30 @@ function M.FactionChoices(readingId)
     if not listed[c.arg] then rest[#rest + 1] = c end
   end
   if #rest > 0 then groups[#groups + 1] = { name = false, list = rest }; n = n + #rest end
+  return groups, n
+end
+
+--- (HC-71) The character's skill lines for a skill reading, by the skill panel's headers, narrowed by the reading's
+--- param.filter: { { name = header or nil, list = { { arg = skillLineID, label = name }, ... } }, ... }, and their
+--- total. Lines under a header the player collapsed aren't listed by the game's fallback list.
+function M.SkillChoices(readingId)
+  local r = ns.readings[readingId]
+  local groups, byName, n = {}, {}, 0
+  local filter = r and r.param and r.param.filter
+  for _, line in ipairs(ns.wow.skillLines()) do
+    local keep = true
+    if filter then
+      local ok, yes = pcall(filter, line)
+      keep = ok and yes and true or false
+    end
+    if keep then
+      local key = line.group or ""
+      local g = byName[key]
+      if not g then g = { name = line.group, list = {} }; byName[key] = g; groups[#groups + 1] = g end
+      g.list[#g.list + 1] = { arg = line.id, label = line.name }
+      n = n + 1
+    end
+  end
   return groups, n
 end
 

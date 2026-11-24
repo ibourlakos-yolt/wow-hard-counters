@@ -1233,7 +1233,26 @@ function Boards.MemberMenu(anchor, rid, fn, current)
     return { text = c.label, checked = current ~= nil and c.arg == current, func = function() fn(c.arg) end }
   end
   local kind, done = r.param.type, false
-  if kind == "faction" then
+  if r.param.optional then
+    -- (2026-11-24) no member: the whole total
+    items[#items + 1] = { text = ns.MemberLabel(r, nil), checked = current == nil, func = function() fn(nil) end }
+  end
+  if kind == "skill" then
+    -- (HC-71) the character's skill lines, by the skill panel's headers
+    local groups, n = M.SkillChoices(rid)
+    done = true
+    for _, g in ipairs(groups) do
+      if n <= M.FLAT_CHOICES or not g.name then
+        for _, c in ipairs(g.list) do items[#items + 1] = pick(c) end
+      else
+        local sub = {}
+        for _, c in ipairs(g.list) do sub[#sub + 1] = pick(c) end
+        items[#items + 1] = { text = g.name, sub = sub }
+      end
+    end
+    if n == 0 then items[#items + 1] = { text = L["No skill lines listed (open a collapsed header in the skill panel)"], disabled = true }
+    else items[#items + 1] = { text = L["Lines under a collapsed header in the skill panel aren't listed"], disabled = true } end
+  elseif kind == "faction" then
     local groups, n = M.FactionChoices(rid)
     done = n > 0                                       -- no faction API: the members counted so far, below
     for _, g in ipairs(groups) do
@@ -1415,6 +1434,17 @@ function Boards.TileSettingsItems(tile, board, anchor)
         func = function() M.SetWho(tile, "account", board); done() end },
     } }
     local rdef = ns.readings[tile.reading]
+    local units = ns.ReadingUnits(rdef)
+    if units then
+      -- (2026-11-24) the same value in other units (Traveler's speeds): the tile switches readings, keeps the rest
+      local sub = {}
+      for _, u in ipairs(units) do
+        sub[#sub + 1] = { text = L[u.label], checked = tile.reading == u.id, func = function()
+          M.SetReading(tile, u.id, board); done()
+        end }
+      end
+      items[#items + 1] = { text = L["Units"], sub = sub }
+    end
     if rdef and rdef.param and rdef.param.multi then
       -- (HC-60) the tile's filter: the reading's presets, then a checklist of its members
       local sub, cur = {}, M.TileSet(tile)
@@ -1683,8 +1713,14 @@ end
 --- The presets, then "Empty board" (the + menu's and the launcher's "New board" submenu).
 function Boards.NewBoardItems()
   local items = {}
-  for _, key in ipairs(M.PRESET_ORDER) do
-    items[#items + 1] = { text = M.PRESETS[key].name, func = function() Boards.NewBoard(key) end }
+  -- (HC-57, 2026-11-24) grouped as in the New board dialog: a submenu per group, Hard Counters' presets only
+  for _, g in ipairs(M.PresetGroups()) do
+    local sub = {}
+    for _, key in ipairs(g.keys) do
+      local p = M.PRESETS[key]
+      if p then sub[#sub + 1] = { text = p.name, tip = p.tip and L[p.tip] or nil, func = function() Boards.NewBoard(key) end } end
+    end
+    if #sub > 0 then items[#items + 1] = { text = L[g.title], sub = sub } end
   end
   items[#items + 1] = { text = L["Empty board"], tip = L["Opens for editing: add numbers with its [+]"],
     func = function() Boards.NewBoard(nil) end }

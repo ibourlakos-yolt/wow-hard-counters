@@ -931,7 +931,7 @@ describe("boards: names, copies and your presets", function()
     assert.is_nil(p.tiles[1].id)
     assert.are.equal("large", p.tiles[1].size)                     -- the placement's size travels with it
     local groups = M.PresetGroups()
-    assert.are.equal("Hard Counters", groups[1].title)
+    assert.are.equal("Activity", groups[1].title)             -- (HC-57: by category)
     assert.are.equal("Your presets", groups[#groups].title)
     assert.are.same({ key }, groups[#groups].keys)
     local made = M.Create(key)

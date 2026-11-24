@@ -65,6 +65,19 @@ function HC:RegisterPack(name, def)
   return p
 end
 
+--- (2026-11-24) Hard Counters Basic: gold and XP, shipped inside Hard Counters and always on. It is a pack like the
+--- others for the player (pack lists, the New board dialog, /hc report) but keeps the `hc` namespace, so every id it
+--- registered before stays as it was. Not public: only Basics/Basics.lua calls it.
+function ns.RegisterBuiltinPack(name, def)
+  local existing = ns.packs[name]
+  if existing then return existing end
+  local p = setmetatable({ name = name, namespace = "hc", version = tostring(def.version or HC.VERSION or "?"),
+    title = def.title or name, tag = "HC", health = {}, builtin = true }, Pack)
+  ns.packs[name] = p
+  table.insert(ns.packOrder, 1, name)
+  return p
+end
+
 function ns.PackSummaries()
   local out = {}
   for _, name in ipairs(ns.packOrder) do

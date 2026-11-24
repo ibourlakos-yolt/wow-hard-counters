@@ -34,6 +34,13 @@ function W.entityInfo()
   return { name = UnitName("player"), realm = GetRealmName(), class = class, faction = UnitFactionGroup("player") }
 end
 
+--- The character's class file name ("MAGE"), or nil (HC-57: the New board dialog lists your class board first).
+function W.playerClass()
+  local ok, _, class = pcall(UnitClass, "player")
+  if not ok or W.isSecret(class) or type(class) ~= "string" then return nil end
+  return class
+end
+
 --- version, build number, interface number
 function W.build()
   local version, build, _, interface = GetBuildInfo()
@@ -167,6 +174,45 @@ function W.factions()
     end
   end
   return out
+end
+
+--- (HC-71) The character's skill lines, in the skill panel's order: { { id = skillLineID, name, group = header name
+--- or nil }, ... }. From C_SkillInfo's visible list (GetNumSkillLines / GetSkillLineInfo, as Character Stats reads
+--- them): lines under a header the player collapsed aren't listed (expanding it would change the player's panel).
+--- Empty when the client has no such API. Unprobed as a list on Forever (Character Stats reads lines by id).
+function W.skillLines()
+  local out = {}
+  local S = C_SkillInfo
+  if not (type(S) == "table" and type(S.GetNumSkillLines) == "function" and type(S.GetSkillLineInfo) == "function") then
+    return out
+  end
+  local ok, n = pcall(S.GetNumSkillLines)
+  if not ok or W.isSecret(n) or type(n) ~= "number" then return out end
+  local group
+  for i = 1, n do
+    local okLine, d = pcall(S.GetSkillLineInfo, i)
+    if okLine and type(d) == "table" and not W.isSecret(d.name) and type(d.name) == "string" and d.name ~= "" then
+      local header = d.isHeader and not W.isSecret(d.isHeader)
+      if header then
+        group = d.name
+      elseif not W.isSecret(d.skillID) and type(d.skillID) == "number" and d.skillID > 0 then
+        out[#out + 1] = { id = d.skillID, name = d.name, group = group }
+      end
+    end
+  end
+  return out
+end
+
+--- A skill line's name by id (by id where the client offers it, else from the visible list), or nil.
+function W.skillName(id)
+  local S = C_SkillInfo
+  if type(id) ~= "number" or type(S) ~= "table" then return nil end
+  if type(S.GetSkillLineInfoByID) == "function" then
+    local ok, d = pcall(S.GetSkillLineInfoByID, id)
+    if ok and type(d) == "table" and not W.isSecret(d.name) and type(d.name) == "string" and d.name ~= "" then return d.name end
+  end
+  for _, line in ipairs(W.skillLines()) do if line.id == id then return line.name end end
+  return nil
 end
 
 --- Installed addons (names and loaded state), only for the opt-in part of /hc report.
