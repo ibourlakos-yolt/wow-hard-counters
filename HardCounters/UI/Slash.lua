@@ -52,11 +52,9 @@ function HC:RegisterSlash(name, fn, helpText, owner)
 end
 
 ns.AddSlash("report", function(rest)
-  local addons = rest == "addons"
-  local ok, s = pcall(ns.BuildReport, { addons = addons })
-  if not ok then ns.Error(s); ns.Print(L["could not build the report (see BugSack)"]); return end
-  ns.ShowCopyBox(L["Hard Counters report"] .. (addons and (" " .. L["(with addon list)"]) or ""), s)
-end, L["copy a diagnostics report (add 'addons' to include your addon list)"])
+  -- (HC-61) the report window: what it is for, what is in it, the opt-ins (name, class, addon list), the string
+  ns.ShowReportBox({ addons = rest == "addons" })
+end, L["a report to copy and paste for bug fixes (add 'addons' to tick your addon list)"])
 
 ns.AddSlash("help", help)
 

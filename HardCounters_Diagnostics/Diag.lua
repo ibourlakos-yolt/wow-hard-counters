@@ -88,4 +88,6 @@ f:SetScript("OnEvent", function(self, _, name)
   B.SetLogSink(ns.AddLine)
   B.Log("info", "Diag", "diagnostics loaded (%s)", contextLine())
   if ns.StartProbes then ns.StartProbes() end
+  -- (HC-61) the probes ride along in /hc report (Probes.lua loads after this file: looked up at the call)
+  if B.SetReportSection then B.SetReportSection(function() return ns.ReportSection and ns.ReportSection() end) end
 end)

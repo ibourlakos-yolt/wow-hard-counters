@@ -138,6 +138,41 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
+  -- HC-61: with Diagnostics loaded the report carries the probes; the report window says what is in it, starts
+  -- anonymous every time it opens, and rebuilds when a box is ticked
+  it("puts the probes in /hc report and opens the report window anonymous", function()
+    UI.with(function(ctx)
+      ctx.diag.RunProbes()
+      local s, body = ctx.hc.BuildReport({})
+      assert.truthy(s:match("^!HCReport:1!"))
+      assert.are.equal(1, body.diag.v)
+      assert.are.equal("ok", body.diag.funcs.GetMoney.s)
+      assert.truthy(body.diag.samplers.travel)
+      assert.truthy(body.diag.strings)
+      assert.is_nil(body.who)
+      _G.SlashCmdList.HARDCOUNTERS("report")
+      local f = _G.HardCountersReportBox
+      assert.is_true(f:IsShown())
+      assert.are.equal(s, f.text)
+      assert.truthy(f.summary:GetText():find("No character name", 1, true))
+      assert.truthy(f.summary:GetText():find("API checks", 1, true))
+      assert.is_nil(f.opts.name)                   -- (the fake client keeps no checked state: read the options)
+      f.checks.name:GetScript("OnClick")(f.checks.name)
+      assert.is_true(f.opts.name)
+      assert.truthy(f.summary:GetText():find("Your character:", 1, true))
+      -- reopened: the box is off again (never saved)
+      f:Hide()
+      _G.SlashCmdList.HARDCOUNTERS("report addons")
+      assert.is_nil(f.opts.name)
+      assert.is_true(f.opts.addons)
+      assert.truthy(f.summary:GetText():find("addon list", 1, true))
+      -- the Diagnostics console's Report button opens the same window
+      f:Hide()
+      ctx.hc.HC._diag.ShowReport({})
+      assert.is_true(f:IsShown())
+    end)
+  end)
+
   -- HC-70 (DESIGN §17.4; note #7 decided 2026-11-23): every probe as a record, and the browser over them
   it("lists every probe by kind with a feature and a status, and browses, runs, copies and clears them", function()
     UI.with(function(ctx)

@@ -111,6 +111,70 @@ describe("tier-1 diagnostics", function()
     assert.are.same({ "HardCounters", "Other" }, env.lastReportBody.addons)
   end)
 
+  -- HC-61: anonymous by default; name (with realm) and class only when asked for, each on its own
+  it("leaves out the character unless name or class is asked for", function()
+    local env = Env.new():boot()
+    local _, body = env.ns.BuildReport({})
+    assert.is_nil(body.who)
+    local summary = table.concat(env.ns.ReportSummary(body), "\n")
+    assert.truthy(summary:find("No character name, realm or class", 1, true))
+    _, body = env.ns.BuildReport({ class = true })
+    assert.are.same({ class = "MAGE" }, body.who)
+    _, body = env.ns.BuildReport({ name = true })
+    assert.are.same({ name = "Tester", realm = "Test" }, body.who)
+    summary = table.concat(env.ns.ReportSummary(body), "\n")
+    assert.truthy(summary:find("Your character: Tester-Test", 1, true))
+    assert.is_nil(summary:find("No character name", 1, true))
+  end)
+
+  -- HC-61: the Diagnostics section rides along; a failing one doesn't break the report
+  it("carries the Diagnostics section when one is set, and survives it failing", function()
+    local env = Env.new():boot()
+    local ns = env.ns
+    local _, body = ns.BuildReport({})
+    assert.is_nil(body.diag)
+    assert.truthy(table.concat(ns.ReportSummary(body), "\n"):find("Diagnostics: not loaded", 1, true))
+    ns.reportSection = function() return { v = 1, funcs = { GetMoney = { s = "ok" } }, events = {}, strings = {}, samplers = {} } end
+    _, body = ns.BuildReport({})
+    assert.are.equal("ok", body.diag.funcs.GetMoney.s)
+    assert.truthy(table.concat(ns.ReportSummary(body), "\n"):find("Diagnostics: 1 API checks", 1, true))
+    ns.reportSection = function() error("boom") end
+    local s
+    s, body = ns.BuildReport({})
+    assert.truthy(s:match("^!HCReport:1!"))
+    assert.truthy(tostring(body.diag):find("Diagnostics section failed", 1, true))
+  end)
+
+  -- HC-61: over the cap, the storage report goes before the probes, and the probes' parts go samplers first
+  it("sheds the storage report, then the probes' samplers, events and strings, keeping the API checks", function()
+    local env = Env.new():boot()
+    local ns = env.ns
+    ns.reportSection = function()
+      return { v = 1, funcs = { GetMoney = { s = "ok" } }, events = { E = 1 }, strings = { S = "x" }, samplers = { travel = {} } }
+    end
+    local W = ns.wow
+    local function size(t)
+      local n = 100
+      if t.granary then n = n + 9000 end
+      if type(t.diag) == "table" then
+        if t.diag.samplers then n = n + 9000 end
+        if t.diag.events then n = n + 9000 end
+        if t.diag.strings then n = n + 3000 end
+        n = n + 5000
+      end
+      return n
+    end
+    W.encodeReport = function(t) env.lastReportBody = t; return string.rep("x", size(t)), "raw" end
+    local s, body = ns.BuildReport({})
+    assert.is_true(#s <= ns.REPORT_MAX)
+    assert.is_true(body.truncated)
+    assert.is_nil(body.granary)
+    assert.is_nil(body.diag.samplers)
+    assert.truthy(body.diag.events)          -- 100 + 9000 + 3000 + 5000 fits once the samplers are gone
+    assert.truthy(body.diag.funcs.GetMoney)
+    assert.truthy(table.concat(ns.ReportSummary(body), "\n"):find("Shortened to fit", 1, true))
+  end)
+
   it("trims the report to its size cap, oldest warnings first", function()
     local env = Env.new():boot()
     local ns = env.ns

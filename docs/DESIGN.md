@@ -550,6 +550,21 @@ It has its own SavedVariable, so debug data never mixes with statistics.
 - **Opt-in and visible:** the user sees the box and copies it. Nothing is sent automatically, and addons have no network access anyway.
 - **Scrubbed by default:** no character names, realms or other players' data.
 - **The list of other installed addons** is behind a separate checkbox: useful for finding conflicts, but more personal.
+- **As built (HC-61, 2026-11-24): the report window and the probes.** `/hc report` and the Diagnostics console's
+  Report button open one window: what the report is for (fixing and improving Hard Counters; the addon sends nothing;
+  pasted into GitHub it is public; zone, map and spell IDs hint at where you play), a plain list of what is in it
+  (`ns.ReportSummary`), three checkboxes (**Include my character's name** (with the realm), **my character's class**,
+  **my addon list**), then the string. The boxes start off every time the window opens and are never saved;
+  `/hc report addons` pre-ticks the addon list. With `HardCounters_Diagnostics` loaded the body gains `diag`, set
+  through the private bridge (`_diag.SetReportSection`): the latest result of each function probe (status, the
+  value's types, the context line: map or instance key, instance type, combat), the events (fires by instance type,
+  argument types), the client strings and the samplers' tables (travel and TR-6 counts, loading screens, item link
+  shapes, Edit Mode), as kept: types, counts and game IDs, never coordinates, names or chat text. Over the 24,000
+  character cap the report sheds the oldest warnings, the addon list, the storage report, then the probes'
+  samplers, events and strings; the function results go last. One tester's real probe data came to about 10,800
+  characters. Decoding is unchanged (`tools\decode-report.ps1` takes any file holding the string, a chat paste
+  included). Not built from HC-61: the decoder's merge mode across reports and a "Diagnostics report" GitHub issue
+  template.
 - **Size-capped,** so the paste never freezes the text box.
 - **Feedback channel:**
   - **Now:** friends paste the string back to you (Discord, email…).

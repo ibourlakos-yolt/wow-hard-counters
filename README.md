@@ -50,7 +50,7 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 | `/hc ledger` | Farmer's money Ledger |
 | `/hc stats` | The Character Stats window |
 | `/hc edit` | Edit every board |
-| `/hc report` | A copyable report for bug reports (`/hc report addons` adds your addon list) |
+| `/hc report` | A report to copy and paste for bug reports, with what is in it and what to include |
 | `/hc diag` | The Diagnostics console |
 | `/hc help` | Every command |
 
@@ -58,15 +58,17 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 
 - **Combat.** WoW: Forever hides many character stats from addons during combat. Single-value stats keep updating;
   the rest show their last value, marked *in combat*, until the fight ends.
-- **Nothing leaves your computer.** Addons have no network access. `/hc report` only shows text for you to copy.
-  It includes no character names or realms, and your addon list only if you ask for it.
+- **Nothing leaves your computer.** Addons have no network access. `/hc report` only shows text for you to copy,
+  with a list of what is in it. It includes no character name, realm or class, and no addon list, unless you tick
+  the box for it.
 - **Saved data** lives in `HardCountersDB` and `HardCountersSettings` (WTF folder). During the beta a new version may
   reset it; the changelog will say so.
 - **The packs' API is experimental.** Other authors can build packs on Hard Counters, but the API may still change.
 
 ## Reporting a problem
 
-1. Type `/hc report`, copy the text in the box (Ctrl+A, Ctrl+C).
+1. Type `/hc report`, copy the text in the box (Ctrl+A, Ctrl+C). With **Hard Counters: Diagnostics** enabled the
+   report also carries its checks of the game's API, which helps most.
 2. Open a bug report on GitHub ([new bug report](https://github.com/ibourlakos-yolt/wow-hard-counters/issues/new?template=bug.yml)) and paste it into the form, with what you did
    and what you expected.
 3. If BugSack or the game showed an error, include that too.

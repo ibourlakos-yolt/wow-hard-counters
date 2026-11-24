@@ -1774,3 +1774,29 @@ function ns.ClearProbes()
   for _, rec in ipairs(ns.ProbeList()) do ns.ClearProbe(rec) end
   P().lastRun = nil
 end
+
+--- (HC-61) The probes' section of /hc report: the latest result of each function probe, the events, the client
+--- strings and the samplers' tables, as kept (types, counts, statuses, game IDs; never coordinates, names or chat
+--- text). The report drops samplers, events and strings in that order when it is over its size cap.
+function ns.ReportSection()
+  local p = HardCountersDiagDB and HardCountersDiagDB.probes
+  if type(p) ~= "table" then return nil end
+  local funcs = {}
+  for _, pr in ipairs(FUNCS) do
+    local h = p.funcs and p.funcs[pr[1]]
+    local r = type(h) == "table" and h[#h]
+    if r then funcs[pr[1]] = { s = r.status, d = r.detail, c = r.ctx, t = r.t, st = funcStatus(h) } end
+  end
+  local samplers = {}
+  for _, s in ipairs(SAMPLERS) do
+    if type(p[s[2]]) == "table" then samplers[s[2]] = p[s[2]] end
+  end
+  return {
+    v = 1,
+    lastRun = p.lastRun,
+    funcs = funcs,
+    events = p.events, missingEvents = next(p.missingEvents or {}) and p.missingEvents or nil,
+    strings = p.strings, stringsWas = next(p.stringsWas or {}) and p.stringsWas or nil,
+    samplers = samplers,
+  }
+end

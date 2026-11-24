@@ -3,6 +3,15 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+### New
+- **A clearer `/hc report`.** The report window now says what the report is for and lists what is in it before you
+  copy it. Three boxes, off each time it opens: include your character's name (with the realm), your class, your
+  addon list. With **Hard Counters: Diagnostics** enabled, the report carries its checks of the game's API and its
+  travel counts (types, counts and game IDs; no positions, names or chat), so one paste is all a tester sends. The
+  Diagnostics console's Report button opens the same window.
+
 ## 0.2.2-beta1 (2026-11-24)
 
 The third beta, **still experimental**: every character gets boards of its own (copy one from another character

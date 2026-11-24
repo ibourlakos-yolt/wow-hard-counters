@@ -12,6 +12,9 @@ D.RecentWarnings = function(max) return ns.RecentWarnings(max) end
 D.Health = function() return ns.U.copy(ns.health.session), ns.U.copy(ns.health.saved) end
 D.ShowCopyBox = function(title, text) ns.ShowCopyBox(title, text) end
 D.BuildReport = function(opts) return ns.BuildReport(opts) end
+-- (HC-61) Diagnostics adds its section to /hc report; fn() returns a table of types, counts, statuses and game IDs
+D.SetReportSection = function(fn) ns.reportSection = fn end
+D.ShowReport = function(opts) if ns.ShowReportBox then ns.ShowReportBox(opts) end end
 D.SchedulerStats = function() return ns.SchedulerStats() end
 D.Context = function()
   return { zone = W.zone(), instance = W.instanceType(), combat = W.inCombat(), loading = ns.loadingScreen }

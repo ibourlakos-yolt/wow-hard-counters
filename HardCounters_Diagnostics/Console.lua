@@ -268,7 +268,9 @@ local function build(f)
   end)
   bottom("Marker", 70, function() ns.Marker(); refresh() end)
   bottom("Run probes", 90, function() ns.RunProbes(); current = "Probes"; refresh() end)
-  bottom("Report", 70, function() B.ShowCopyBox("Hard Counters report", B.BuildReport({})) end)
+  bottom("Report", 70, function()
+    if B.ShowReport then B.ShowReport({}) else B.ShowCopyBox("Hard Counters report", (B.BuildReport({}))) end
+  end)
   f.levelBtn = bottom("Level: all", 90, function()
     ns.minLevel = ns.minLevel % 4 + 1
     refresh()
