@@ -95,6 +95,7 @@ function HC:RegisterTracker(id, def)
     id = id, title = def.title or id, counters = U.copy(def.counters), default = def.default or "off",
     needsHistory = def.needsHistory, icon = def.icon, category = def.category, description = def.description,
     pack = pack and pack.name or nil, packTitle = pack and pack.title or "Hard Counters",
+    builtin = pack and pack.builtin or nil,     -- (Hard Counters Basic: always there, never announced as new)
   }
   if not ns.trackers[id] then ns.trackerOrder[#ns.trackerOrder + 1] = id end
   ns.trackers[id] = t
@@ -166,7 +167,7 @@ local function trackerCopy(t)
     history = PRESET_NAMES[h], days = days, chosenHistory = type(c) == "table" and c.history or "off",
     lastHistory = type(c) == "table" and PRESETS[c.last] and c.last or "daily",
     needsHistory = t.needsHistory, icon = t.icon, category = t.category, description = t.description,
-    pack = t.pack, packTitle = t.packTitle, new = t.pack ~= nil and not (type(c) == "table" and c.seen) }
+    pack = t.pack, packTitle = t.packTitle, new = t.pack ~= nil and not t.builtin and not (type(c) == "table" and c.seen) }
 end
 
 function HC:GetTracker(id)

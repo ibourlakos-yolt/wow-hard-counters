@@ -78,6 +78,32 @@ describe("Basics", function()
     assert.are.equal(1307, login(env, "hc:money.in"))
   end)
 
+  it("is the Basic pack, and reads Gold in and Gold out by source as the tile's filter (2026-11-24)", function()
+    local env = boot()
+    local HC, ns = env.HC, env.ns
+    assert.are.equal("Basic", ns.PackSummaries()[1].name)
+    assert.are.equal("Gold", HC:GetTracker("hc:goldph").title)
+    assert.are.equal("Experience", HC:GetTracker("hc:xpph").title)
+    assert.are.equal("Hard Counters Basic", HC:GetTracker("hc:goldph").packTitle)
+    HC:SetAttributor("hc:money.in", function(amount, _, book) book(amount, amount > 1000 and "quest" or "loot") end)
+    HC:SetAttributor("hc:money.out", function(amount, _, book) book(amount, "repair") end)
+    money(env, 2500); money(env, 300); money(env, -400)
+    assert.are.equal(2800, (HC:Reading("hc:gold", "session")))
+    assert.are.equal(300, (HC:Reading("hc:gold", "session", { arg = { "loot" } })))
+    assert.are.equal(2500, (HC:Reading("hc:goldfrom", "session", "quest")))       -- the folded one still answers
+    assert.are.equal(400, (HC:Reading("hc:goldout", "session")))
+    assert.are.equal(400, (HC:Reading("hc:goldout", "session", { arg = { "repair" } })))
+    local gold = ns.readings["hc:gold"]
+    assert.are.equal("Gold in", ns.ReadingTitle(gold, nil))
+    assert.are.equal("Gold in: Loot", ns.ReadingTitle(gold, { "loot" }))
+    assert.are.equal("Gold in: Loot and quests", ns.ReadingTitle(gold, ns.NormalizeSet({ "quest", "loot" })))
+    assert.are.equal("hc:gold", ns.readings["hc:goldfrom"].foldInto)
+    assert.are.equal("hc:goldout", ns.readings["hc:spenton"].foldInto)
+    -- the headline keeps its recent rate (the whole counter)
+    assert.are_not.equal("calc", select(4, HC:Reading("hc:gold", "session", { calc = "recent" })))
+    assert.are.equal(20, (HC:Reading("hc:level", "now")))
+  end)
+
   it("counts XP across a level-up, time to level and rested XP", function()
     local env = boot()
     local HC = env.HC

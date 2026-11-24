@@ -402,29 +402,32 @@ local function avgSpeed(get, scope)
   if type(d) ~= "number" or type(t) ~= "number" or t <= 0 then return nil end
   return d / t
 end
-HC:RegisterReading("hctravel:avgspeed", { title = "Average speed", tracker = DIST, param = modeParam("Everything but teleports"),
+HC:RegisterReading("hctravel:avgspeed", { title = "Average speed (moving)", unitLabel = "yd/s", tracker = DIST, param = modeParam("Everything but teleports"),
   inputs = { "hctravel:distance", "hctravel:time" }, compute = avgSpeed, scopes = ALL, formatter = "speed", order = 42,
   description = "Distance divided by time moving, over the ways of travel picked on the tile." })
-HC:RegisterReading("hctravel:avgspeedpct", { title = "Average speed (%)", tracker = DIST, param = modeParam("Everything but teleports"),
+HC:RegisterReading("hctravel:avgspeedpct", { title = "Average speed (moving, %)", unitOf = "hctravel:avgspeed",
+  unitLabel = "% of run speed", tracker = DIST, param = modeParam("Everything but teleports"),
   inputs = { "hctravel:distance", "hctravel:time" }, compute = avgSpeed, scopes = ALL, formatter = "speedpct", order = 42.5,
   description = "Average speed as a percentage of the normal run speed (100% = 7 yards a second, as on the character sheet)." })
-HC:RegisterReading("hctravel:topspeed", { title = "Top speed", tracker = DIST, counter = ID.speed, measure = "max",
+HC:RegisterReading("hctravel:topspeed", { title = "Top speed", unitLabel = "yd/s", tracker = DIST, counter = ID.speed, measure = "max",
   scopes = BEST, formatter = "speed", order = 43,
   description = "Your best speed over 2 seconds or more under your own power (not flight paths or boats)." })
-HC:RegisterReading("hctravel:topspeedpct", { title = "Top speed (%)", tracker = DIST, counter = ID.speed, measure = "max",
+HC:RegisterReading("hctravel:topspeedpct", { title = "Top speed (%)", unitOf = "hctravel:topspeed",
+  unitLabel = "% of run speed", tracker = DIST, counter = ID.speed, measure = "max",
   scopes = BEST, formatter = "speedpct", order = 43.5,
   description = "Top speed as a percentage of the normal run speed (100% = 7 yards a second)." })
 local function speedNow() return motion:SpeedNow(GetTime()) end
-HC:RegisterReading("hctravel:speednow", { title = "Speed now", tracker = DIST, scopes = { "now" }, formatter = "speed",
+HC:RegisterReading("hctravel:speednow", { title = "Speed now", unitLabel = "yd/s", tracker = DIST, scopes = { "now" }, formatter = "speed",
   compute = speedNow, order = 44,
   description = "How fast you are moving, from your position: it keeps working in combat. Updates while you move." })
-HC:RegisterReading("hctravel:speednowpct", { title = "Speed now (%)", tracker = DIST, scopes = { "now" },
+HC:RegisterReading("hctravel:speednowpct", { title = "Speed now (%)", unitOf = "hctravel:speednow",
+  unitLabel = "% of run speed", tracker = DIST, scopes = { "now" },
   formatter = "speedpct", compute = speedNow, order = 44.5,
   description = "Speed now as a percentage of the normal run speed (100% = 7 yards a second)." })
 HC:RegisterReading("hctravel:longest", { title = "Farthest without stopping", tracker = DIST, counter = ID.leg,
   measure = "max", scopes = BEST, formatter = "distance", order = 45,
   description = "The longest stretch under your own power with no stop over 3 seconds and no change of how you travel." })
-HC:RegisterReading("hctravel:jumps", { title = "Teleports and blinks", tracker = DIST, counter = ID.jumps,
+HC:RegisterReading("hctravel:jumps", { title = "Instant travel", tracker = DIST, counter = ID.jumps,
   param = jumpParam(), scopes = ALL, formatter = "number", order = 46,
   description = "Jumps from place to place: hearthstone, teleports, summons, blinks and leaps, releases, instance doors, boat"
     .. " crossings. Pick which on the tile." })
@@ -439,9 +442,9 @@ HC:RegisterReading("hctravel:longestair", { title = "Longest time in the air", t
   description = "Your longest single jump or fall, in seconds in the air (the game gives no heights)." })
 HC:RegisterReading("hctravel:corpseruns", { title = "Corpse runs", tracker = DIST, counter = ID.corpse, scopes = ALL,
   formatter = "number", order = 49, description = "Times you ran back to your corpse as a ghost and took your body." })
-HC:RegisterReading("hctravel:healer", { title = "Spirit healer visits", tracker = DIST, counter = ID.healer, scopes = ALL,
+HC:RegisterReading("hctravel:healer", { title = "Spirit healer resurrections", tracker = DIST, counter = ID.healer, scopes = ALL,
   formatter = "number", order = 49.5, description = "Times you took the spirit healer's resurrection." })
-HC:RegisterReading("hctravel:corpse", { title = "Corpse", tracker = DIST, scopes = { "now" }, formatter = "distance",
+HC:RegisterReading("hctravel:corpse", { title = "Distance to corpse", tracker = DIST, scopes = { "now" }, formatter = "distance",
   compute = function() return corpseDistance() end, order = 50,
   description = "While a ghost: how far away your corpse is. Empty otherwise." })
 HC:RegisterReading("hctravel:flights", { title = "Flights taken", tracker = FLIGHTS, counter = ID.flight,

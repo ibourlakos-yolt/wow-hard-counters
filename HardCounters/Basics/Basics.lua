@@ -8,8 +8,14 @@
 -- later (Farmer matches chat lines that arrive just before or after PLAYER_MONEY). Whatever isn't booked within
 -- ATTR_TIMEOUT seconds is booked as "none", so nothing is ever lost or counted twice.
 -- Mail between your own characters counts on both sides, gold/h included (Farmer DESIGN §4.1, user, 2026-11-15).
+--
+-- Hard Counters Basic (the user, 2026-11-24): to the player this is a pack like the others, always on, shipped
+-- inside Hard Counters. Its one call outside the public API registers it as that pack, keeping the `hc` namespace
+-- so every id it ever saved stays the same.
+local ADDON, ns = ...
 local HC = HardCounters
 if not HC then return end
+if ns and ns.RegisterBuiltinPack then ns.RegisterBuiltinPack("Basic", { title = "Hard Counters Basic" }) end
 
 local GetTime, GetMoney, UnitXP, UnitXPMax, UnitLevel = GetTime, GetMoney, UnitXP, UnitXPMax, UnitLevel
 local GetXPExhaustion = GetXPExhaustion
@@ -55,12 +61,13 @@ HC:RegisterCounter({ id = XP, version = 1, kind = "flow", unit = "xp", measures 
 -- Trackers: the two starters, on for a fresh install (TRACKERS_AND_BOARDS §0.3), history off
 ---------------------------------------------------------------------------
 
-HC:RegisterTracker("hc:goldph", { title = "Gold per hour", category = "Basics", icon = 133784,
+-- (HC-39 a) named for their subject, not one member: the ids stay
+HC:RegisterTracker("hc:goldph", { title = "Gold", category = "Basic", icon = 133784,
   counters = { IN, OUT, OWNED }, default = "on",
-  description = "Money looted and earned, and spent, per active hour: this run, this login, or by day with history." })
-HC:RegisterTracker("hc:xpph", { title = "XP per hour", category = "Basics", icon = 894556,
+  description = "Gold in and out, net, by source, and the gold you own: totals or per active hour, this run, this session, or by day with history." })
+HC:RegisterTracker("hc:xpph", { title = "Experience", category = "Basic", icon = 894556,
   counters = { XP }, default = "on",
-  description = "Experience per active hour, time to level and rested XP." })
+  description = "Experience gained (per active hour too), your level, time to level and rested XP." })
 
 ---------------------------------------------------------------------------
 -- Attribution plumbing: hand a change to the attributor, book what it answers, time out the rest
@@ -209,24 +216,52 @@ local ALL = { "run", "session", "today", "week", "month", "year", "lifetime" }
 -- One reading per thing counted; per hour is the tile's calc (DESIGN 16.9, HC-51). The old per-hour twins
 -- (hc:goldph, hc:netph, hc:xpph) stay as hidden aliases: HC:Reading("hc:goldph", scope) keeps its value, and the run
 -- list and the launcher keep showing them.
-HC:RegisterReading("hc:gold", { title = "Gold earned", rateTitle = "Gold/h", tracker = "hc:goldph", counter = IN,
-  scopes = ALL, formatter = "money", order = 20, description = "Money looted and earned." })
+-- Sources and sinks (2026-11-24): the keys a pack's attributor books (Farmer's), and "none" for what none named.
+-- A tile picks some or all of them; all is the whole counter, with its recent rate and trend.
+local MONEY_LABEL = {
+  loot = "Loot", quest = "Quests", vendor = "Vendor", ah = "Auction house", mail = "Mail", trade = "Trade",
+  alts = "Your characters", repair = "Repairs", training = "Training", travel = "Travel", other = "Other",
+  none = "Unknown", kill = "Kills",
+}
+local function moneyLabel(k) return MONEY_LABEL[k] end
+local SOURCES = { "loot", "quest", "vendor", "ah", "mail", "trade", "alts", "other", "none" }
+local SINKS = { "repair", "vendor", "training", "travel", "ah", "mail", "trade", "alts", "other", "none" }
+local XP_SOURCES = { "kill", "quest", "other", "none" }
+
+-- (the user, 2026-11-24) "Gold in", not "Gold earned": mail from your own characters, auction sales and trades
+-- count too. One reading with the source as the tile's filter ("Gold from %s" was folded into it).
+HC:RegisterReading("hc:gold", { title = "Gold in", rateTitle = "Gold/h", tracker = "hc:goldph", counter = IN,
+  param = { dim = "source", multi = true, members = SOURCES, label = moneyLabel, presets = {
+    { name = "Loot and quests", members = { "loot", "quest" } },
+    { name = "Not from your characters", members = { "loot", "quest", "vendor", "ah", "mail", "trade", "other", "none" } } } },
+  scopes = ALL, formatter = "money", order = 20,
+  description = "Every copper this character received: loot, quests, sales, mail (from your other characters too)."
+    .. " Pick the sources on the tile (default: all)." })
 HC:RegisterReading("hc:net", { title = "Net gold", rateTitle = "Net gold/h", tracker = "hc:goldph", counter = IN,
   minus = OUT, scopes = ALL, formatter = "money", order = 21, description = "Money in minus money out." })
 HC:RegisterReading("hc:goldph", { aliasOf = "hc:gold", calc = "perHour", headline = true, order = 10,
-  description = "Money looted and earned per active hour (AFK and loading screens don't count)." })
+  description = "Gold in per active hour (AFK and loading screens don't count)." })
 HC:RegisterReading("hc:netph", { aliasOf = "hc:net", calc = "perHour", order = 11,
   description = "Money in minus money out, per active hour." })
--- Readings with a parameter (DESIGN 16.4): one source or sink, picked on the tile. Sources and sinks are named by
--- a pack (Farmer's attributors); without one everything is "none".
+-- "Gold out" (2026-11-24): everything that left, by sink; it had no total before ("Spent on %s" was one sink).
+-- Not "spent": gold mailed to your own characters counts too.
+HC:RegisterReading("hc:goldout", { title = "Gold out", rateTitle = "Gold out/h", tracker = "hc:goldph", counter = OUT,
+  param = { dim = "sink", multi = true, members = SINKS, label = moneyLabel, presets = {
+    { name = "Not to your characters", members = { "repair", "vendor", "training", "travel", "ah", "mail", "trade", "other", "none" } } } },
+  scopes = ALL, formatter = "money", order = 21.5,
+  description = "Every copper that left this character: repairs, purchases, training, flights, mail (to your other"
+    .. " characters too). Pick the sinks on the tile (default: all)." })
+-- The one-source readings before 2026-11-24: folded into the filters above (their tiles move there), still readable.
 HC:RegisterReading("hc:goldfrom", { title = "Gold from %s", tracker = "hc:goldph", counter = IN,
-  param = { dim = "source", type = "enum" }, scopes = ALL, formatter = "money", order = 26,
-  description = "Money earned from one source (loot, quests, vendor, mail...)." })
+  param = { dim = "source", type = "enum", label = moneyLabel }, scopes = ALL, formatter = "money", order = 26,
+  foldInto = "hc:gold", foldArg = "set", description = "Gold in from one source." })
 HC:RegisterReading("hc:spenton", { title = "Spent on %s", tracker = "hc:goldph", counter = OUT,
-  param = { dim = "sink", type = "enum" }, scopes = ALL, formatter = "money", order = 27,
-  description = "Money spent on one thing (repairs, vendor, training, mail...)." })
+  param = { dim = "sink", type = "enum", label = moneyLabel }, scopes = ALL, formatter = "money", order = 27,
+  foldInto = "hc:goldout", foldArg = "set", description = "Gold out to one sink." })
 HC:RegisterReading("hc:xpgained", { title = "XP gained", rateTitle = "XP/h", tracker = "hc:xpph", counter = XP,
-  scopes = ALL, formatter = "number", order = 22, description = "Experience gained." })
+  param = { dim = "source", multi = true, members = XP_SOURCES, label = moneyLabel },
+  scopes = ALL, formatter = "number", order = 22,
+  description = "Experience gained. Pick the sources on the tile (default: all; kills and quests need the Farmer pack)." })
 HC:RegisterReading("hc:xpph", { aliasOf = "hc:xpgained", calc = "perHour", headline = true, order = 12,
   description = "Experience per active hour." })
 
@@ -267,6 +302,15 @@ HC:RegisterReading("hc:xplevel", { title = "XP this level", tracker = "hc:xpph",
     local m = UnitXPMax("player")
     if not HC:Readable(m) or type(m) ~= "number" or m <= 0 then return nil end
     return m
+  end })
+
+-- (2026-11-24) the character's level: a Leveling board's companion to XP this level
+HC:RegisterReading("hc:level", { title = "Level", tracker = "hc:xpph", scopes = { "now" }, formatter = "number",
+  order = 24.5, refresh = { "PLAYER_LEVEL_UP" }, description = "Your character's level.",
+  compute = function()
+    local l = UnitLevel("player")
+    if not HC:Readable(l) or type(l) ~= "number" then return nil end
+    return l
   end })
 
 HC:RegisterReading("hc:owned", { title = "Gold owned", tracker = "hc:goldph", counter = OWNED,

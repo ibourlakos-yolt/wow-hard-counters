@@ -347,12 +347,14 @@ end
 
 local PERIODS = { "run", "session", "today", "week", "month", "year", "lifetime" }
 -- One reading per thing counted (Hard Counters DESIGN §16.9, FM-17): per hour, recent and trend are the tile's calc.
+-- One faction, one item: folded into Reputation gained and Items looted (2026-11-24), where the faction or the item
+-- is the tile's choice. Their tiles move there; HC:Reading("hcfarm:repwith", scope, id) keeps answering.
 HC:RegisterReading("hcfarm:repwith", { title = "%s rep", rateTitle = "%s rep/h", tracker = "hcfarm:rep", counter = ID.rep,
   param = { dim = "faction", type = "faction", label = factionLabel }, scopes = PERIODS, formatter = "number", order = 29,
-  description = "Reputation gained with one faction." })
+  foldInto = "hcfarm:rep", foldArg = "same", description = "Reputation gained with one faction." })
 HC:RegisterReading("hcfarm:looted", { title = "%s looted", tracker = "hcfarm:loot", counter = ID.items,
   param = { dim = "item", type = "item", label = itemLabel }, scopes = PERIODS, formatter = "number", order = 30,
-  description = "How many of one item you looted. A tile counts it from when it is placed; with history, the periods count everything stored." })
+  foldInto = "hcfarm:items", foldArg = "same", description = "How many of one item you looted." })
 -- How many of one item are in the bags right now (Hard Counters HC-34): no counter behind it, the game is asked
 -- (C_Item.GetItemCount answers on Forever: probed 2026-11-18). With a target on the tile it is "143 / 200" as a
 -- bar. `counter` only supplies the picker's list of items looted last.
@@ -363,13 +365,15 @@ local function inBags(key)
   if not ok or not HC:Readable(n) or type(n) ~= "number" then return nil end
   return n
 end
-HC:RegisterReading("hcfarm:inbags", { title = "%s in bags", tracker = "hcfarm:loot", counter = ID.items,
+HC:RegisterReading("hcfarm:inbags", { title = "In bags: %s", pickTitle = "In bags: pick an item", tracker = "hcfarm:loot", counter = ID.items,
   param = { dim = "item", type = "item", label = itemLabel }, scopes = { "now" }, formatter = "number", order = 30.5,
   refresh = { "BAG_UPDATE" },
   description = "How many of one item you carry right now (bags only, not the bank). Set a target on the tile and show it as a bar for a goal.",
   compute = function(_, _, arg) return inBags(arg) end })
 -- A bar toward the next standing (Hard Counters HC-33). `counter` only supplies the list of factions seen.
-HC:RegisterReading("hcfarm:standing", { title = "%s standing", tracker = "hcfarm:rep", counter = ID.rep,
+-- (2026-11-24) "Standing progress", not "standing": it is the rep inside your current standing, not the standing
+HC:RegisterReading("hcfarm:standing", { title = "Standing progress: %s", pickTitle = "Standing progress: pick a faction",
+  tracker = "hcfarm:rep", counter = ID.rep,
   param = { dim = "faction", type = "faction", label = factionLabel }, scopes = { "now" }, formatter = "number",
   order = 31, refresh = { "UPDATE_FACTION" },
   description = "Reputation inside your current standing with one faction; as a bar it fills toward the next standing.",
@@ -381,26 +385,33 @@ HC:RegisterReading("hcfarm:standing", { title = "%s standing", tracker = "hcfarm
 
 ---------------------------------------------------------------------------
 -- Readings (the farm stopwatch's numbers, DESIGN §4.2; Hard Counters' reading API, HC-17) and Ledger views (§4.1).
--- Gold/h, Net gold/h, Gold earned and XP/h are Basics' (hc:goldph ...), with Farmer's sources.
+-- Gold/h, Net gold/h, Gold in and XP/h are Basics' (hc:goldph ...), with Farmer's sources.
 ---------------------------------------------------------------------------
 
 local ALL = { "run", "session", "today", "week", "month", "year", "lifetime" }
-HC:RegisterReading("hcfarm:vendor", { title = "Vendor value", rateTitle = "Vendor value/h", tracker = "hcfarm:loot",
+-- (2026-11-24) "Loot vendor value": "Vendor value" read like gold from vendors
+HC:RegisterReading("hcfarm:vendor", { title = "Loot vendor value", rateTitle = "Loot vendor value/h", tracker = "hcfarm:loot",
   counter = ID.vendor, scopes = ALL, formatter = "money", order = 25,
   description = "What the items you looted would sell for at a vendor." })
 -- the per-hour twin before FM-17: a hidden alias, so its tiles and HC:Reading("hcfarm:vendorph", ...) keep their value
 HC:RegisterReading("hcfarm:vendorph", { aliasOf = "hcfarm:vendor", calc = "perHour", order = 14,
   description = "What the items you looted would sell for at a vendor, per active hour." })
+-- (2026-11-24) the item and the faction are the tile's choice, none for every one together (the merges above)
 HC:RegisterReading("hcfarm:items", { title = "Items looted", rateTitle = "Items/h", tracker = "hcfarm:loot", counter = ID.items,
-  scopes = ALL, formatter = "number", order = 26, description = "Items you looted (each one counted, stacks by size)." })
-HC:RegisterReading("hcfarm:best", { title = "Best drop (vendor)", tracker = "hcfarm:loot", counter = ID.vendor, best = true,
+  param = { dim = "item", type = "item", label = itemLabel, optional = true, anyLabel = "Any item" },
+  scopes = ALL, formatter = "number", order = 26,
+  description = "Items you looted (each one counted, stacks by size); pick one item on the tile, or count them all."
+    .. " One item counts from when its tile is placed; with history, the periods count everything stored." })
+HC:RegisterReading("hcfarm:best", { title = "Best drop (vendor price)", tracker = "hcfarm:loot", counter = ID.vendor, best = true,
   scopes = { "run" }, formatter = "money", order = 27, description = "The run's most valuable single drop, by vendor price." })
-HC:RegisterReading("hcfarm:rep", { title = "Reputation gained", rateTitle = "Rep/h", tracker = "hcfarm:rep", counter = ID.rep, scopes = ALL,
-  formatter = "number", order = 28, description = "Reputation gained with every faction together." })
+HC:RegisterReading("hcfarm:rep", { title = "Reputation gained", rateTitle = "Rep/h", tracker = "hcfarm:rep", counter = ID.rep,
+  param = { dim = "faction", type = "faction", label = factionLabel, optional = true, anyLabel = "Any faction" },
+  scopes = ALL, formatter = "number", order = 28,
+  description = "Reputation gained: with every faction together, or one picked on the tile." })
 
 HC:RegisterView("hcfarm:ledger.in", { counter = ID.moneyIn, groupBy = "source", grain = "day", title = "Income by source" })
 HC:RegisterView("hcfarm:ledger.out", { counter = ID.moneyOut, groupBy = "sink", grain = "day", title = "Spending by sink" })
 HC:RegisterView("hcfarm:goldph.today", { counter = ID.moneyIn, per = "activeHour", grain = "day", title = "Gold per hour today",
   formatter = "money", feed = true })
-HC:RegisterView("hcfarm:gold.today", { counter = ID.moneyIn, grain = "day", title = "Gold earned today", formatter = "money" })
+HC:RegisterView("hcfarm:gold.today", { counter = ID.moneyIn, grain = "day", title = "Gold in today", formatter = "money" })
 HC:RegisterView("hcfarm:items.bycat", { counter = ID.items, groupBy = "category", grain = "day", title = "Items by category" })
