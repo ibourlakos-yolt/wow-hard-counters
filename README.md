@@ -87,8 +87,9 @@ No GitHub account? Leave a comment on the CurseForge page and we'll take it from
 ## How it's made
 
 Hard Counters is designed, directed and play-tested by Yolt Labs. Most of its code and documentation is written with
-**Claude**, Anthropic's AI, through Claude Code, working from that design. Every change is reviewed, has to pass the
-automated tests and lint, and is played in game before it ships. Commits written with Claude say so in a
+**Claude**, Anthropic's AI, through Claude Code, working from that design. Every change is reviewed and has to pass
+the automated tests and lint. Beta builds are for trying things early and can go out before they have been played;
+a full release is played in game before it ships. Commits written with Claude say so in a
 `Co-Authored-By: Claude` line, so the history shows which ones.
 
 ## License
