@@ -1824,6 +1824,11 @@ end
 function M.MemberChoices(readingId, all)
   local r = ns.readings[readingId]
   local out = {}
+  if r and r.param and r.param.members and not r.param.multi then
+    -- (2026-11-24) a fixed list of members (a spell school, a resistance): in the reading's order
+    for _, k in ipairs(r.param.members) do out[#out + 1] = { arg = k, label = ns.MemberLabel(r, k) } end
+    return out, false
+  end
   if not (r and r.param and r.counter) then return out, false end
   local keys = ns.OdoMembers(r.counter, r.param.dim)
   local c = ns.counters[r.counter]

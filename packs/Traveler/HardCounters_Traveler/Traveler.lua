@@ -459,7 +459,7 @@ HC:RegisterReading("hctravel:longestflight", { title = "Longest flight", tracker
 ---------------------------------------------------------------------------
 
 if HC.RegisterBoardPreset then
-  HC:RegisterBoardPreset("hctravel:trip", { name = "Trip", tiles = {
+  HC:RegisterBoardPreset("hctravel:trip", { name = "Trip", category = "activity", tiles = {
     { reading = "hctravel:distance", display = "odometer", size = "large" },
     { reading = "hctravel:time", display = "mix", size = "line" },
     { reading = "hctravel:distance", arg = { "walk", "run" }, size = "half" },
@@ -469,7 +469,7 @@ if HC.RegisterBoardPreset then
     { reading = "hctravel:speednow", scope = "now", size = "line" },
     { reading = "hctravel:flights", size = "line" },
   } })
-  HC:RegisterBoardPreset("hctravel:flightlog", { name = "Flight log", tiles = {
+  HC:RegisterBoardPreset("hctravel:flightlog", { name = "Flight log", category = "activity", tiles = {
     { reading = "hctravel:flights", size = "large" },
     { reading = "hctravel:flightdist", size = "half" },
     { reading = "hctravel:time", arg = { "taxi" }, size = "half" },

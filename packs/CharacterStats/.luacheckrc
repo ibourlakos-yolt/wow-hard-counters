@@ -15,7 +15,10 @@ files["HardCounters_CharacterStats/Stats.lua"] = {
     "UnitRangedAttackPower", "GetCritChance", "GetHitModifier", "GetRangedCritChance", "GetSpellBonusDamage",
     "GetSpellBonusHealing", "GetSpellCritChance", "GetSpellHitModifier", "GetManaRegen", "UnitArmor",
     "GetDodgeChance", "GetParryChance", "GetBlockChance", "GetShieldBlock", "UnitClass", "GetInventoryItemID",
-    "GetInventorySlotInfo", "C_SkillInfo", "C_Item", "GetItemInfoInstant" },
+    "GetInventorySlotInfo", "C_SkillInfo", "C_Item", "GetItemInfoInstant",
+    -- (2026-11-24) weapon damage and speed, penetration, resistances, gear
+    "UnitDamage", "UnitAttackSpeed", "UnitRangedDamage", "GetSpellPenetration", "UnitResistance",
+    "GetInventoryItemDurability", "GetAverageItemLevel" },
 }
 files["HardCounters_CharacterStats/UI/**"] = {
   read_globals = { "HardCounters", "CreateFrame", "GameTooltip" },   -- Hard Counters hosts the window

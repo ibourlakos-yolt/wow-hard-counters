@@ -5,7 +5,7 @@
 local ADDON, ns = ...
 
 local HC = HardCounters
-if not (HC and ns.STATS and HC.Supports and HC:Supports("windows")) then return end
+if not (HC and ns.ROWS and HC.Supports and HC:Supports("windows")) then return end
 
 local ipairs, floor = ipairs, math.floor
 
@@ -13,8 +13,9 @@ local WINDOW = "hcstats:window"
 ns.WINDOW = WINDOW
 local HEAD_H, ROW_H, TOP, PAD = 22, 16, -8, 12
 local WIDTH = 300
--- room for every section open and every row used: the window never needs a scroll bar
-local HEIGHT = -TOP + #ns.TRACKERS * HEAD_H + #ns.STATS * ROW_H + 16
+-- room for every section open and every row used (no character uses them all: rows that don't apply are left out,
+-- and a taller list scrolls in the shared window)
+local HEIGHT = -TOP + #ns.TRACKERS * HEAD_H + #ns.ROWS * ROW_H + 16
 
 local win
 local lines = {}
@@ -71,10 +72,10 @@ local function refresh()
     h:Show()
     y = y - HEAD_H
     if on then
-      for i, s in ipairs(ns.STATS) do
-        local id = ns.IDS[i]
-        if s[3] == t.id and HC:ReadingApplies(id) then
-          local _, text, _, state = HC:Reading(id, "now")
+      for _, row in ipairs(ns.ROWS) do
+        local id = row.id
+        if row.tracker == t.id and HC:ReadingApplies(id) then
+          local _, text, _, state = HC:Reading(id, "now", row.arg)
           n = n + 1
           local l = line(n)
           place(l, y, 10)
@@ -84,17 +85,17 @@ local function refresh()
           local stale = state == "stale"
           -- in combat: the game's value handed straight to the font string where it is one value (CS-9)
           local lv, fmt
-          if stale and HC.ReadingLive then lv, fmt = HC:ReadingLive(id) end
+          if stale and HC.ReadingLive then lv, fmt = HC:ReadingLive(id, row.arg) end
           if lv ~= nil then
-            l.name:SetText(s[2])
+            l.name:SetText(row.title)
             l.value:SetFormattedText(fmt, lv)
             l.value:SetTextColor(1, 1, 1)
           else
-            l.name:SetText(stale and (s[2] .. "  (in combat)") or s[2])
+            l.name:SetText(stale and (row.title .. "  (in combat)") or row.title)
             l.value:SetText(text or "-")
             if stale then l.value:SetTextColor(0.5, 0.5, 0.5) else l.value:SetTextColor(1, 1, 1) end
           end
-          l.tip, l.tipTitle = s[7], s[2]
+          l.tip, l.tipTitle = row.tip, row.title
           l:Show()
           y = y - ROW_H
         end

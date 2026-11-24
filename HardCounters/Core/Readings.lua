@@ -57,8 +57,9 @@ local SCOPE_GRAIN = { today = "day", week = "thisweek", month = "month", year = 
 ns.SCOPE_GRAIN = SCOPE_GRAIN
 -- distance: yards; speed: yards a second, shown as yd/s, or by speedpct as a percentage of the 100% run speed
 -- (TR-10; the Traveler decisions of 2026-11-22: yards only, speed in both forms)
+-- seconds: "2.60 s" (a weapon's speed); decimal: one decimal ("45.3", a weapon's DPS, an average item level)
 local FORMATTERS = { money = true, duration = true, number = true, percent = true, distance = true, speed = true,
-  speedpct = true }
+  speedpct = true, seconds = true, decimal = true }
 ns.RUN_SPEED = 7                                   -- yards a second: 100% speed, the character sheet's convention
 
 --- Display text of a value for a formatter (counters, views and readings): "12g 3s 4c", "1:02:03", "5.2%",
@@ -70,7 +71,9 @@ function ns.FormatValue(f, v)
   elseif f == "percent" then return U.number(v, 1) .. "%"
   elseif f == "distance" then return U.number(v) .. " yd"
   elseif f == "speed" then return U.number(v, 1) .. " yd/s"
-  elseif f == "speedpct" then return U.number(v * 100 / ns.RUN_SPEED) .. "%" end
+  elseif f == "speedpct" then return U.number(v * 100 / ns.RUN_SPEED) .. "%"
+  elseif f == "seconds" then return U.number(v, 2) .. " s"
+  elseif f == "decimal" then return U.number(v, 1) end
   return U.number(v)
 end
 -- min, max: a stock's lowest and highest level over the scope, or a flow's smallest and largest single value where
@@ -275,7 +278,7 @@ function HC:RegisterReading(id, def)
   if def.minus ~= nil and type(def.minus) ~= "string" then misuse("RegisterReading('%s'): minus must be a counter id", id) end
   if def.measure ~= nil and not MEASURES[def.measure] then misuse("RegisterReading('%s'): measure must be sum, count, last, min, max or avg", id) end
   if def.formatter ~= nil and not FORMATTERS[def.formatter] then
-    misuse("RegisterReading('%s'): formatter must be money, duration, number, percent, distance, speed or speedpct", id)
+    misuse("RegisterReading('%s'): formatter must be money, duration, number, percent, distance, speed, speedpct, seconds or decimal", id)
   end
   local per = def.per
   if per ~= nil and per ~= "activeHour" then misuse("RegisterReading('%s'): per must be \"activeHour\"", id) end
@@ -311,12 +314,21 @@ function HC:RegisterReading(id, def)
       param.optional = true
       if p.anyLabel ~= nil and type(p.anyLabel) ~= "string" then misuse("RegisterReading('%s'): param.anyLabel must be a string", id) end
       param.anyLabel = p.anyLabel
+      -- the title with no member, when the plain title isn't it ("Spell damage (best school)")
+      if p.anyTitle ~= nil and type(p.anyTitle) ~= "string" then misuse("RegisterReading('%s'): param.anyTitle must be a string", id) end
+      param.anyTitle = p.anyTitle
     end
     if p.filter ~= nil then
       -- (HC-71) a skill reading narrows the picker: filter(line) with line = { id, name, group }
       if type(p.filter) ~= "function" then misuse("RegisterReading('%s'): param.filter must be a function", id) end
       if param.type ~= "skill" then misuse("RegisterReading('%s'): param.filter is for a skill parameter", id) end
       param.filter = p.filter
+    end
+    if p.members ~= nil and p.multi == nil then
+      -- (2026-11-24) a single enum member from a fixed list (a spell school): what its picker offers
+      if param.type ~= "enum" then misuse("RegisterReading('%s'): param.members is for an enum parameter", id) end
+      if type(p.members) ~= "table" or #p.members == 0 then misuse("RegisterReading('%s'): param.members must be a non-empty array", id) end
+      param.members = U.copy(p.members)
     end
     if p.multi ~= nil then
       -- (HC-60) a set of members instead of one: a tile's filter
@@ -702,6 +714,7 @@ end
 
 -- Same decimals as the formatters out of combat (percent: U.number(v, 1)), so the text doesn't jump at combat edges.
 local LIVE_FORMAT = { percent = "%.1f%%", number = "%.0f", distance = "%.0f yd", speed = "%.1f yd/s", duration = nil,
+  seconds = "%.2f s", decimal = "%.1f",
   money = nil, speedpct = nil }
 --- The format a display passes a live value through: the reading's `liveFormat`, or one for its formatter (money,
 --- durations and speedpct need arithmetic to format: none, so no pass-through for them).
@@ -790,7 +803,10 @@ function ns.ReadingTitle(r, arg, calc)
   -- (HC-60) a set reading with no set chosen reads its default: the plain title says what it is
   if r.param.multi and arg == nil and not title:find("%%s") then return title end
   -- (2026-11-24) an optional member, none chosen: the whole total, under the plain title
-  if r.param.optional and arg == nil and not title:find("%%s") then return title end
+  if r.param.optional and arg == nil then
+    if r.param.anyTitle and (calc == nil or calc == ns.DefaultCalc(r)) then return r.param.anyTitle end
+    if not title:find("%%s") then return title end
+  end
   if arg == nil and not r.param.multi then
     -- (HC-39 d) the list name says what is picked ("In bags: pick an item")
     if r.pickTitle and (calc == nil or calc == ns.DefaultCalc(r)) then return r.pickTitle end

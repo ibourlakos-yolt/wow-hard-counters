@@ -7,6 +7,8 @@ local GAME = {
   "GetHitModifier", "GetRangedCritChance", "GetSpellBonusDamage", "GetSpellBonusHealing", "GetSpellCritChance",
   "GetSpellHitModifier", "GetManaRegen", "UnitArmor", "GetDodgeChance", "GetParryChance", "GetBlockChance",
   "GetShieldBlock", "UnitClass", "GetInventoryItemID", "GetInventorySlotInfo", "C_SkillInfo", "GetItemInfoInstant",
+  "UnitDamage", "UnitAttackSpeed", "UnitRangedDamage", "GetSpellPenetration", "UnitResistance", "GetInventoryItemDurability",
+  "GetAverageItemLevel",
 }
 
 local function boot(class)
@@ -36,6 +38,15 @@ local function boot(class)
   _G.GetParryChance = function() return v(5) end
   _G.GetBlockChance = function() return v(4) end
   _G.GetShieldBlock = function() return v(30) end
+  _G.UnitDamage = function() return v(40), v(60), v(20), v(30) end
+  _G.UnitAttackSpeed = function() return v(2.5), game.off2 and v(1.25) or nil end
+  _G.UnitRangedDamage = function() return v(3), v(30), v(54) end
+  _G.GetSpellPenetration = function() return v(10) end
+  _G.UnitResistance = function(_, school) return 0, v(school * 10), 0, 0 end
+  _G.GetInventoryItemDurability = function(slot)
+    if slot == 16 then return 30, 100 elseif slot == 5 then return 60, 80 end
+  end
+  _G.GetAverageItemLevel = function() return 40.5, 38.25 end
   _G.UnitClass = function() return "Class", game.class end
   _G.GetInventorySlotInfo = function() return 18 end
   _G.GetInventoryItemID = function(_, slot)
@@ -80,7 +91,7 @@ describe("Character Stats, phase 1 (live readings)", function()
         assert.are.same({}, t.counters)
       end
     end
-    assert.are.equal(5, stats)
+    assert.are.equal(7, stats)                                -- (2026-11-24: Resistances and Gear)
     assert.are.equal(#env.pack.STATS, #HC:Readings({ tracker = nil, scope = "now" }) - #HC:Readings({ scope = "now", tracker = "hc:xpph" })
       - #HC:Readings({ scope = "now", tracker = "hc:goldph" }))
     HC:SetTrackerOn("hcstats:melee", false)
@@ -180,22 +191,89 @@ describe("Character Stats, phase 1 (live readings)", function()
     assert.is_false(HC:ReadingApplies("hcstats:rap"))
   end)
 
-  it("offers four board presets made of its readings", function()
-    local env = boot()
+  it("offers role and class boards made of its readings (2026-11-24, Hard Counters HC-57)", function()
+    local env = boot("MAGE")
     local M = env.ns.BoardModel
-    for key, hero in pairs({ ["hcstats:caster"] = "hcstats:spelldmg", ["hcstats:melee"] = "hcstats:ap",
-        ["hcstats:hunter"] = "hcstats:rap", ["hcstats:tank"] = "hcstats:armor" }) do
-      local b = M.Create(key)
-      assert.are.equal(hero, b.tiles[1].reading)
-      assert.are.equal("now", b.tiles[1].scope)
-      assert.are.equal("large", b.tiles[1].size)              -- (CS-11, DESIGN §16.9) a big number
-      assert.are.equal("number", b.tiles[1].display)
-      assert.is_nil(b.tiles[1].style)
-      assert.are.same({ "total" }, env.HC:GetReading(hero).calcs)   -- a stat is a stock: total only
-      local last = b.tiles[#b.tiles]
-      assert.are.equal("half", b.tiles[2].size)
-      if key ~= "hcstats:caster" then assert.are.same({ "bar", "line" }, { last.display, last.size }) end
-      assert.is_false(M.UsesTimer(b) and true or false)       -- now tiles: no timer on these boards
+    local roles, classes = 0, 0
+    for key, p in pairs(M.PRESETS) do
+      if key:find("^hcstats:") then
+        if p.category == "role" then roles = roles + 1 elseif p.category == "class" then classes = classes + 1 end
+        local b = M.Create(key)
+        assert.are.equal(#p.tiles, #b.tiles)                   -- every reading it names exists
+        assert.are.equal("now", b.tiles[1].scope)
+        assert.are.equal("large", b.tiles[1].size)              -- (CS-11, DESIGN §16.9) a big number first
+        assert.are.equal("number", b.tiles[1].display)
+        assert.is_false(M.UsesTimer(b) and true or false)       -- now tiles: no timer on these boards
+      end
     end
+    assert.are.equal(7, roles)
+    assert.are.equal(9, classes)
+    -- the old keys kept: a board remembers the preset it came from
+    assert.are.equal("Tank (physical)", M.PRESETS["hcstats:tank"].name)
+    assert.are.equal("Caster DPS", M.PRESETS["hcstats:caster"].name)
+    assert.are.equal("HUNTER", M.PRESETS["hcstats:hunter"].class)
+    -- your class first
+    local by = {}
+    for _, g in ipairs(M.PresetGroups()) do by[g.title] = g end
+    assert.are.same({ "hcstats:mage" }, by["Your class"].keys)
+    assert.are.equal(8, #by["Other classes"].keys)
+    -- a spell tank's resistances, one school each
+    local st = M.Create("hcstats:spelltank")
+    assert.are.equal("hcstats:resist", st.tiles[2].reading)
+    assert.are.equal(2, st.tiles[2].arg)
+    assert.are.same({ "total" }, env.HC:GetReading("hcstats:armor").calcs)   -- a stat is a stock: total only
+  end)
+
+  it("reads weapon damage and speed, schools, penetration, resistances and gear (2026-11-24)", function()
+    local env = boot("WARRIOR")
+    local HC, ns = env.HC, env.ns
+    assert.are.equal(20, (read(env, "mhdps")))                 -- (40 + 60) / 2 / 2.5
+    assert.are.equal(2.5, (read(env, "mhspeed")))
+    assert.are.equal(14, (read(env, "rdps")))                  -- (30 + 54) / 2 / 3
+    assert.are.equal("20.0", select(2, read(env, "mhdps")))
+    assert.are.equal("2.50 s", select(2, read(env, "mhspeed")))
+    assert.are.equal(30, (HC:Reading("hcstats:resist", "now", 3)))
+    assert.are.equal("noarg", select(4, HC:Reading("hcstats:resist", "now")))
+    assert.are.equal("Resistance: Nature", ns.ReadingTitle(ns.readings["hcstats:resist"], 3))
+    assert.are.equal("Resistance: pick a school", ns.ReadingTitle(ns.readings["hcstats:resist"], nil))
+    assert.are.equal(30, (read(env, "durability")))            -- the main hand at 30 of 100
+    assert.are.equal(38.25, (read(env, "ilvl")))
+    -- the off hand applies only with a weapon there (the shield is armour)
+    assert.are.equal("inapplicable", select(4, read(env, "ohdps")))
+    -- a school picked, or the best one
+    local mage = boot("MAGE")
+    assert.are.equal(120, (mage.HC:Reading("hcstats:spelldmg", "now")))
+    assert.are.equal(90, (mage.HC:Reading("hcstats:spelldmg", "now", 5)))
+    assert.are.equal("Spell damage (best school)", mage.ns.ReadingTitle(mage.ns.readings["hcstats:spelldmg"], nil))
+    assert.are.equal("Spell damage: Frost", mage.ns.ReadingTitle(mage.ns.readings["hcstats:spelldmg"], 5))
+    assert.are.equal(10, (mage.HC:Reading("hcstats:spellpen", "now")))
+    -- in combat: the last value per school, and the game's own value handed through for one school
+    mage.game.combat = true
+    local v, _, _, state = mage.HC:Reading("hcstats:spelldmg", "now", 5)
+    assert.are.equal(90, v)
+    assert.are.equal("stale", state)
+    assert.is_not_nil(mage.HC:ReadingLive("hcstats:spelldmg", 5))
+    -- the window lists the five resistances and no row for "Weapon skill: pick a skill"
+    local resist, skill = 0, 0
+    for _, row in ipairs(env.pack.ROWS) do
+      if row.id == "hcstats:resist" then resist = resist + 1 end
+      if row.id == "hcstats:skill" then skill = skill + 1 end
+    end
+    assert.are.equal(5, resist)
+    assert.are.equal(0, skill)
+  end)
+
+  it("reads any weapon skill picked on the tile, and a fist weapon as Unarmed when there is no Fist line (CS-12, CS-13)", function()
+    local env = boot("WARRIOR")
+    local HC = env.HC
+    assert.are.equal(150, (HC:Reading("hcstats:skill", "now", 45)))   -- Bows, while a sword is held
+    assert.are.equal(300, HC:ReadingTarget("hcstats:skill", 45))
+    -- a fist weapon (subclass 13) in the main hand: no line 473 here, so Unarmed (162)
+    env.game.main = 13
+    _G.GetItemInfoInstant = function(id)
+      if id == 13 then return id, nil, nil, nil, nil, 2, 13 end
+      if id == 2504 then return id, nil, nil, nil, nil, 2, 2 end
+    end
+    assert.are.equal(1, (read(env, "mainskill")))                     -- Unarmed's rank
   end)
 end)
