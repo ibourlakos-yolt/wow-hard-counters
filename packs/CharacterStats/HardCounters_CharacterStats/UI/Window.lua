@@ -13,9 +13,19 @@ local WINDOW = "hcstats:window"
 ns.WINDOW = WINDOW
 local HEAD_H, ROW_H, TOP, PAD = 22, 16, -8, 12
 local WIDTH = 300
--- room for every section open and every row used (no character uses them all: rows that don't apply are left out,
--- and a taller list scrolls in the shared window)
+-- room for every section open and every row used (no character uses them all); the window asks for the rows this
+-- character shows (minSize below), and the shared window scrolls a taller list
 local HEIGHT = -TOP + #ns.TRACKERS * HEAD_H + #ns.ROWS * ROW_H + 16
+
+--- The height this character's list needs now: every section's header, the rows of the sections that are on and
+--- apply to this character.
+local function neededHeight()
+  local rows = 0
+  for _, row in ipairs(ns.ROWS) do
+    if HC:IsTrackerOn(row.tracker) and HC:ReadingApplies(row.id) then rows = rows + 1 end
+  end
+  return -TOP + #ns.TRACKERS * HEAD_H + rows * ROW_H + 16
+end
 
 local win
 local lines = {}
@@ -67,7 +77,11 @@ local function refresh()
     h.name:SetText(t.title)
     h.value:SetText("")
     h.button:SetShown(not on)
-    h.button:SetScript("OnClick", function() HC:SetTrackerOn(t.id, true); refresh() end)
+    h.button:SetScript("OnClick", function()
+      HC:SetTrackerOn(t.id, true)
+      refresh()
+      if HC.RelayoutWindow then HC:RelayoutWindow(WINDOW) end      -- (its rows need room now)
+    end)
     h.tip, h.tipTitle = t.description, t.title
     h:Show()
     y = y - HEAD_H
@@ -122,6 +136,7 @@ end
 HC:RegisterWindow(WINDOW, {
   title = "Character Stats", icon = "Interface\\Icons\\INV_Misc_Book_09",   -- (an icon tab on Hard Counters 0.2.1+)
   width = WIDTH, height = HEIGHT, minWidth = WIDTH, minHeight = floor(HEIGHT),
+  minSize = function() return WIDTH, floor(neededHeight()) end,
   build = build,
   onShow = function(f) f:SetScript("OnUpdate", f.tick); refresh() end,
   onHide = function(f) f:SetScript("OnUpdate", nil) end,

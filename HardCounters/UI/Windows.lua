@@ -5,8 +5,8 @@
 -- inset), drag to move, Escape, BlizzMove (Ctrl+mouse wheel scales), raise on click, and its position and scale
 -- saved under settings.windows[id]. The shared frame is not resizable and keeps one size for every tab (user,
 -- 2026-11-23): its design size (DESIGN §17.2), wider only for a tab whose minimum width needs it, capped at the
--- screen; a tab taller than it scrolls. Hard Counters' own windows are tabs along the bottom, a pack's window (and
--- Diagnostics) an icon tab down the right edge (HC-69). A frame of its own keeps a resize grip and its saved size. A
+-- screen; a tab taller than it scrolls. Hard Counters' own windows are icon tabs down the right edge, a pack's window (and
+-- Diagnostics) a tab along the bottom (HC-69, swapped by the user 2026-11-24). A frame of its own keeps a resize grip and its saved size. A
 -- HUD window (chrome = "hud") gets a plain dark frame instead.
 --
 -- Content never shows or hides itself: the host shows the content frame exactly while the window is on screen and
@@ -15,6 +15,7 @@ local ADDON, ns = ...
 
 local HC, L, Wd = ns.HC, ns.L, ns.Widgets
 local floor, max, min = math.floor, math.max, math.min
+local format = string.format
 
 local MAIN, MAIN_NAME = "_main", "HardCountersMain"
 local MAX_W, MAX_H = 1600, 1200
@@ -97,21 +98,11 @@ local function dockedIds()
   return out
 end
 
---- Hard Counters' own tabs along the bottom, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs).
-local function bottomIds()
-  local out = {}
-  for i, id in ipairs(order) do if isDocked(id) and not sideIds[id] then out[#out + 1] = { id = id, i = i } end end
-  table.sort(out, function(a, b)
-    local oa, ob = defs[a.id].tabOrder or 100, defs[b.id].tabOrder or 100
-    if oa ~= ob then return oa < ob end
-    return a.i < b.i
-  end)
-  for i, e in ipairs(out) do out[i] = e.id end
-  return out
-end
+-- (the user, 2026-11-24) the tabs swapped places: packs' windows along the bottom, Hard Counters' own down the
+-- right edge. `sideIds` keeps its name for "a pack's window" (registered through the public API).
 
---- Packs' windows down the right edge, in load order; Diagnostics (Hard Counters' own companion) always last.
-local function sideList()
+--- Packs' windows along the bottom, in load order; Diagnostics (Hard Counters' own companion) always last.
+local function bottomIds()
   local out, last = {}, {}
   for _, id in ipairs(order) do
     if isDocked(id) and sideIds[id] then
@@ -120,6 +111,19 @@ local function sideList()
     end
   end
   for _, id in ipairs(last) do out[#out + 1] = id end
+  return out
+end
+
+--- Hard Counters' own tabs down the right edge, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs).
+local function sideList()
+  local out = {}
+  for i, id in ipairs(order) do if isDocked(id) and not sideIds[id] then out[#out + 1] = { id = id, i = i } end end
+  table.sort(out, function(a, b)
+    local oa, ob = defs[a.id].tabOrder or 100, defs[b.id].tabOrder or 100
+    if oa ~= ob then return oa < ob end
+    return a.i < b.i
+  end)
+  for i, e in ipairs(out) do out[i] = e.id end
   return out
 end
 
@@ -175,6 +179,7 @@ local function panelFrame(name)
 end
 
 local function setTitle(f, text)
+  f.hcTitleText = text                           -- (what it says, for tests and the tab tooltips)
   if try(f, "SetTitle", text) then return end
   local tc = f.TitleContainer
   local t = (widget(tc) and tc.TitleText) or f.TitleText
@@ -333,8 +338,8 @@ local function ensureHost(id)
 end
 
 ---------------------------------------------------------------------------
--- The shared frame (DESIGN §17.2): Hard Counters' own windows as tabs along the bottom (Overview, Boards, Trackers,
--- Runs; labelled as the player chose), every pack's window and Diagnostics as icon tabs down the right edge (they
+-- The shared frame (DESIGN §17.2, swapped 2026-11-24): every pack's window and Diagnostics as tabs along the bottom
+-- (labelled as the player chose), Hard Counters' own (Overview, Boards, Trackers, Runs) as icon tabs down the right edge (they
 -- hang off it and take no width; a column too long for the frame scrolls), a header row with a button per window
 -- that asks for one (def.mainButton), and a body that scrolls a tab taller than the panel.
 ---------------------------------------------------------------------------
@@ -583,7 +588,7 @@ local function refreshTabs()
   local bottom, side = bottomIds(), sideList()
   local found = false
   for _, id in ipairs(ids) do if id == c.selected then found = true end end
-  if not found then c.selected = bottom[1] or side[1] end
+  if not found then c.selected = side[1] or bottom[1] end    -- (Overview first: Hard Counters' own, on the side since 2026-11-24)
   local prev
   for i, id in ipairs(bottom) do
     local b = main.tabs[i]
@@ -618,6 +623,9 @@ local function refreshTabs()
   layoutSide(true)
   setClamp()
   main.empty:SetShown(#ids == 0)
+  -- (2026-11-24) Hard Counters' own tabs are icons now: the title says which one is open
+  local sel = defs[c.selected]
+  setTitle(main, sel and sel.title and format("%s: %s", L["Hard Counters"], sel.title) or L["Hard Counters"])
 end
 
 --- Header buttons: one per window with def.mainButton, right to left; their text says shown or not.
@@ -873,7 +881,7 @@ function HC:RegisterWindow(id, def)
   if type(id) ~= "string" or not id:match("^[%w_]+:[%w_.%-]+$") then
     return false, "window id must be namespaced, e.g. \"mypack:main\""
   end
-  return Win.Register(id, def, true)          -- a pack's window: an icon tab down the right edge
+  return Win.Register(id, def, true)          -- a pack's window: a tab along the bottom (swapped 2026-11-24)
 end
 function HC:ShowWindow(id, show) return Win.Show(id, show) end
 function HC:ToggleWindow(id) return Win.Show(id, nil) end

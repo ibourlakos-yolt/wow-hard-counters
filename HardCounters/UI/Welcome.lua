@@ -14,7 +14,7 @@ local f
 local function text()
   return L["The Leveling board on the right is this character's own: its numbers, live. Right-click it to edit it,"
     .. " hide it or add numbers."] .. "\n\n"
-    .. L["Everything else is in the Hard Counters window (the minimap button, or /hc):"] .. "\n"
+    .. L["Everything else is in the Hard Counters window (the minimap button, or /hc), its tabs down the right edge:"] .. "\n"
     .. "  - " .. L["Overview: every number you follow, board by board"] .. "\n"
     .. "  - " .. L["Boards: show, hide and find your boards; make new ones"] .. "\n"
     .. "  - " .. L["Trackers: what is counted, and numbers to add"] .. "\n"

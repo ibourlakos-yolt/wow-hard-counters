@@ -31,7 +31,7 @@ local function login(env, id)
 end
 
 describe("Basics", function()
-  it("starts with Gold per hour and XP per hour on, history off, and counts money with no sources", function()
+  it("starts with Gold and Experience on, history off, and counts money with no sources", function()
     local env = boot()
     local HC = env.HC
     assert.is_true(HC:IsTrackerOn("hc:goldph"))

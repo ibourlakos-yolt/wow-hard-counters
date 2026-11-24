@@ -774,7 +774,7 @@ describe("load smoke test", function()
       local HC, B = ctx.HC, ctx.hc.Boards
       local impact = HC:TrackerOffImpact("hc:goldph")
       local list = table.concat(impact.readings, ", ")
-      assert.is_truthy(list:find("Gold from ...", 1, true))           -- display titles, not "Gold from %s"
+      assert.is_truthy(list:find("Gold in", 1, true))                 -- display titles (the folded "Gold from %s" is hidden)
       assert.is_nil(list:find("%", 1, true))
       for _, msg in ipairs({ "Turn Gold per hour off?\nIt also stops: Gold from %s, Spent on %s.", "Delete 50% run?" }) do
         B.Confirm(msg, function() end)

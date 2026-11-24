@@ -167,6 +167,7 @@ describe("windows", function()
       assert.are.same({ "TOPLEFT", main, "BOTTOMLEFT" }, { point, rel, relPoint })
       local selected = 0
       for _, t in ipairs(main.tabs) do if t:IsShown() and t._selected then selected = selected + 1 end end
+      for _, t in ipairs(main.sideTabs) do if t:IsShown() and t._checked then selected = selected + 1 end end   -- (Overview: a side tab)
       assert.are.equal(1, selected)
       -- run 3: the close button was lowered under the template's border art and never drew
       for _, f in ipairs({ host, main }) do
@@ -192,7 +193,7 @@ describe("windows", function()
         tab.Text:SetWidth(textWidth)
         tab:SetWidth(width)
       end
-      Win.Register("t:long", counting({ title = "A rather long tab title" }))   -- one of ours: a bottom tab, no icon
+      HC:RegisterWindow("t:long", counting({ title = "A rather long tab title" }))   -- a pack's: a bottom tab, no icon
       Win.ShowMain(true)
       local main = Win.Host("_main")
       local long
@@ -324,12 +325,17 @@ describe("windows", function()
 
   -- HC-69 (DESIGN §17.2): Hard Counters' own windows along the bottom in a fixed order, packs and Diagnostics as
   -- icon tabs down the right edge (Diagnostics last), the clamp reaching over both, labels as the player chose
-  it("puts its own windows along the bottom and packs' down the right edge, with icons and the label option", function()
+  it("puts packs' windows along the bottom and its own down the right edge, with icons and the label option (swapped 2026-11-24)", function()
     UI.with(function(ctx)
       local HC, ns = ctx.HC, ctx.hc
       local Win = ns.Windows
       Win.ShowMain(true)
       local main = Win.Host("_main")
+      local function bottomIds()
+        local out = {}
+        for _, b in ipairs(main.tabs) do if b:IsShown() then out[#out + 1] = b.hcId or b.hcTitle end end
+        return out
+      end
       local function bottomTitles()
         local out = {}
         for _, b in ipairs(main.tabs) do if b:IsShown() then out[#out + 1] = b.hcTitle end end
@@ -340,47 +346,51 @@ describe("windows", function()
         for _, t in ipairs(main.sideTabs) do if t:IsShown() then out[#out + 1] = t.hcId end end
         return out
       end
-      assert.are.same({ "Overview", "Boards", "Trackers", "Runs" }, bottomTitles())   -- (Overview HC-67, Boards HC-68)
-      local side = sideIds()
-      assert.are.equal("hcdiag:console", side[#side])                -- Diagnostics always last
-      if ctx.farmer then assert.truthy(table.concat(side, " "):find("hcfarm:ledger", 1, true)) end
-      -- a window of ours sorts by its tabOrder; a pack's window joins the side column
-      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
+      assert.are.same({ "overview", "boards", "trackers", "runs" }, sideIds())   -- (Overview HC-67, Boards HC-68)
+      local bottom = bottomTitles()
+      assert.are.equal("Diagnostics", bottom[#bottom])              -- Diagnostics always last
+      if ctx.farmer then assert.truthy(table.concat(bottom, " "):find("Ledger", 1, true)) end
+      -- the open tab's name is in the title (its tab is an icon now)
+      assert.truthy(main.hcTitleText:find("^Hard Counters: "))
+      -- a window of ours sorts by its tabOrder down the side; a pack's window joins the bottom row before Diagnostics
+      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\Icons\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
-      assert.are.same({ "Overview", "Boards", "Ours", "Trackers", "Runs" }, bottomTitles())
-      side = sideIds()
-      assert.are.equal("hcdiag:console", side[#side])
-      assert.are.equal("t:pack", side[#side - 1])
-      local packTab = main.sideTabs[#side - 1]
-      assert.are.equal("LargeSideTabButtonTemplate", packTab._template)
-      assert.are.equal("Pack", packTab.tooltipText)
-      assert.is_true(packTab._fill)
+      assert.are.same({ "overview", "boards", "t:ours", "trackers", "runs" }, sideIds())
+      bottom = bottomTitles()
+      assert.are.equal("Diagnostics", bottom[#bottom])
+      assert.are.equal("Pack", bottom[#bottom - 1])
+      local ours = main.sideTabs[3]
+      assert.are.equal("LargeSideTabButtonTemplate", ours._template)
+      assert.are.equal("Ours", ours.tooltipText)
+      assert.is_true(ours._fill)
       -- a click on a side tab (its mouse-up handler) opens that window and checks only its tab
-      packTab._onUp(packTab, "LeftButton", true)
-      assert.is_true(HC:IsWindowShown("t:pack"))
-      assert.is_true(packTab._checked)
+      ours._onUp(ours, "LeftButton", true)
+      assert.is_true(HC:IsWindowShown("t:ours"))
+      assert.is_true(ours._checked)
       local checked = 0
       for _, t in ipairs(main.sideTabs) do if t._checked then checked = checked + 1 end end
       assert.are.equal(1, checked)
       for _, b in ipairs(main.tabs) do assert.is_false(b._selected and true or false) end
+      assert.are.equal("Hard Counters: Ours", main.hcTitleText)
       -- the clamp reaches over the side column and under the bottom tabs (HC-65)
       assert.are.same({ 0, 55, 0, -30 }, main._clamp)
-      -- labels: icon and title by default; icon only leaves the title to the tooltip; title only hides the icon
-      local trackers
-      for _, b in ipairs(main.tabs) do if b.hcTitle == "Trackers" then trackers = b end end
-      assert.are.equal("Trackers", trackers:GetText())
-      assert.is_true(trackers.hcIcon:IsShown())
-      assert.are.equal((16 + 3) / 2, trackers.selectedTextX)
+      -- labels (the bottom tabs): icon and title by default; icon only leaves the title to the tooltip
+      local pack
+      for _, b in ipairs(main.tabs) do if b.hcTitle == "Pack" then pack = b end end
+      assert.are.equal("Pack", pack:GetText())
+      assert.is_true(pack.hcIcon:IsShown())
+      assert.are.equal((16 + 3) / 2, pack.selectedTextX)
       ns.settings.tabLabels = "icon"
-      Win.Show("trackers", true)
-      assert.are.equal("", trackers:GetText())
-      assert.is_true(trackers.hcIcon:IsShown())
-      assert.are.equal(0, trackers.selectedTextX)
+      Win.Show("t:pack", true)
+      assert.are.equal("", pack:GetText())
+      assert.is_true(pack.hcIcon:IsShown())
+      assert.are.equal(0, pack.selectedTextX)
       ns.settings.tabLabels = "title"
-      Win.Show("trackers", true)
-      assert.are.equal("Trackers", trackers:GetText())
-      assert.is_false(trackers.hcIcon:IsShown())
+      Win.Show("t:pack", true)
+      assert.are.equal("Pack", pack:GetText())
+      assert.is_false(pack.hcIcon:IsShown())
       ns.settings.tabLabels = nil
+      assert.truthy(bottomIds())
       -- a bad icon is refused
       assert.is_false((HC:RegisterWindow("t:badicon", counting({ icon = {} }))))
       assert.are.same({}, ctx.env.errors)
@@ -391,7 +401,7 @@ describe("windows", function()
   it("scrolls a side column too long for the frame and keeps the selected tab in view", function()
     UI.with(function(ctx)
       local HC, Win = ctx.HC, ctx.hc.Windows
-      for i = 1, 14 do HC:RegisterWindow("t:p" .. i, counting({ title = "P" .. i })) end
+      for i = 1, 14 do Win.Register("t:p" .. i, counting({ title = "P" .. i })) end   -- (ours: the side column)
       HC:ShowWindow("t:p1", true)
       local main = Win.Host("_main")
       local fit = main.sideFit
@@ -554,8 +564,10 @@ describe("boards on screen", function()
       assert.is_true(ctx.hc.Menu.IsShown())
       B.AddReading(b, "hc:goldfrom", nil, "none")
       local last = b.tiles[#b.tiles]
-      assert.are.equal("none", last.arg)
-      assert.are.equal("Gold from none", M.TileTitle(last))
+      -- (2026-11-24) "Gold from" is folded into Gold in: the tile moves there, the source as its filter
+      assert.are.equal("hc:gold", last.reading)
+      assert.are.same({ "none" }, last.arg)
+      assert.are.equal("Gold in: Unknown", M.TileTitle(last))
       B.TileMenu(f.rowFrames[1], b, #b.tiles)
       -- HC-33: a bar toward a target draws; a write redraws boards on the next frame, at most 4 times a second
       local bar = M.AddReading(b, "hc:xplevel", "bar")
@@ -650,7 +662,11 @@ describe("boards on screen", function()
       assert.is_false(B.IsEditing())
       -- New board: the + menu and the launcher open the New board dialog (HC-68); the presets list is kept
       local items = B.NewBoardItems()
-      assert.are.equal(#M.PRESET_ORDER + 1, #items)
+      -- (HC-57) a submenu per group of presets, then Empty board
+      local listed = 0
+      for i = 1, #items - 1 do listed = listed + #items[i].sub end
+      assert.are.equal(#M.PRESET_ORDER, listed)
+      assert.are.equal("Empty board", items[#items].text)
       B.EditBoard(b.id, true)
       B.AddMenu(fb.addBtn, b)
       assert.is_true(ctx.hc.Menu.IsShown())
@@ -833,12 +849,12 @@ describe("the Trackers window", function()
       -- the tree: all, then each category (Basics first), counts beside them
       local nodes = nodeTexts()
       assert.truthy(nodes[1]:find("^All trackers"))
-      assert.truthy(nodes[2]:find("^Basics"))
+      assert.truthy(nodes[2]:find("^Basic"))
       assert.truthy(table.concat(nodes, "|"):find("Testing", 1, true))
       -- the list: Name, On, History, Size
       assert.are.same({ "Name", "On", "History", "Size" },
         { br.list.heads[1].text:GetText(), br.list.heads[2].text:GetText(), br.list.heads[3].text:GetText(), br.list.heads[4].text:GetText() })
-      local gold = rowWith("^Gold per hour")
+      local gold = rowWith("^Gold")
       assert.truthy(gold)
       assert.truthy(gold.cells[2]:GetText():find("on", 1, true))
       assert.are.equal("Off", gold.cells[3]:GetText())               -- history off
@@ -851,14 +867,14 @@ describe("the Trackers window", function()
       -- nothing selected: a hint, and no actions
       assert.truthy(br.detail.text:GetText():find("Click a tracker", 1, true))
       assert.are.same({}, actionTexts())
-      -- select Gold per hour: its readings with Add tile, and its actions
+      -- select Gold: its readings with Add tile, and its actions
       gold:GetScript("OnClick")(gold, "LeftButton")
       assert.are.equal("hc:goldph", br.selected)
-      assert.truthy(br.detail.title:GetText():find("^Gold per hour"))
+      assert.truthy(br.detail.title:GetText():find("^Gold"))
       assert.are.same({ "Turn off", "History...", "Delete data" }, actionTexts())
       local goldItem
       for _, it in ipairs(br.detail.items) do
-        if it:IsShown() and (it.text:GetText() or ""):find("^Gold earned ") then goldItem = it end
+        if it:IsShown() and (it.text:GetText() or ""):find("^Gold in ") then goldItem = it end
       end
       assert.truthy(goldItem)                                        -- (HC-51: Gold/h is no row of its own)
       assert.are.equal("Add tile", goldItem.btn:GetText())
@@ -896,7 +912,7 @@ describe("the Trackers window", function()
         { menu[1].text, menu[2].text, menu[3].text, menu[4].text })
       menu[2].func()                                                 -- Keep history: on (Daily)
       assert.are.equal("daily", HC:GetTracker("hc:goldph").history)
-      assert.truthy(rowWith("^Gold per hour").cells[3]:GetText():find("Daily", 1, true))
+      assert.truthy(rowWith("^Gold").cells[3]:GetText():find("Daily", 1, true))
       assert.truthy(br.footer:GetText():find("History on for 1 of"))
       -- Turn on: the test tracker is off
       br:Select("tt:big")
@@ -908,7 +924,7 @@ describe("the Trackers window", function()
       for _, r in ipairs(br.tree.rows) do if r:IsShown() and r.text:GetText():find("^Testing") then testing = r end end
       testing:GetScript("OnClick")(testing)
       assert.truthy(rowWith("^Big"))
-      assert.is_nil(rowWith("^Gold per hour"))
+      assert.is_nil(rowWith("^Gold"))
       -- Filters: hide trackers that are on; the button says a filter is on
       br.tree.rows[1]:GetScript("OnClick")(br.tree.rows[1])        -- back to All trackers
       local fmenu
@@ -918,11 +934,11 @@ describe("the Trackers window", function()
       local items = fmenu()
       assert.are.equal("On", items[2].text)
       items[2].func()
-      assert.is_nil(rowWith("^Gold per hour"))
+      assert.is_nil(rowWith("^Gold"))
       assert.are.equal("Filters *", br.filterBtn:GetText())
       items = fmenu()
       items[#items].func()                                           -- Show everything
-      assert.truthy(rowWith("^Gold per hour"))
+      assert.truthy(rowWith("^Gold"))
       assert.are.equal("Filters", br.filterBtn:GetText())
       -- sort by name, then descending
       br.list.heads[1]:GetScript("OnClick")(br.list.heads[1])
@@ -945,8 +961,8 @@ describe("the Trackers window", function()
       -- search: matches tracker titles and the titles of their readings
       br.tree.rows[1]:GetScript("OnClick")(br.tree.rows[1])
       br:SetSearch("xp")
-      assert.is_nil(rowWith("^Gold per hour"))
-      assert.truthy(rowWith("^XP per hour"))
+      assert.is_nil(rowWith("^Gold"))
+      assert.truthy(rowWith("^Experience"))
       br:SetSearch("big number")
       assert.truthy(rowWith("^Big"))
       br:SetSearch("")
@@ -1139,7 +1155,7 @@ describe("the Boards tab and the New board dialog", function()
       for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
       assert.truthy(nodes[1]:find("^Your boards"))
       assert.truthy(nodes[2]:find("^Presets"))
-      assert.truthy(nodes[3]:find("Hard Counters", 1, true))
+      assert.truthy(nodes[3]:find("Activity", 1, true))          -- (HC-57: presets by category)
       local row = rowFor("^Pocket$")
       assert.truthy(row)
       assert.truthy(row.cells[2]:GetText():find("Shown", 1, true))
@@ -1241,7 +1257,7 @@ describe("the Boards tab and the New board dialog", function()
       ns.Menu.Show = function(_, items) menu = items end
       f.start:GetScript("OnClick")(f.start)
       ns.Menu.Show = realShow
-      assert.are.equal("Hard Counters", menu[1].text)
+      assert.are.equal("Activity", menu[1].text)
       local texts = {}
       for _, it in ipairs(menu) do texts[#texts + 1] = it.text end
       local all = table.concat(texts, "|")
