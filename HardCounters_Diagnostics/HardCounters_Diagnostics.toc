@@ -2,7 +2,7 @@
 ## Title: Hard Counters: Diagnostics
 ## Notes: The Hard Counters dev console: log, live values, storage, probes, snapshots. Turn it on when asked, or out of curiosity.
 ## Author: Ioannis (John) Bourlakos
-## Version: 0.2.1-beta1
+## Version: 0.2.2-beta1
 ## X-License: MIT
 ## X-AI-Assisted: Claude (Anthropic), via Claude Code
 ## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters

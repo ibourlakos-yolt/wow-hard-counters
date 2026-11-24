@@ -3,7 +3,11 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.2.2-beta1 (2026-11-24)
+
+The third beta, **still experimental**: every character gets boards of its own (copy one from another character
+in two clicks), a new character starts with the Leveling board and a short welcome, and Overview groups your
+tiles by board.
 
 **Saved data:** kept. Boards become each character's own: every character that ran Hard Counters before gets a copy
 of the boards they all shared, the first time it logs in, timers included. The Overview tab's sections are gone
