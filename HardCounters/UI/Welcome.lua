@@ -1,97 +1,404 @@
--- A new character's first login (HC-74, the user 2026-11-24): M.Seed gives it the Leveling board, in front of it,
--- and marks `boards.welcome`. Here, once per account, a small window next to that board introduces the Hard Counters
--- window (the central panel: Overview, Boards, Trackers, Runs) and how to copy another character's boards. Later new
--- characters get one chat line instead. DIALOG strata, like the New board dialog; Escape closes it.
+-- The tutorial (the user, 2026-11-24; it replaces HC-74's one-page welcome window). A small window of steps, Back
+-- and Next, that walks through Hard Counters where it is: the boards on screen (the first one flashes), a first
+-- board for the character's class (one click makes it, from Character Stats' class preset), then the Hard Counters
+-- window, opened by the tour on each of its tabs in turn (Overview, Boards, Trackers, Runs, the packs' tabs, Guide).
+-- It shows by itself once per account, at the first login that hasn't run it (`ns.globalSettings.tutorialSeen`,
+-- set when it opens: closing it early counts), and again from the window's Tutorial button, the Guide tab's Run the
+-- tutorial button, and /hc tutorial. A new character on an account that has seen it gets HC-74's chat line.
+-- DIALOG strata, like the New board dialog; Escape closes it. Everything it says at length is in the Guide tab.
+-- luacheck: no max line length (steps of prose: one sentence, one string)
 local ADDON, ns = ...
 
 local L, Wd = ns.L, ns.Widgets
+local format = string.format
 
-local Welcome = {}
-ns.Welcome = Welcome
+local Tutorial = {}
+ns.Tutorial = Tutorial
+ns.Welcome = Tutorial                   -- (its name before the tour)
 
-local f
+local W, H = 440, 430
+local HOME = { "CENTER", -140, 40 }                    -- left of the starter board (BoardModel.STARTER_POS)
+local CLASS_POS = { "CENTER", -500, 40, "CENTER" }     -- the class board: left of the tour, in sight
+local MAIN = "_main"
 
-local function text()
-  return L["The Leveling board on the right is this character's own: its numbers, live. Right-click it to edit it,"
-    .. " hide it or add numbers."] .. "\n\n"
-    .. L["Everything else is in the Hard Counters window (the minimap button, or /hc), its tabs down the right edge:"] .. "\n"
-    .. "  - " .. L["Overview: every number you follow, board by board"] .. "\n"
-    .. "  - " .. L["Boards: show, hide and find your boards; make new ones"] .. "\n"
-    .. "  - " .. L["Trackers: what is counted, and numbers to add"] .. "\n"
-    .. "  - " .. L["Runs: your recorded runs and dungeons"] .. "\n\n"
-    .. L["Each character has its own boards. To use another character's: Boards, New board..., Start from,"
-    .. " Copy of a board. Then change it as you like."]
+local f, step = nil, 1
+local lit                               -- the board the tour is flashing
+local made                              -- the board the tour made (its id)
+local STEPS
+
+local function BM() return ns.BoardModel end
+local function Bo() return ns.Boards end
+local function gold(s) return "|cffffd200" .. s .. "|r" end
+local function lines(...) return table.concat({ ... }, "\n") end
+local function bullet(s) return "  - " .. s end
+
+--- Flash one board (whatever its rules hide), and stop flashing the one before.
+local function light(id)
+  local B = Bo()
+  if not B then lit = nil; return end
+  if lit and lit ~= id then B.Highlight(lit, false) end
+  lit = id
+  if id then B.Highlight(id, true) end
+end
+
+local function mainHost() return ns.Windows and ns.Windows.Host(MAIN) or nil end
+local function mainShown() local m = mainHost(); return m and m:IsShown() and true or false end
+local function hideMain() if mainShown() then ns.Windows.ShowMain(false) end end
+local function showTab(id) return ns.Windows and ns.Windows.Show(id, true) or false end
+
+--- The board the tour points at: the first one on screen, else the first.
+local function firstBoard()
+  local M = BM()
+  if not (M and ns.charSettings) then return nil end
+  local list = M.Store().list
+  for _, b in ipairs(list) do if b.shown then return b end end
+  return list[1]
+end
+
+--- This character's class board among the presets (Character Stats registers one per class): key, preset; or nil.
+function Tutorial.ClassPreset()
+  local M = BM()
+  local class = M and M.PlayerClass()
+  if not class then return nil end
+  for _, key in ipairs(M.PRESET_ORDER) do
+    local p = M.PRESETS[key]
+    if p.category == "class" and p.class == class then return key, p end
+  end
+  return nil
+end
+
+--- The board this character already has from that preset (the tour's own first).
+local function classBoard(key)
+  local M = BM()
+  local b = made and M.Get(made) or nil
+  if b then return b end
+  for _, x in ipairs(M.Store().list) do if x.preset == key then return x end end
+  return nil
+end
+
+--- Make the class board, left of the tour, flashing. Returns it (nil without a class preset).
+function Tutorial.MakeClassBoard()
+  local key = Tutorial.ClassPreset()
+  if not key then return nil end
+  local b = BM().Create(key)
+  b.pos = ns.U.copy(CLASS_POS)
+  made = b.id
+  if Bo() then Bo().Created(b) end
+  return b
+end
+
+---------------------------------------------------------------------------
+-- The steps: { title, text() -> string, hud (the window out of the way), tab (the window, on this tab),
+--   board() -> a board to flash, action() -> { text, func, disabled } or nil }
+---------------------------------------------------------------------------
+
+local PACK_WORDS = {
+  hcfarm = "where your gold came from and where it went, by day, week or month",
+  hcstats = "your character sheet, stat by stat, each one ready to put on a board",
+  hcdiag = "for finding problems: the log, live values and checks of the game's API",
+}
+
+local function packLines()
+  local out = {}
+  local Win = ns.Windows
+  for _, id in ipairs(Win and Win.PackWindows() or {}) do
+    local def = Win.Def(id)
+    local words = PACK_WORDS[id:match("^([%w_]+):") or ""]
+    out[#out + 1] = bullet(gold(def.title or id) .. (words and (": " .. L[words]) or ""))
+  end
+  return out
+end
+
+STEPS = {
+  { title = L["Welcome to Hard Counters"],
+    text = function()
+      return lines(
+        L["Hard Counters puts the numbers you care about on your screen: gold per hour, XP to level, what you loot, your stats."],
+        "",
+        L["Four words are all you need:"],
+        bullet(format(L["A %s is one number, such as Gold in or Crit chance."], gold(L["reading"]))),
+        bullet(format(L["A %s shows one reading your way: a number, a bar, a gauge."], gold(L["tile"]))),
+        bullet(format(L["A %s is a small panel of tiles that stays on screen while you play."], gold(L["board"]))),
+        bullet(format(L["The %s is where you find, make and change all of it."], gold(L["Hard Counters window"]))),
+        "",
+        format(L["This tour has %d short steps. Close it whenever you like: the Guide tab of the window keeps everything it says, and /hc tutorial starts it again."], #STEPS))
+    end },
+
+  { title = L["Boards: the numbers on your screen"], hud = true, board = firstBoard,
+    text = function()
+      local b = firstBoard()
+      return lines(
+        b and format(L["The flashing panel is a board, called %s. It is this character's own: every character has its own boards."], gold(b.name))
+          or L["A board is a panel of tiles on your screen. This character has none yet: the next step makes one."],
+        "",
+        L["While you play a board is locked: clicks go through it to the world."],
+        bullet(format(L["Hover a board and click the gold %s tab above it to change it. Drag it by its name bar; Done or Escape ends it."], gold(L["Edit"]))),
+        bullet(format(L["While editing, %s adds a tile, and a right-click on a tile changes it: total or per hour, number, bar or gauge, its size, this character or the whole account."], gold("[+]"))),
+        bullet(L["The buttons on a board are its clock. Its tiles count since the clock started: pause it, reset it, or save the stretch as a run."]),
+        bullet(L["A right-click on the name bar opens the board's menu: mini mode (one line), when it shows (combat, instances), what period it counts."]))
+    end },
+
+  { title = L["Your first board"], hud = true,
+    board = function()
+      local key = Tutorial.ClassPreset()
+      return key and classBoard(key) or nil
+    end,
+    text = function()
+      local key, p = Tutorial.ClassPreset()
+      if not key then
+        return lines(
+          L["Hard Counters has ready-made boards: Leveling, Pocket and Run for gold and XP, and with the Character Stats pack one for each role and each class."],
+          "",
+          L["Character Stats isn't loaded on this character (the game's AddOns list turns it on), so there is no class board to offer. New board... lists the ready-made boards you do have, or starts an empty one."])
+      end
+      local b = classBoard(key)
+      if b then
+        return lines(
+          format(L["This character has its class board: %s, flashing now. Its stats are live, and most keep updating in combat."], gold(b.name)),
+          "",
+          L["Try what the last step said: hover it, click Edit, drag it where you want it, right-click a tile."],
+          "",
+          L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
+      end
+      return lines(
+        format(L["Hard Counters has a ready-made board for every class. Yours is %s: the stats this class uses, live."], gold(p.name)),
+        "",
+        L["The button below makes it, left of this window. It is yours to change: move it, drop tiles you don't want, add others."],
+        "",
+        L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
+    end,
+    action = function()
+      local key, p = Tutorial.ClassPreset()
+      local B = Bo()
+      if not key then
+        return { text = L["New board..."], func = function() if B then B.OpenNewBoard() end end }
+      end
+      local b = classBoard(key)
+      if b then
+        return { text = L["Show it"], func = function() if B then B.ShowNow(b.id, 8) end end }
+      end
+      return { text = format(L["Make my %s board"], p.name), func = function() Tutorial.MakeClassBoard() end }
+    end },
+
+  { title = L["The Hard Counters window"], tab = "overview",
+    text = function()
+      return lines(
+        format(L["This is the Hard Counters window. %s opens it; so do the minimap button and the game's AddOns menu."], gold("/hc")),
+        "",
+        bullet(L["The icon tabs down its right edge are Hard Counters' own: Overview, Boards, Trackers, Runs and Guide. Hover one for its name."]),
+        bullet(L["The tabs along the bottom belong to the packs you have (Farmer's Ledger, Character Stats, ...)."]),
+        bullet(L["The title bar names the open tab. Drag the window by it; Escape closes it."]),
+        "",
+        L["The next steps open each tab in turn. It opened on the first one: Overview."])
+    end },
+
+  { title = L["Overview: everything you follow"], tab = "overview",
+    text = function()
+      return lines(
+        L["Overview shows every tile you have as a card with its number now, grouped by the board it is on."],
+        "",
+        bullet(L["Click a card to edit the tile, move it to another board or take it off the screen."]),
+        bullet(L["Click a board's heading for that board's actions: show, hide, edit, rename."]),
+        bullet(format(L["Tiles on no board sit under %s: numbers you want to keep an eye on here without having them on screen."], gold(L["Window only"]))),
+        bullet(L["Add tile takes you to the Trackers tab to pick a number."]))
+    end },
+
+  { title = L["Boards: find, make, copy"], tab = "boards",
+    text = function()
+      return lines(
+        L["The Boards tab lists this character's boards and whether each one is on screen."],
+        "",
+        bullet(L["Hover a board's row and it flashes on screen: the quick way to find one."]),
+        bullet(format(L["%s (top right) makes one: from a ready-made board, empty, or as a copy."], gold(L["New board..."]))),
+        bullet(format(L["%s on the left lists the ready-made boards: Activity, Roles, your class, and any you saved yourself."], gold(L["Presets"]))),
+        bullet(format(L["%s appears once you have several: copy a board from one character to another."], gold(L["Other characters"]))),
+        bullet(L["Click a board for its actions: Show, Edit on screen, Reset position, Duplicate, Save as preset, Delete."]))
+    end },
+
+  { title = L["Trackers: what is counted"], tab = "trackers",
+    text = function()
+      return lines(
+        L["A tracker is a group of readings that counts together: Gold and Experience come with Hard Counters, the rest with the packs."],
+        "",
+        bullet(format(L["Click a tracker for its readings. %s beside one puts that number on a board."], gold(L["Add tile"]))),
+        bullet(L["Turn off the trackers you don't care about: they stop counting and cost nothing."]),
+        bullet(format(L["%s is off unless you turn it on, tracker by tracker. Off: only this session and your boards' clocks. On: totals for today, this week, this month and beyond, kept between sessions."], gold(L["History"]))),
+        bullet(L["The Size column says how much a tracker's history takes on disk."]))
+    end },
+
+  { title = L["Runs: stretches you kept"], tab = "runs",
+    text = function()
+      return lines(
+        L["A run is a stretch of play saved with its numbers: how long, how much gold and XP, what dropped."],
+        "",
+        bullet(L["Dungeons record themselves: walk in, and when you leave the run is here."]),
+        bullet(L["Any board can save its clock's stretch as a run (its menu: Save as run)."]),
+        bullet(format(L["%s and %s do it from the chat line."], gold("/hc run start"), gold("/hc run stop"))),
+        bullet(L["Click a run for its summary. A big number on a board compares itself with your past runs in the same zone."]))
+    end },
+
+  { title = L["The packs' tabs"],
+    text = function()
+      local packs = packLines()
+      local out = { L["Packs add readings, and some add a tab of their own along the bottom of this window. On this character:"], "" }
+      if #packs == 0 then out[#out + 1] = bullet(L["(none loaded: the game's AddOns list turns the packs on)"]) end
+      for _, s in ipairs(packs) do out[#out + 1] = s end
+      out[#out + 1] = ""
+      out[#out + 1] = L["Farmer counts loot, vendor value and reputation; Character Stats your stats; Traveler distance and speed. A pack with no tab still adds its numbers to Trackers and its ready-made boards to New board..."]
+      out[#out + 1] = ""
+      out[#out + 1] = L["Don't want one? Turn it off in the game's AddOns list. Options: the Tab labels choice (icon, title or both)."]
+      return table.concat(out, "\n")
+    end },
+
+  { title = L["Guide: all of this, any time"], tab = "guide",
+    text = function()
+      return lines(
+        L["That's the tour. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, runs, the packs, every /hc command, and where pack authors start."],
+        "",
+        bullet(format(L["%s, at the top of this window on every tab, starts the tour again. So do the Guide tab's button and %s."], gold(L["Tutorial"]), gold("/hc tutorial"))),
+        bullet(format(L["%s lists every command; %s makes a report to paste when something breaks."], gold("/hc help"), gold("/hc report"))),
+        "",
+        L["Now play: your boards count while you do."])
+    end },
+}
+
+---------------------------------------------------------------------------
+-- The window
+---------------------------------------------------------------------------
+
+--- Beside the Hard Counters window while it is open, else left of the starter board; left alone once dragged.
+local function place()
+  if f.moved then return end
+  f:ClearAllPoints()
+  local m = mainShown() and mainHost()
+  if m then f:SetPoint("TOPRIGHT", m, "TOPLEFT", -6, 0)
+  else f:SetPoint(HOME[1], UIParent, HOME[1], HOME[2], HOME[3]) end
+end
+
+local function setTitle(text)
+  if type(f.SetTitle) == "function" then pcall(f.SetTitle, f, text)
+  elseif type(f.TitleContainer) == "table" and type(f.TitleContainer.TitleText) == "table" then
+    f.TitleContainer.TitleText:SetText(text)
+  elseif f.plainTitle then f.plainTitle:SetText(text) end
+end
+
+local function render()
+  local s = STEPS[step]
+  if s.tab then showTab(s.tab) elseif s.hud then hideMain() end
+  light(s.board and (s.board() or {}).id or nil)
+  f.head:SetText(s.title)
+  f.body:SetText(s.text())
+  f.count:SetText(format(L["Step %d of %d"], step, #STEPS))
+  f.back:SetEnabled(step > 1)
+  f.next:SetText(step == #STEPS and L["Finish"] or L["Next"])
+  local a = s.action and s.action() or nil
+  f.act:SetShown(a ~= nil)
+  if a then
+    f.act:SetText(a.text)
+    Wd.FitWidth(f.act, 140, 32)
+    f.act:SetEnabled(not a.disabled)
+    f.actFunc = a.func
+  end
+  place()
+  f:Raise()
 end
 
 local function build()
   local ok
-  ok, f = pcall(CreateFrame, "Frame", "HardCountersWelcome", UIParent, "ButtonFrameTemplate")
+  ok, f = pcall(CreateFrame, "Frame", "HardCountersTutorial", UIParent, "ButtonFrameTemplate")
   if not ok or type(f) ~= "table" then
-    f = CreateFrame("Frame", "HardCountersWelcome", UIParent)
+    f = CreateFrame("Frame", "HardCountersTutorial", UIParent)
     local bg = f:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(0.05, 0.05, 0.07, 0.95)
+    f.plainTitle = Wd.Text(f, "GameFontNormal", "TOP", 0, -8)
+    local x = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    x:SetPoint("TOPRIGHT", 2, 2)
+    f.CloseButton = x
   end
   f:Hide()
-  f:SetSize(400, 300)
-  f:SetPoint("CENTER", UIParent, "CENTER", -140, 40)
+  f:SetSize(W, H)
   f:SetFrameStrata("DIALOG")
   f:SetToplevel(true)
   f:EnableMouse(true)
   f:SetMovable(true)
   f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); self.moved = true end)
   f:SetClampedToScreen(true)
   local hide = rawget(_G, "ButtonFrameTemplate_HidePortrait")
   if type(hide) == "function" then pcall(hide, f) end
-  if type(f.SetTitle) == "function" then pcall(f.SetTitle, f, L["Welcome to Hard Counters"])
-  elseif type(f.TitleContainer) == "table" and type(f.TitleContainer.TitleText) == "table" then
-    f.TitleContainer.TitleText:SetText(L["Welcome to Hard Counters"])
-  end
+  setTitle(L["Hard Counters: tutorial"])
   if type(f.CloseButton) == "table" then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
-  tinsert(UISpecialFrames, "HardCountersWelcome")              -- Escape closes it
+  tinsert(UISpecialFrames, "HardCountersTutorial")             -- Escape closes it
+  f.head = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  f.head:SetPoint("TOPLEFT", 20, -36)
+  f.head:SetPoint("TOPRIGHT", -20, -36)
+  f.head:SetJustifyH("LEFT")
   f.body = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  f.body:SetPoint("TOPLEFT", 20, -36)
-  f.body:SetPoint("TOPRIGHT", -20, -36)
+  f.body:SetPoint("TOPLEFT", 20, -62)
+  f.body:SetPoint("TOPRIGHT", -20, -62)
   f.body:SetJustifyH("LEFT")
   f.body:SetJustifyV("TOP")
   f.body:SetSpacing(2)
-  f.body:SetText(text())
-  f.open = Wd.Button(f, L["Open the window"], 140, function()
-    f:Hide()
-    if ns.ShowOverview then ns.ShowOverview(true) end
+  f.act = Wd.Button(f, "", 160, function()
+    if f.actFunc then f.actFunc() end
+    render()                                                   -- (the step's text and button follow what it did)
   end)
-  f.open:SetPoint("BOTTOMRIGHT", -112, 10)
-  f.ok = Wd.Button(f, L["Got it"], 90, function() f:Hide() end)
-  f.ok:SetPoint("BOTTOMRIGHT", -16, 10)
+  f.act:SetHeight(24)
+  f.act:SetPoint("BOTTOM", 0, 40)
+  f.count = Wd.Text(f, "GameFontDisableSmall", "BOTTOMLEFT", 18, 15)
+  f.next = Wd.Button(f, L["Next"], 90, function() Tutorial.Go(step + 1) end)
+  f.next:SetPoint("BOTTOMRIGHT", -16, 10)
+  f.back = Wd.Button(f, L["Back"], 80, function() Tutorial.Go(step - 1) end)
+  f.back:SetPoint("RIGHT", f.next, "LEFT", -6, 0)
+  -- (hidden above before this is set: closing stops the flashing, and never runs at build)
+  f:SetScript("OnHide", function() light(nil) end)
 end
 
---- Show the introduction now (also `/hc welcome`, to read it again).
-function Welcome.Show()
+--- Show step n (past the last one: the tour ends).
+function Tutorial.Go(n)
   if not f then build() end
+  if n > #STEPS then f:Hide(); return end
+  step = math.max(1, n)
   f:Show()
-  f:Raise()
+  render()
+end
+
+--- Start the tour (step 1, or n). The window's Tutorial button, the Guide tab, /hc tutorial.
+function Tutorial.Show(n)
+  if ns.globalSettings then ns.globalSettings.tutorialSeen = true end
+  Tutorial.Go(n or 1)
   return f
 end
 
---- After a login: a new character's starter board was just made (boards.welcome). The account's first one gets the
---- introduction; later ones a chat line. Returns "window", "line" or nil.
-function Welcome.Check()
-  local M = ns.BoardModel
+function Tutorial.Hide() if f then f:Hide() end end
+function Tutorial.Step() return step, #STEPS end
+function Tutorial.Steps() return STEPS end
+
+--- After a login: the account's first login that hasn't run the tour gets it (a character Hard Counters already
+--- knew too: the tour is newer than they are). After that a new character, whose starter board M.Seed just made
+--- (boards.welcome), gets a chat line. Returns "window", "line", "later" (in combat: asked again shortly) or nil.
+function Tutorial.Check()
+  local M = BM()
   if not (M and ns.charSettings) then return nil end
   M.Seed()
+  local G = ns.globalSettings or {}
+  if not G.tutorialSeen then
+    if ns.wow and ns.wow.inCombat and ns.wow.inCombat() then
+      C_Timer.After(10, function() Tutorial.Check() end)
+      return "later"
+    end
+    M.Store().welcome = nil
+    G.introSeen = true                  -- (HC-74's flag, for a build before the tour)
+    Tutorial.Show(1)
+    return "window"
+  end
   local B = M.Store()
   if not B.welcome then return nil end
   B.welcome = nil
-  local G = ns.globalSettings or {}
-  if not G.introSeen then
-    G.introSeen = true
-    Welcome.Show()
-    return "window"
-  end
   if ns.Print then
-    ns.Print(L["A Leveling board for this character. To copy another character's board: /hc boards, New board..."])
+    ns.Print(L["A Leveling board for this character. To copy another character's board: /hc boards, New board... (/hc tutorial: the tour again)"])
   end
   return "line"
 end
@@ -99,8 +406,9 @@ end
 ns.On("PLAYER_ENTERING_WORLD", function()
   if not ns.ready then return end
   -- after the loading screen, so it isn't lost behind it
-  C_Timer.After(2, function() Welcome.Check() end)
+  C_Timer.After(2, function() Tutorial.Check() end)
 end, "Welcome")
 
-ns.AddSlash("welcome", function() Welcome.Show() end, L["the introduction to Hard Counters, again"])
-ns.WelcomeFrame = function() return f end           -- (tests)
+ns.AddSlash("tutorial", function() Tutorial.Show(1) end, L["the tour of Hard Counters: boards, the window and its tabs, your first board"])
+ns.AddSlash("welcome", function() Tutorial.Show(1) end)        -- (its name in 0.2.2; not listed)
+ns.TutorialFrame = function() return f end                     -- (tests)

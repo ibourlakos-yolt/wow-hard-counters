@@ -467,8 +467,8 @@ dropdown templates differ between clients).
   earned, Items, Vendor value/h, time to level, splits, best drop; Farmer's tiles only when Farmer is loaded),
   Pocket (mini; Gold/h hero, XP/h, Net gold/h), Leveling (XP/h hero, the XP bar, time to level, rested XP, XP gained, Gold/h).
 - **First use and migration (once, `M.Seed`):** a new character gets the Leveling board and, once per account, the
-  welcome (HC-74, §17.12; before, a fresh install got the Pocket board, as a returning character with no boards
-  still does). A player of the old run panel (its window state exists) gets a Run board in its place,
+  tutorial (HC-74, §17.12; the tour, §17.13; before, a fresh install got the Pocket board, as a returning character
+  with no boards still does). A player of the old run panel (its window state exists) gets a Run board in its place,
   width and scale, compact as mini, its headline as the hero (Farmer's old reading ids mapped to Basics'), and a
   Pocket board shown if the live number was. `/hc panel` and `/hc live` toggle those boards.
 - The run panel and the live number (`UI/RunPanel.lua`, `UI/LiveNumber.lua`) were deleted 2026-11-15 (HC-24), once the
@@ -1524,13 +1524,13 @@ reading the player placed, with its choices (§16.1); a board is a HUD stack of 
 
 The user's call (2026-11-24). `UI/Windows.lua`; not seen in game.
 - **Which column now:** a window Hard Counters registers itself (`ns.Windows.Register`) is an icon tab down the
-  right edge, sorted by `def.tabOrder` (Overview 1, Boards 2, Trackers 3, Runs 4); one registered through
+  right edge, sorted by `def.tabOrder` (Overview 1, Boards 2, Trackers 3, Runs 4, Guide 5); one registered through
   `HC:RegisterWindow` (every pack, and Diagnostics) is a tab along the bottom, in load order, Diagnostics last.
   Templates, sizes, clamping and scrolling are as in §17.8; only which set goes where changed.
 - The **Tab labels** option now shapes the packs' tabs. Hard Counters' own are icons, the title as the tooltip.
 - With no tab selected yet the window opens on the first side tab, Overview.
 - **The frame's title names the open tab** ("Hard Counters: Boards"), since Hard Counters' own tabs carry no words
-  now. The welcome (HC-74) says the tabs are down the right edge.
+  now. The tutorial (§17.13) says the tabs are down the right edge.
 - Known costs, accepted: the casual player's main tabs lose their words (the title and the tooltips make up for it);
   with no pack loaded and Diagnostics off, the bottom row is empty.
 - Character Stats' tab asks for the height of the rows this character shows (`minSize`) and lays out again when a
@@ -1880,5 +1880,53 @@ front of them with a one-off introduction message about the central panel and it
   this character's own; the Hard Counters window (minimap button or `/hc`) holds Overview, Boards, Trackers, Runs,
   one line each; each character has its own boards, and how to copy one. Buttons **Open the window** (the Overview
   tab) and **Got it**; Escape closes it. Later new characters get one chat line. `/hc welcome` shows it again.
+  **Replaced by the tutorial (§17.13)**; the starter board, `boards.welcome` and the chat line stay.
 - **Not done:** a character renamed or moved to another realm gets a new AceDB key, so it starts as new (its old
   boards are listed under its old name, to copy). AceDB's Profiles page no longer affects boards.
+
+### 17.13 As built (2026-11-24): the tutorial and the Guide tab
+
+The user (2026-11-24): "create a tutorial for this addon when the user logs in and they haven't yet run the
+tutorial. It has to explain to them what they can find in the addon's components like the central window, each tab,
+and in the HUD boards. It could guide them to create their first board based on their class. In addition make sure
+we have a guide core tab in the panel, where people can find out about our concepts and what they can do with the
+addon including the slash commands API." Then: "we could also add a central action button that re-runs the
+tutorial." Not seen in game.
+- **The tutorial** (`UI/Welcome.lua`, `ns.Tutorial`; it replaces §17.12's welcome window). A 440 × 430 dialog
+  (`HardCountersTutorial`, DIALOG strata, Escape closes it) with a heading, the step's text, "Step n of 10", **Back**
+  and **Next** (**Finish** on the last), and on some steps one action button. It does things as it goes, so the
+  player sees what it talks about:
+  1. *Welcome*: reading, tile, board, the Hard Counters window, in one line each.
+  2. *Boards*: the window is moved out of the way and the first shown board flashes (`Boards.Highlight`: HIGH strata,
+     shown whatever its rules) while the step explains the Edit tab, `[+]`, a tile's right-click, the clock, the
+     name bar's menu.
+  3. *Your first board*: `Tutorial.ClassPreset()` finds the preset with `category = "class"` and this character's
+     class (Character Stats registers one per class). **Make my <Class> board** creates it (`M.Create`) left of the
+     tour (centre, 500 left, 40 up) and flashes it; with one already there the button is **Show it**; without the
+     pack it says so and offers **New board...**.
+  4. to 8. *The window*, then *Overview*, *Boards*, *Trackers*, *Runs*: the tour opens the window on that tab
+     (`Windows.Show`) and sits beside it (anchored to the window's top-left corner, clamped to the screen; left
+     alone once the player drags it).
+  9. *The packs' tabs*: the bottom tabs by title (`Windows.PackWindows()`), a line for the ones we ship.
+  10. *Guide*: opens the Guide tab; says where the tour and the commands are.
+- **When it shows.** Two seconds after the login's `PLAYER_ENTERING_WORLD`, `Tutorial.Check()`: when
+  `ns.globalSettings.tutorialSeen` is not set it opens (once per account; the flag is set when it opens, so closing
+  it early counts as run); in combat it asks again every 10 s instead. That includes a character Hard Counters
+  already knew: the tour is newer than they are. `introSeen` (§17.12) is still written, for an older build reading
+  the same file. On an account that has seen it, a new character gets §17.12's chat line.
+- **Again:** the **Tutorial** button in the Hard Counters window's header row, on every tab (`main.tutorial`, the
+  first of the header buttons; a pack's `mainButton` lines up left of it); the Guide tab's **Run the tutorial**;
+  `/hc tutorial` (`/hc welcome` still works, unlisted). All start at step 1.
+- **The Guide tab** (`UI/Guide.lua`, window id `guide`, `tabOrder = 5`, the question-mark icon): the fifth of Hard
+  Counters' own tabs. Ten pages down the left, the page's text on the right in a scroll frame of its own with
+  `Widgets.VScroll`: Start here, Concepts, Boards, Tiles, The window, Trackers and history, Runs, Packs, Commands,
+  For addon authors. Text is built when a page is shown, so the lists are live: **Commands** from `ns.SlashList()`
+  (every `/hc` subcommand with a help line, a pack's with its owner, then worked examples), **Packs** from
+  `ns.packOrder`, **The window** from the bottom tabs. **For addon authors** summarises the public API in the
+  order a pack uses it and documents `HC:RegisterSlash` in full, pointing to `docs/API.md` and `docs/PACKS.md`.
+  `/hc guide [page]` opens it, on a page by key or title.
+- **Costs, accepted.** The guide's text lives in Lua strings (one more place to keep in step with README and
+  API.md; `tests/tutorial_spec.lua` checks the command list against the registry, not the prose). A new file in the
+  TOC: the first load needs a full client restart; on a `/reload` alone the tour works and its last step finds no
+  Guide tab. The tour's window can cover the left of the Hard Counters window on a narrow screen (it is movable).
+- **Not done:** per-step pointers (an arrow at the Edit tab or a tab's icon); a tour per pack; localisation.

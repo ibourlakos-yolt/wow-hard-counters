@@ -27,8 +27,11 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 1. Install through the CurseForge app (set this addon's release type to **Beta**, or the app won't offer it), or
    unzip the download into `World of Warcraft\_forever_\Interface\AddOns`. After installing or updating, restart
    the game: a new addon folder doesn't load with a `/reload`.
-2. Log in. A first board appears on screen.
-3. Open Hard Counters with **`/hc`**, the **minimap button**, or the game's **AddOns menu**.
+2. Log in. A first board appears on screen, and a short **tutorial** opens: the boards on your screen, a first
+   board for your class, then the Hard Counters window tab by tab. Close it whenever you like; `/hc tutorial` or the
+   window's **Tutorial** button runs it again.
+3. Open Hard Counters with **`/hc`**, the **minimap button**, or the game's **AddOns menu**. Its **Guide** tab is the
+   manual: the concepts, boards and tiles, history, runs, the packs and every command.
 
 **Boards** are the panels that stay on screen while you play. Each one holds tiles, and each tile shows one reading.
 
@@ -48,12 +51,17 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 | Command | |
 |---|---|
 | `/hc` | Open the Hard Counters window |
+| `/hc tutorial` | The tour, from its first step |
+| `/hc guide` | The Guide tab (`/hc guide commands`: straight to a page) |
+| `/hc boards`, `/hc trackers`, `/hc runs` | Those tabs |
+| `/hc board` | List your boards; `/hc board <name>` shows or hides one; `/hc board new` makes one |
+| `/hc run start [label]`, `/hc run stop` | Record a run by hand |
 | `/hc ledger` | Farmer's money Ledger |
 | `/hc stats` | The Character Stats window |
 | `/hc edit` | Edit every board |
 | `/hc report` | A report to copy and paste for bug reports, with what is in it and what to include |
 | `/hc diag` | The Diagnostics console |
-| `/hc help` | Every command |
+| `/hc help` | Every command (the Guide tab's Commands page lists them too, with examples) |
 
 ## Good to know
 

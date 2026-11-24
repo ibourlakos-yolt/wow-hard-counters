@@ -346,7 +346,7 @@ describe("windows", function()
         for _, t in ipairs(main.sideTabs) do if t:IsShown() then out[#out + 1] = t.hcId end end
         return out
       end
-      assert.are.same({ "overview", "boards", "trackers", "runs" }, sideIds())   -- (Overview HC-67, Boards HC-68)
+      assert.are.same({ "overview", "boards", "trackers", "runs", "guide" }, sideIds())   -- (Overview HC-67, Boards HC-68)
       local bottom = bottomTitles()
       assert.are.equal("Diagnostics", bottom[#bottom])              -- Diagnostics always last
       if ctx.farmer then assert.truthy(table.concat(bottom, " "):find("Ledger", 1, true)) end
@@ -355,7 +355,7 @@ describe("windows", function()
       -- a window of ours sorts by its tabOrder down the side; a pack's window joins the bottom row before Diagnostics
       Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
-      assert.are.same({ "overview", "boards", "t:ours", "trackers", "runs" }, sideIds())
+      assert.are.same({ "overview", "boards", "t:ours", "trackers", "runs", "guide" }, sideIds())
       bottom = bottomTitles()
       assert.are.equal("Diagnostics", bottom[#bottom])
       assert.are.equal("Pack", bottom[#bottom - 1])
@@ -1340,20 +1340,16 @@ describe("a new character", function()
       assert.are.equal("Leveling", list[1].name)
       assert.is_true(list[1].shown)
       assert.are.same(BM.STARTER_POS, list[1].pos)
-      assert.is_nil(ns.WelcomeFrame())                                 -- not behind the loading screen
+      assert.is_nil(ns.TutorialFrame())                                -- not behind the loading screen
       ctx.env:advance(3)
-      local w = ns.WelcomeFrame()
+      local w = ns.TutorialFrame()
       assert.truthy(w)
-      assert.is_true(w:IsShown())
-      local body = w.body:GetText()
-      for _, s in ipairs({ "Overview", "Boards", "Trackers", "Runs", "/hc", "Copy of a board" }) do
-        assert.truthy(body:find(s, 1, true), s)
-      end
-      assert.is_true(ns.globalSettings.introSeen)                     -- once per account
+      assert.is_true(w:IsShown())                                      -- the tour (tests/tutorial_spec.lua walks it)
+      assert.is_true(ns.globalSettings.tutorialSeen)                  -- once per account
+      assert.is_true(ns.globalSettings.introSeen)
       assert.is_nil(BM.Store().welcome)
-      w.open:GetScript("OnClick")(w.open)
+      ns.Tutorial.Hide()
       assert.is_false(w:IsShown())
-      assert.is_true(ns.Windows.IsShown("overview"))
       -- the other character's board, in the Boards tab, copied to this one
       ns.ShowBoardsTab(true)
       ns.Windows.Content("boards"):SetSize(762, 568)
@@ -1390,20 +1386,25 @@ describe("a new character", function()
       local printed
       ns.Print = function(fmt) printed = fmt end
       ctx.env:advance(3)
-      assert.is_nil(ns.WelcomeFrame())
+      assert.is_nil(ns.TutorialFrame())
       assert.truthy(printed and printed:find("Leveling board", 1, true))
       assert.are.equal("Leveling", ns.BoardModel.Store().list[1].name)
       assert.are.same({}, ctx.env.errors)
-    end, { newCharacter = true, settings = altSettings({ introSeen = true }) })
+    end, { newCharacter = true, settings = altSettings({ introSeen = true, tutorialSeen = true }) })
   end)
 
-  it("a character Hard Counters knew keeps its boards and sees no introduction", function()
+  it("a character Hard Counters knew keeps its boards; it gets the tour once, being older than the tour", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       assert.is_true(ns.knownCharacter)
       ctx.env:advance(3)
-      assert.is_nil(ns.WelcomeFrame())
+      assert.is_true(ns.TutorialFrame():IsShown())
       assert.are.equal("Pocket", ns.BoardModel.Store().list[1].name)
     end)
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      ctx.env:advance(3)
+      assert.is_nil(ns.TutorialFrame())                                -- an account that has seen it
+    end, { settings = { global = { tutorialSeen = true } } })
   end)
 end)

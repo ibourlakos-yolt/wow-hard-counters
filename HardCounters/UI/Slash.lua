@@ -16,6 +16,17 @@ function ns.AddSlash(name, fn, help, owner)
   commands[name] = { fn = fn, help = help, owner = owner }
 end
 
+--- Every subcommand that has a help line, in registration order: { { name, help, owner } } (the Guide tab's
+--- Commands page; owner is the pack's label, nil for Hard Counters' own).
+function ns.SlashList()
+  local out = {}
+  for _, name in ipairs(order) do
+    local c = commands[name]
+    if c.help then out[#out + 1] = { name = name, help = c.help, owner = c.owner } end
+  end
+  return out
+end
+
 local function help()
   ns.Print(L["commands:"])
   DEFAULT_CHAT_FRAME:AddMessage("  /hc - " .. L["open the Hard Counters window"])

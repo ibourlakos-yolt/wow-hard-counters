@@ -348,9 +348,15 @@ no tabs); `/hc help` lists them, with the pack each one comes from.
 `/hc run start [label] | stop | pause | resume | split [label] | status`, `/hc runs`, `/hc board [n | new <preset> | mini <n> | reset]`,
 `/hc edit` (edit boards), `/hc panel [compact|full]` (the Run board), `/hc live` (the Pocket board), `/hc trackers`
 (the Trackers window), `/hc track` (the same from the chat line),
-`/hc windows`, `/hc options`, `/hc welcome` (the introduction a new character gets), `/hc report [addons]`;
+`/hc boards`, `/hc overview`, `/hc windows`, `/hc options`, `/hc minimap`, `/hc tutorial` (the tour a first login
+gets; `/hc welcome` is its old name), `/hc guide [page]` (the Guide tab, the manual in the game; pages `start`,
+`concepts`, `boards`, `tiles`, `window`, `history`, `runs`, `packs`, `commands`, `authors`), `/hc report [addons]`;
 `/hc diag [mark|snap|probes]` (Diagnostics);
-`/hc ledger` (Farmer). The older `/hcdiag` still works as an alias (`/hcf` and `/farmer` were deleted by HC-49).
+`/hc ledger` (Farmer), `/hc stats` (Character Stats). The older `/hcdiag` still works as an alias (`/hcf` and
+`/farmer` were deleted by HC-49).
+
+The Guide tab's **Commands** page is built from the same registry as `/hc help`: every subcommand with a help line,
+a pack's with its `owner` beside it. Give `RegisterSlash` a help line and your command is documented in the game.
 
 ## 9. Windows and subcommands (packs)
 
@@ -359,7 +365,8 @@ close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, raise on clic
 (Ctrl+mouse wheel scales it when BlizzMove is installed), and its position and scale saved per profile. Every
 window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). A
 pack's window is a **tab along the bottom** of the window, with Diagnostics last (since 2026-11-24; in 0.2.1 and
-0.2.2 it was an icon tab down the right edge, where Hard Counters' own Overview, Boards, Trackers and Runs are now).
+0.2.2 it was an icon tab down the right edge, where Hard Counters' own Overview, Boards, Trackers, Runs and Guide are
+now). The tutorial names the packs' tabs by their `title`.
 Give it an `icon` and a `title`: the player's Tab labels option shows the icon, the title or both, and an icon-only
 tab shows the title as its tooltip. The frame's title names the open tab ("Hard Counters: Ledger").
 
@@ -376,7 +383,7 @@ width makes the panel wider for every tab, a large height makes yours scroll. On
 | `HC:ShowWindow(id[, show])` | `show` nil toggles. A tab is shown by opening the shared frame on it. |
 | `HC:ToggleWindow(id)`, `HC:IsWindowShown(id)` | Shown = on screen (a tab counts only while it is the selected one). |
 | `HC:RelayoutWindow(id)` | Re-reads `minSize()` / `fixedHeight()` after the content changed shape. |
-| `HC:RegisterSlash(name, fn[, help, owner])` → ok, err | `/hc <name> [args]`; `fn(rest)` gets the text after the name. Lowercase letters and digits; a name already taken (by Hard Counters or another pack) is refused. `owner` labels it in `/hc help`. Check `HC:Supports("slash")`. |
+| `HC:RegisterSlash(name, fn[, help, owner])` → ok, err | `/hc <name> [args]`; `fn(rest)` gets the text after the name. Lowercase letters and digits; a name already taken (by Hard Counters or another pack) is refused. `owner` labels it in `/hc help` and on the Guide tab's Commands page; a command without `help` works but is listed in neither. Check `HC:Supports("slash")`. |
 
 Content rules: anchor to the content frame's edges (it is resized), redo width-dependent layout in its
 `OnSizeChanged`, never show or hide the content frame yourself, and never call `SetParent` on it.

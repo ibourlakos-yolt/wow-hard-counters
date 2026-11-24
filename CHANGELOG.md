@@ -3,6 +3,33 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+**Saved data:** kept.
+
+**Updating:** restart the game (a new addon file: `/reload` is not enough).
+
+### New
+- **A tutorial.** The first time you log in with this version a short tour opens, once per account: what a
+  reading, a tile and a board are; the boards on your screen (yours flashes); a **first board for your class**, made
+  with one click (it needs the Character Stats pack); then the Hard Counters window, opened for you on each tab in
+  turn: Overview, Boards, Trackers, Runs, the packs' tabs and the new Guide. Back and Next, close it whenever you
+  like. It waits for the end of a fight. Players who already use Hard Counters get it once too.
+- **Run it again** with the **Tutorial** button at the top of the Hard Counters window (on every tab), the Guide
+  tab's **Run the tutorial** button, or `/hc tutorial`.
+- **The Guide tab**, the fifth icon tab of the window: the manual, in the game. Pages: Start here, Concepts, Boards,
+  Tiles, The window, Trackers and history, Runs, Packs, Commands, For addon authors. The Commands page lists every
+  `/hc` command that is loaded right now, the packs' too, with examples. `/hc guide` opens it; `/hc guide commands`
+  goes straight to a page.
+
+### Changed
+- The tutorial replaces the one-page welcome a new character got. `/hc welcome` still works and opens the tour. A
+  new character on an account that has seen the tour gets its Leveling board and one chat line, as before.
+
+### Developer notes
+- A pack's `/hc` subcommand registered with a help line (`HC:RegisterSlash(name, fn, help, owner)`) is listed on the
+  Guide tab's Commands page with its owner. API §8, §9.
+
 ## 0.2.3-beta1 (2026-11-24)
 
 A beta, **still experimental**: gold and XP become the Hard Counters Basic pack, related numbers merge into one

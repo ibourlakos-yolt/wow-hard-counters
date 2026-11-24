@@ -54,6 +54,7 @@ UI\Trackers.lua
 UI\Overview.lua
 UI\BoardDialog.lua
 UI\BoardsTab.lua
+UI\Guide.lua
 UI\Welcome.lua
 UI\RunList.lua
 UI\Broker.lua

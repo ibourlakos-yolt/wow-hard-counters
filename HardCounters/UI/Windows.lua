@@ -114,7 +114,7 @@ local function bottomIds()
   return out
 end
 
---- Hard Counters' own tabs down the right edge, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs).
+--- Hard Counters' own tabs down the right edge, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs, Guide).
 local function sideList()
   local out = {}
   for i, id in ipairs(order) do if isDocked(id) and not sideIds[id] then out[#out + 1] = { id = id, i = i } end end
@@ -640,7 +640,14 @@ end
 
 local function buildHeader()
   main.header = {}
-  local prev
+  -- the tour again, from any tab (the user, 2026-11-24): the first button of the header row, when the tutorial is loaded
+  if not main.tutorial and ns.Tutorial then
+    main.tutorial = Wd.Button(main, L["Tutorial"], 80, function() ns.Tutorial.Show(1) end)
+    main.tutorial:SetHeight(22)
+    main.tutorial:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY)
+    Wd.Tip(main.tutorial, function() return L["A short tour of Hard Counters: the boards on screen, this window and its tabs, your first board."] end)
+  end
+  local prev = main.tutorial
   for _, id in ipairs(order) do
     local def = defs[id]
     if def.mainButton then
@@ -846,6 +853,8 @@ function Win.ShowMain(show)
 end
 
 function Win.HasDocked() return #dockedIds() > 0 end
+--- The packs' windows (and Diagnostics, last): the tabs along the bottom, in order. The tutorial and the Guide name them.
+function Win.PackWindows() return bottomIds() end
 function Win.List() local out = {} for i, id in ipairs(order) do out[i] = id end return out end
 function Win.Def(id) return defs[id] end
 function Win.Content(id) return entries[id] and entries[id].content end
