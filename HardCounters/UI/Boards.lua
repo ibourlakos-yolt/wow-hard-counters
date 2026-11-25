@@ -782,13 +782,18 @@ local function setEditChrome(f, on)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); savePos(self) end)
     f.bg:SetColorTexture(0.10, 0.08, 0.02, 0.85)
   else
-    f:SetScript("OnDragStart", nil)
-    f:SetScript("OnDragStop", nil)
+    -- (the user, 2026-11-25: a Ctrl-dragged board stuck to the cursor) This runs at every redraw of a board that
+    -- was edited once. While the move key has the board armed, or it is being dragged, its drag scripts and its
+    -- mouse are the move's: clearing them here took away the script that ends the drag.
+    if not (f.moveArmed or f.dragging) then
+      f:SetScript("OnDragStart", nil)
+      f:SetScript("OnDragStop", nil)
+    end
     f.bg:SetColorTexture(0.04, 0.04, 0.06, 0.72)
   end
   if on and f.handle then f.handle:Hide(); f.moveHandle:Hide() end
   if on then f.moveArmed = nil end
-  setMouse(f)
+  if on or not (f.moveArmed or f.dragging) then setMouse(f) end
 end
 
 -- The hover chrome of a locked board (HC-42 a; the move handle and the move key: the user, 2026-11-25). Boards are
@@ -832,6 +837,15 @@ local function stopMove(f)
   f:StopMovingOrSizing()
   f.dragging = nil
   savePos(f)
+end
+
+--- Is the left mouse button held? (nil when the client can't say.)
+local function leftDown()
+  local fn = rawget(_G, "IsMouseButtonDown")
+  if type(fn) ~= "function" then return nil end
+  local ok, down = pcall(fn, "LeftButton")
+  if not ok then return nil end
+  return down and true or false
 end
 
 local function handleTab(f, label, width, point, rel)
@@ -912,6 +926,8 @@ function Boards.Hover(elapsed)
   local shown = 0
   local keyDown = moveKeyDown()
   for _, f in pairs(frames) do
+    -- a drag whose end we never heard (the button is up and the board still follows the cursor): end it here
+    if f.dragging and leftDown() == false then stopMove(f) end
     local onBoard = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
     local over = false
     if handleFits(f) then
@@ -1076,7 +1092,7 @@ function Boards.Refresh(id, rebuild)
     Boards.Tick(f, nil)
     return
   end
-  if rebuild or not f.placed then
+  if (rebuild or not f.placed) and not f.dragging then      -- (never re-anchor a board under the cursor)
     applyGeometry(f)
     f.placed = true
     f.layoutKey = nil

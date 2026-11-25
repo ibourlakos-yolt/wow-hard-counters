@@ -63,9 +63,9 @@ function HC:RegisterSlash(name, fn, helpText, owner)
 end
 
 ns.AddSlash("report", function(rest)
-  -- (HC-61) the report window: what it is for, what is in it, the opt-ins (name, class, addon list), the string
+  -- (HC-61) the report window: what it is for, what is in it, the boxes (name; class and addon list, ticked), the string
   ns.ShowReportBox({ addons = rest == "addons" })
-end, L["a report to copy and paste for bug fixes (add 'addons' to tick your addon list)"])
+end, L["a report to copy and paste for bug fixes (your class and addon list are in it unless you untick them; your name only if you tick it)"])
 
 ns.AddSlash("help", help)
 

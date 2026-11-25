@@ -75,7 +75,7 @@ local PAGES = {
       item(L["Trackers tab: click a tracker, then Add tile beside the number you want."]),
       item(L["Turn history on for a tracker (Trackers tab) to get today, this week, this month."]),
       head(L["Good to know"]),
-      item(L["Nothing leaves your computer: addons have no network access. /hc report only shows text for you to copy."]),
+      item(L["Nothing leaves your computer: addons have no network access. /hc report only shows text for you to copy. It lists what it holds; your class and your addon list are in it unless you untick them, your character's name and realm only if you tick the box."]),
       item(L["In combat the game hides many character stats from addons. Single-value stats keep updating; the rest show their last value, marked in combat, until the fight ends."]),
       item(L["This is a beta: a new version may reset saved data, and its changelog says so when it does."]),
     })

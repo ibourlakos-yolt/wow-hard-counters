@@ -68,8 +68,12 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
 - **Combat.** WoW: Forever hides many character stats from addons during combat. Single-value stats keep updating;
   the rest show their last value, marked *in combat*, until the fight ends.
 - **Nothing leaves your computer.** Addons have no network access. `/hc report` only shows text for you to copy,
-  with a list of what is in it. It includes no character name, realm or class, and no addon list, unless you tick
-  the box for it.
+  with a list of what is in it.
+- **What a report holds.** Versions, error and warning counts, which packs are loaded, storage sizes and, with
+  Diagnostics on, its checks of the game's API (types, counts and game IDs: no amounts, no positions, no chat). It
+  also holds **your character's class and the list of addons you have installed, unless you untick those two
+  boxes** in the report window, and your character's name and realm **only if you tick that box**. Whatever you
+  paste into a public bug report is public.
 - **Saved data** lives in `HardCountersDB` and `HardCountersSettings` (WTF folder). During the beta a new version may
   reset it; the changelog will say so.
 - **The packs' API is experimental.** Other authors can build packs on Hard Counters, but the API may still change.

@@ -136,8 +136,10 @@ local function buildReport()
   f.intro:SetWidth(612)
   f.intro:SetJustifyH("LEFT")
   f.intro:SetText(L["This report helps fix and improve Hard Counters. The addon sends nothing: you copy the text "
-    .. "below and paste it to whoever asked for it. Pasted into a GitHub issue it is public. Zone, map and spell IDs "
-    .. "in it can hint at where you play."])
+    .. "below and paste it to whoever asked for it. Pasted into a GitHub issue it is public. It includes your "
+    .. "character's class and the list of addons you have installed unless you untick them below; your character's "
+    .. "name and realm only if you tick that box. Zone, map and spell IDs in it can hint at where you play. The "
+    .. "lines under this one say what this report holds."])
 
   f.summary = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   f.summary:SetPoint("TOPLEFT", f.intro, "BOTTOMLEFT", 0, -8)
@@ -187,10 +189,14 @@ local function buildReport()
   return f
 end
 
---- Open the report window. opts.addons pre-ticks the addon list (/hc report addons); name and class start off.
-function ns.ShowReportBox(opts)
+--- Open the report window. (The user, 2026-11-25) Class and the addon list start ticked at every opening: they are
+--- what makes a tester's report readable (a probe result means one thing on a mage, another on a warrior; a
+--- conflict needs the addon list) and neither names anyone. The character's name and realm start unticked. All
+--- three are boxes the player sees and can change before copying; nothing is saved between openings. The window's
+--- first lines, README and the CurseForge page say so: change them together.
+function ns.ShowReportBox(_opts)
   report = report or buildReport()
-  report.opts = { addons = opts and opts.addons or nil }
+  report.opts = { class = true, addons = true }
   report:Show()
   refreshReport(report)
   return report

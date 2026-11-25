@@ -52,6 +52,10 @@ called "Farming".
 - The ready-made board "Run" is called **Farming** ("run" already means a saved stretch of play).
 - **Start from** in the New board dialog is a dropdown that looks like one.
 - Adding a tile to a board from the Trackers tab no longer puts that board on your screen.
+- **`/hc report` now includes your class and your addon list unless you untick them** (both boxes start ticked;
+  they were off). Your character's name and realm stay out unless you tick that box. The report window, this
+  README and the CurseForge page say so. Why: a tester's report is hard to read without knowing the class, and a
+  conflict needs the addon list.
 - The Guide and the tutorial say all of the above; the tutorial has 11 steps.
 
 ### Not checked in game yet
@@ -61,6 +65,11 @@ called "Farming".
 - Health regen, mana from spirit and haste use calls this client documents; a call that is missing shows "n/a".
 - Per-school spell hit is not offered: the game reports one spell hit number, and the per-school part comes from
   talents.
+
+### For testers
+- Play as usual (one fight is enough), then `/hc report`, copy the text and send it to whoever asked. With
+  Diagnostics on, the report carries this build's checks of the game's API: spell schools, talents, regeneration,
+  mana-per-5 buffs, item stat names.
 
 ### For pack authors
 - `HC:RegisterWindowHelp(id, def)`: the Help page and tour of your window (docs/API.md §9).

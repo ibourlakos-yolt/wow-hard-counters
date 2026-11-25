@@ -1,9 +1,10 @@
 -- /hc report: the field-feedback string (DESIGN §8.3; HC-61 for the Diagnostics section and the opt-ins).
 --   !HCReport:1!d:<adler32 of the CBOR>:<Base64 of raw Deflate of CBOR>!End:HCReport:1!
--- Opt-in and visible: the player copies it from a text box; nothing is sent anywhere. Scrubbed: no character
--- names, realms, GUIDs or other players' data, unless the player ticks "name" or "class" in the report window
--- (opts.name, opts.class: read when the report is built, never saved). The list of installed addons only with
--- opts.addons. With HardCounters_Diagnostics loaded, its probe results ride along (body.diag: types, counts, statuses
+-- Visible and the player's to send: they copy it from a text box; nothing is sent anywhere. Scrubbed: no GUIDs, no
+-- other players' data, and no character name or realm unless the player ticks "name" in the report window.
+-- Class and the list of installed addons are in it unless the player unticks them there (since 2026-11-25 those two
+-- boxes start ticked; opts.name, opts.class, opts.addons are read when the report is built, never saved).
+-- With HardCounters_Diagnostics loaded, its probe results ride along (body.diag: types, counts, statuses
 -- and game IDs, never coordinates, names or chat text). Decode offline with tools\decode-report.ps1.
 local ADDON, ns = ...
 
@@ -123,7 +124,9 @@ function ns.ReportSummary(body)
     out[#out + 1] = string.format(L["Your character: %s-%s"], tostring(who.name), tostring(who.realm))
   end
   if who and who.class then out[#out + 1] = string.format(L["Your class: %s"], tostring(who.class)) end
-  if not (who and (who.name or who.class)) then out[#out + 1] = L["No character name, realm or class"] end
+  if not (who and (who.name or who.class)) then out[#out + 1] = L["No character name, realm or class"]
+  elseif not who.name then out[#out + 1] = L["No character name or realm"] end
+  if not body.addons and not body.truncated then out[#out + 1] = L["No addon list"] end
   if body.truncated then out[#out + 1] = L["Shortened to fit: the oldest parts were left out"] end
   return out
 end

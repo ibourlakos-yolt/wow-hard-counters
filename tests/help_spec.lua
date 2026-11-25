@@ -239,6 +239,39 @@ describe("a locked board on the HUD", function()
       B.Hover(1)
       assert.is_nil(f.moveArmed)
       assert.is_nil(f:GetScript("OnDragStart"))
+      -- (the user, 2026-11-25: the board stuck to the cursor) a board that was edited once is redrawn through its
+      -- edit chrome: a redraw while it is armed or dragged must leave the drag scripts and the mouse alone
+      B.EditBoard(b.id, true)
+      B.EditBoard(b.id, false)
+      assert.truthy(f.nameBar)
+      ctx.env.modifier = "CTRL"
+      B.Hover(1)
+      assert.is_true(f.moveArmed)
+      f:GetScript("OnDragStart")(f)
+      assert.is_true(f.dragging)
+      B.Refresh(b.id)
+      B.Refresh(b.id, true)
+      assert.truthy(f:GetScript("OnDragStop"))
+      ctx.env.modifier = nil                              -- the key let go before the button: still dragging
+      B.Hover(1)
+      assert.is_true(f.dragging)
+      assert.truthy(f:GetScript("OnDragStop"))
+      f:GetScript("OnDragStop")(f)
+      assert.is_nil(f.dragging)
+      B.Hover(1)
+      assert.is_nil(f.moveArmed)
+      assert.is_nil(f:GetScript("OnDragStart"))
+      -- a drag whose end never arrived: the next poll with the button up ends it
+      ctx.env.modifier = "CTRL"
+      B.Hover(1)
+      f:GetScript("OnDragStart")(f)
+      local realDown = _G.IsMouseButtonDown
+      _G.IsMouseButtonDown = function() return false end
+      B.Hover(1)
+      assert.is_nil(f.dragging)
+      _G.IsMouseButtonDown = realDown
+      ctx.env.modifier = nil
+      B.Hover(1)
       -- another key by choice; none at all
       ns.settings.boardMoveKey = "ALT"
       ctx.env.modifier = "SHIFT"

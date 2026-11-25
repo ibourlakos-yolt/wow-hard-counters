@@ -140,7 +140,7 @@ describe("load smoke test", function()
 
   -- HC-61: with Diagnostics loaded the report carries the probes; the report window says what is in it, starts
   -- anonymous every time it opens, and rebuilds when a box is ticked
-  it("puts the probes in /hc report and opens the report window anonymous", function()
+  it("puts the probes in /hc report; the report window opens with class and addon list ticked, never the name", function()
     UI.with(function(ctx)
       ctx.diag.RunProbes()
       local s, body = ctx.hc.BuildReport({})
@@ -153,17 +153,33 @@ describe("load smoke test", function()
       _G.SlashCmdList.HARDCOUNTERS("report")
       local f = _G.HardCountersReportBox
       assert.is_true(f:IsShown())
-      assert.are.equal(s, f.text)
-      assert.truthy(f.summary:GetText():find("No character name", 1, true))
-      assert.truthy(f.summary:GetText():find("API checks", 1, true))
+      -- (2026-11-25) class and the addon list start ticked; the name and realm never do; the window says all of it
+      assert.is_true(f.opts.class)
+      assert.is_true(f.opts.addons)
       assert.is_nil(f.opts.name)                   -- (the fake client keeps no checked state: read the options)
+      assert.truthy(f.text:match("^!HCReport:1!"))   -- (the fake encoder gives one string whatever is in the body)
+      local sum = f.summary:GetText()
+      assert.truthy(sum:find("Your class:", 1, true))
+      assert.truthy(sum:find("addon list", 1, true))
+      assert.truthy(sum:find("No character name or realm", 1, true))
+      assert.truthy(sum:find("API checks", 1, true))
+      for _, w in ipairs({ "class", "list of addons", "unless you untick", "name and realm only if you tick" }) do
+        assert.truthy(f.intro:GetText():find(w, 1, true), w)
+      end
+      -- unticked, they leave the report: the same string a bare report is
+      f.checks.class:GetScript("OnClick")(f.checks.class)
+      f.checks.addons:GetScript("OnClick")(f.checks.addons)
+      assert.is_nil(f.opts.class)
+      assert.truthy(f.summary:GetText():find("No character name, realm or class", 1, true))
+      assert.truthy(f.summary:GetText():find("No addon list", 1, true))
       f.checks.name:GetScript("OnClick")(f.checks.name)
       assert.is_true(f.opts.name)
       assert.truthy(f.summary:GetText():find("Your character:", 1, true))
-      -- reopened: the box is off again (never saved)
+      -- reopened: the name is off again and the other two are ticked again (nothing is saved)
       f:Hide()
-      _G.SlashCmdList.HARDCOUNTERS("report addons")
+      _G.SlashCmdList.HARDCOUNTERS("report")
       assert.is_nil(f.opts.name)
+      assert.is_true(f.opts.class)
       assert.is_true(f.opts.addons)
       assert.truthy(f.summary:GetText():find("addon list", 1, true))
       -- the Diagnostics console's Report button opens the same window

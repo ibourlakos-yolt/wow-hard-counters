@@ -337,6 +337,62 @@ FUNCS[#FUNCS + 1] = { "CS-18 mana per 5 auras", function()
   end
   return "ok", format("%d auras, %d with points; %s", n, withPoints, #ids > 0 and table.concat(ids, ",") or "no Wisdom or Mana Spring")
 end }
+-- CS-16 / CS-18, for reports from testers (the user, 2026-11-25): what makes the school and mana-per-5 answers
+-- readable without asking. The names of the stats on what the character wears (the game's own constants, such as
+-- ITEM_MOD_POWER_REGEN0_SHORT or a school's spell power: names only, never amounts or items): a school-specific or
+-- "mana per 5" name there says this character can answer those questions.
+FUNCS[#FUNCS + 1] = { "CS-16 item stat names", function()
+  local stats = G("C_Item.GetItemStats") or G("GetItemStats")
+  local link = G("GetInventoryItemLink")
+  if type(stats) ~= "function" or type(link) ~= "function" then
+    return "missing", "GetItemStats=" .. describe(stats) .. ",GetInventoryItemLink=" .. describe(link)
+  end
+  local seen, names, worn = {}, {}, 0
+  for slot = 1, 18 do
+    local okL, l = pcall(link, "player", slot)
+    if okL and type(l) == "string" and not W.isSecret(l) then
+      worn = worn + 1
+      local okS, t = pcall(stats, l)
+      if okS and type(t) == "table" then
+        for k in pairs(t) do
+          if type(k) == "string" and not seen[k] then seen[k] = true; names[#names + 1] = k end
+        end
+      end
+    end
+  end
+  table.sort(names)
+  return "ok", format("%d items; %s", worn, #names > 0 and table.concat(names, ","):sub(1, 600) or "no stat names")
+end }
+-- The talent calls that exist here (CS-16 talent calls: the classic ones are gone): the function names of the two
+-- namespaces, and the shape of one talent entry (field names and types, no values), for a talent table if one is
+-- ever built.
+FUNCS[#FUNCS + 1] = { "CS-16 talent API shape", function()
+  local out = {}
+  for _, nsName in ipairs({ "C_SpecializationInfo", "C_ClassTalents" }) do
+    local t = G(nsName)
+    local fns = {}
+    if type(t) == "table" then
+      for k, v in pairs(t) do if type(k) == "string" and type(v) == "function" then fns[#fns + 1] = k end end
+    end
+    table.sort(fns)
+    out[#out + 1] = nsName .. "{" .. table.concat(fns, ",") .. "}"
+  end
+  local get = G("C_SpecializationInfo.GetTalentInfo")
+  if type(get) == "function" then
+    local ok, d = pcall(get, { tier = 1, column = 1 })
+    if not ok then
+      out[#out + 1] = "GetTalentInfo{tier,column}: error " .. tostring(d):sub(1, 80)
+    elseif type(d) == "table" then
+      local fields = {}
+      for k, v in pairs(d) do fields[#fields + 1] = tostring(k) .. ":" .. describe(v) end
+      table.sort(fields)
+      out[#out + 1] = "entry{" .. table.concat(fields, ",") .. "}"
+    else
+      out[#out + 1] = "GetTalentInfo{tier,column}: " .. describe(d)
+    end
+  end
+  return "ok", table.concat(out, " "):sub(1, 900)
+end }
 FUNCS[#FUNCS + 1] = { "CS-16 other stat addons", function()
   local out = {}
   -- (public addon names and whether a global of theirs is there; nothing about the player)

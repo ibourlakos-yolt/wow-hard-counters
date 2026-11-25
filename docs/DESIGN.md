@@ -1970,3 +1970,8 @@ The user's nine points (A to I), built in one round. What was decided on the way
 - **Character Stats** (I): its DESIGN §8 "As built (2026-11-25)". Hard Counters' part: `HC:ReadingsChanged()`.
 - **Not done:** per-school spell hit (one number from the game; the rest is talents), per-school rows in the stats
   window (they are tiles), a mana tick bar after the five seconds, dragging tiles between boards in Overview.
+- **The report's defaults (the user, 2026-11-25, after the first play).** `/hc report` opens with class and the addon
+  list ticked and the name unticked (§8.3 had all three off): friends' reports are read for probe results, which need
+  the class, and for conflicts, which need the addon list. Still boxes the player sees and can untick; the window's
+  first lines, README "Good to know" and the CurseForge description state it. Changing a default again means changing
+  those three texts in the same commit.
