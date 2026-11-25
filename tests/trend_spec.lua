@@ -106,7 +106,7 @@ describe("trend on a board (HC-53)", function()
   it("is a number tile of its own: only Number takes it", function()
     local env = boot()
     local M = env.M
-    local b = M.Create(nil, { name = "B" })
+    local b = M.Create(nil, { name = "B", shown = true })
     local t = M.AddReading(b, "hc:gold", { calc = "trend" })
     assert.are.equal("trend", t.calc)
     assert.are.equal("Gold/h trend", M.TileTitle(t))
@@ -121,7 +121,7 @@ describe("trend on a board (HC-53)", function()
   it("is a badge on a big per hour or recent tile, switched from the tile menu", function()
     local env = boot()
     local M = env.M
-    local b = M.Create(nil, { name = "Farm" })
+    local b = M.Create(nil, { name = "Farm", shown = true })
     local t = M.AddReading(b, "hc:gold", { calc = "perHour", size = "large" })
     assert.is_true(M.TrendBadgeFits(t))
     assert.is_nil(M.TrendBadge(t, b))                             -- off by default
@@ -149,7 +149,7 @@ describe("the trend badge on screen (HC-53)", function()
     UI.with(function(ctx)
       local HC, ns, env = ctx.HC, ctx.hc, ctx.env
       local M, B = ns.BoardModel, ns.Boards
-      local b = M.Create(nil, { name = "Pace" })
+      local b = M.Create(nil, { name = "Pace", shown = true })
       local t = M.AddReading(b, "hc:gold", { calc = "perHour", size = "large" })
       t.scope = "session"
       B.Refresh(b.id, true)
@@ -211,7 +211,7 @@ describe("trend against past runs", function()
       local M, B = ns.BoardModel, ns.Boards
       pastRuns(env, HC)
       ns.currentZone = 1429
-      local b = M.Create(nil, { name = "Pocket" })
+      local b = M.Create(nil, { name = "Pocket", shown = true })
       local t = M.AddReading(b, "hc:gold", { calc = "perHour", size = "large" })
       t.scope = "run"
       t.extras = { sparkline = true, vsUsual = true }          -- as the user's Pocket board had them

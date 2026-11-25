@@ -105,7 +105,7 @@ PLACEMENT.__index = function(p, k)
   return nil
 end
 PLACEMENT.__newindex = function(p, k, v)
-  if k == "size" or k == "ref" then rawset(p, k, v); return end
+  if k == "size" or k == "ref" or k == "off" then rawset(p, k, v); return end
   local t = liveTile(p)
   if t then t[k] = v else rawset(p, k, v) end
 end
@@ -119,17 +119,38 @@ function M.TileOf(t)
   return t
 end
 
-local function placement(id, size) return setmetatable({ ref = id, size = size }, PLACEMENT) end
+local function placement(id, size, off)
+  return setmetatable({ ref = id, size = size, off = off and true or nil }, PLACEMENT)
+end
 
---- Put a reading tile into the collection (its size stays with the board: returned as its placement).
+--- Put a reading tile into the collection (its size and whether it is kept off the HUD stay with the board:
+--- returned as its placement).
 local function adopt(B, raw)
   B.nextTile = (B.nextTile or 0) + 1
   local id = "t" .. B.nextTile
-  local size = raw.size
-  raw.size, raw.id = nil, id
+  local size, off = raw.size, raw.off
+  raw.size, raw.off, raw.id = nil, nil, id
   B.tiles[id] = raw
   B.tileOrder[#B.tileOrder + 1] = id
-  return placement(id, size)
+  return placement(id, size, off)
+end
+
+--- (v8) Is this tile drawn on its board's HUD frame? A placement with `off` stays on its board in the Overview
+--- tab only ("Only here"), whether or not the board itself is on the HUD. Labels and splits rows are always drawn.
+function M.TileOnHud(t) return not (type(t) == "table" and rawget(t, "off")) end
+
+--- Put a board's tile on its HUD frame or keep it off (it stays on the board, counting, in the Overview tab).
+function M.SetTileOnHud(t, on)
+  if type(t) ~= "table" or getmetatable(t) ~= PLACEMENT then return false end
+  rawset(t, "off", (not on) and true or nil)
+  return true
+end
+
+--- What a board's HUD frame is laid out from: changes when a tile is added, removed or put on or off the HUD.
+function M.LayoutKey(board)
+  local n = 0
+  for _, t in ipairs(board.tiles) do if rawget(t, "off") then n = n + 1 end end
+  return #board.tiles * 1000 + n
 end
 
 --- Every board's reading tiles in the collection, every saved placement live again (a /reload drops the
@@ -253,6 +274,52 @@ function M.Store()
     for _, t in pairs(B.tiles) do if type(t) == "table" then t.section = nil end end
     B.sections = nil
     B.v = 7
+  end
+  if B.v < 8 then
+    -- v8 (the user, 2026-11-25): no tile without a board. Until now a tile taken off its board, or left behind by a
+    -- deleted board, stayed in the Overview tab under "Window only"; nothing said how it got there. Those tiles move
+    -- to a board of their own, "Unsorted", which is not on the HUD (as they were not); from there they can be moved,
+    -- shown or deleted like any other. From v8 a board is on the HUD or "Only here", and so is each of its tiles
+    -- (placement.off). The ready-made board "Run" is called "Farming".
+    local placed = {}
+    for _, b in ipairs(B.list) do
+      for _, p in ipairs(b.tiles or {}) do
+        local ref = type(p) == "table" and rawget(p, "ref")
+        if ref then placed[ref] = true end
+      end
+      if b.preset == "run" and b.name == "Run" then
+        local free = true
+        for _, o in ipairs(B.list) do if o ~= b and (o.name or ""):lower() == "farming" then free = false end end
+        if free then b.name = "Farming" end
+      end
+    end
+    local loose = {}
+    for _, id in ipairs(B.tileOrder) do if B.tiles[id] and not placed[id] then loose[#loose + 1] = id; placed[id] = true end end
+    local strays = {}
+    for id in pairs(B.tiles) do if not placed[id] then strays[#strays + 1] = id end end
+    table.sort(strays)
+    for _, id in ipairs(strays) do loose[#loose + 1] = id end
+    if #loose > 0 then
+      local name, n = "Unsorted", 1
+      local function taken(x)
+        for _, o in ipairs(B.list) do if (o.name or ""):lower() == x:lower() then return true end end
+        return false
+      end
+      while taken(name) do n = n + 1; name = "Unsorted " .. n end
+      local b = { id = "b" .. B.nextId, name = name, shown = false, mini = false, width = M.WIDTH, scale = 1,
+        show = { combat = "show", instance = "show", runOnly = false, mouseoverFade = false }, scope = "session",
+        tiles = {} }
+      B.nextId = B.nextId + 1
+      for _, id in ipairs(loose) do
+        local t = B.tiles[id]
+        b.tiles[#b.tiles + 1] = placement(id, t.lastSize)
+        t.lastSize = nil
+        if t.scope == "session" then t.follow = true end
+      end
+      B.list[#B.list + 1] = b
+      B.unsorted = b.id                 -- (the Overview tab explains this board once)
+    end
+    B.v = 8
   end
   return B
 end
@@ -650,7 +717,9 @@ end
 
 local PH = "perHour"
 M.PRESETS = {
-  run = { name = "Run", mini = false, category = "activity", pack = "hc", tiles = {
+  -- (2026-11-25) "Farming": it was called "Run", a word that already means a saved stretch of play (the Runs tab);
+  -- its key stays "run" (saved boards name it, /hc panel)
+  run = { name = "Farming", mini = false, category = "activity", pack = "hc", tiles = {
     reading("hc:gold", "run", "large", PH),
     reading("hc:xpgained", "run", "half", PH), reading("hc:net", "run", "half", PH),
     reading("hc:gold", "run", "half"), reading("hcfarm:items", "run", "half"),
@@ -826,7 +895,7 @@ local function tileSpecs(board, from)
     if type(raw) == "table" then
       local c = U.deepcopy(raw)
       c.id, c.lastSize, c.section, c.wid = nil, nil, nil, nil
-      if ref then c.size = rawget(t, "size") end
+      if ref then c.size, c.off = rawget(t, "size"), rawget(t, "off") end
       -- a store older than this build (0.2's shared boards, saved by beta1): the tile shapes migrations change
       if c.kind == "reading" then
         if c.style ~= nil then M.ApplyStyle(c, c.style) end
@@ -901,11 +970,13 @@ function M.PresetGroups()
 end
 
 --- A new board from a preset (Hard Counters', a pack's or the player's) or empty, added to the list. Its name is
---- opts.name or the preset's, made free ("Pocket 2"). Returns it.
+--- opts.name or the preset's, made free ("Pocket 2"). A new board is not on the HUD (v8, the user 2026-11-25: it
+--- lives in the Hard Counters window until the player puts it on screen) unless opts.shown. Returns it.
 function M.Create(presetKey, opts)
   local p = M.Preset(presetKey)
   opts = opts or {}
-  local b = { id = newId(), name = M.FreeName(opts.name or (p and p.name) or "Board"), preset = presetKey, shown = true,
+  local b = { id = newId(), name = M.FreeName(opts.name or (p and p.name) or "Board"), preset = presetKey,
+    shown = opts.shown and true or false,
     mini = p and p.mini or false, width = M.WIDTH, scale = 1, show = p and p.show and U.copy(p.show) or defaultShow(),
     scope = p and p.scope or nil, tiles = {} }
   local B = M.Store()
@@ -928,23 +999,9 @@ function M.Create(presetKey, opts)
   return b
 end
 
---- A tile that leaves its board keeps its settings, but not the board's timer (no board, no timer): it reads the
---- session instead (or the reading's first other scope), and it follows nothing.
-local function offBoard(tile, size)
-  if not tile then return end
-  tile.lastSize = size                             -- (its size, should it go on a board again)
-  tile.follow = nil
-  local r = ns.readings[tile.reading]
-  if tile.scope == "run" and r then
-    local s = r.scopeSet.session and "session" or nil
-    if not s then for _, x in ipairs(r.scopes) do if x ~= "run" then s = x; break end end end
-    if s then tile.scope = s; M.FitCalc(tile) end
-  end
-end
-
---- Delete a board. Its reading tiles stay in the collection, Window only (the Overview tab), unless withTiles
---- (/hc board reset: everything from the start again).
-function M.Delete(id, withTiles)
+--- Delete a board and its tiles (v8: a tile has no life without a board; move the ones worth keeping to another
+--- board first, the confirmation says so).
+function M.Delete(id)
   local B = M.Store()
   for i, b in ipairs(B.list) do
     if b.id == id then
@@ -953,9 +1010,7 @@ function M.Delete(id, withTiles)
       if b.wid then ns.SavedWindows.Drop(winKey(b.wid), M.WidElsewhere(b.wid)) end
       table.remove(B.list, i)
       for _, p in ipairs(b.tiles) do
-        if getmetatable(p) == PLACEMENT then
-          if withTiles then M.DeleteTile(rawget(p, "ref")) else offBoard(liveTile(p), rawget(p, "size")) end
-        end
+        if getmetatable(p) == PLACEMENT then M.DeleteTile(rawget(p, "ref")) end
       end
       return true
     end
@@ -966,11 +1021,11 @@ end
 --- A copy of a board (HC-68: Duplicate, and the New board dialog's "Copy of a board"): its look, rules and scope,
 --- and tiles of its own (new collection tiles, never shared: copies that edit together were rejected), a fresh
 --- timer, placed at the centre. from: the store the board is in when it is another character's or 0.2's shared
---- boards (HC-74, M.OtherBoards). Returns it.
-function M.Duplicate(board, name, from)
+--- boards (HC-74, M.OtherBoards). Not on the HUD unless `shown` (v8). Returns it.
+function M.Duplicate(board, name, from, shown)
   local B = M.Store()
   if from == B then from = nil end
-  local b = { id = newId(), name = M.FreeName(name or board.name), shown = true, mini = board.mini and true or false,
+  local b = { id = newId(), name = M.FreeName(name or board.name), shown = shown and true or false, mini = board.mini and true or false,
     width = board.width or M.WIDTH, scale = 1, show = U.copy(board.show or defaultShow()), scope = board.scope, tiles = {} }
   for _, s in ipairs(tileSpecs(board, from)) do
     if s.kind == "reading" then
@@ -1037,6 +1092,8 @@ function M.Seed()
   -- a run panel that was used: its window state exists (UI/Windows.lua wrote it), or the old position keys do
   local usedPanel = type(rpw) == "table" or s.runPanelPos ~= nil
   if not usedPanel and not ns.knownCharacter then
+    -- (v8, the user 2026-11-25) a first setup puts nothing on the HUD: the starter board is in the Hard Counters
+    -- window (Overview), "Only here", until the player puts it on screen; its place is ready for when they do
     local b = M.Create(M.STARTER)
     b.pos = U.copy(M.STARTER_POS)
     B.welcome = true                    -- UI/Welcome.lua shows the introduction once per account
@@ -1069,7 +1126,7 @@ function M.Seed()
     end
   end
   local ln = s.liveNumber
-  local pocket = M.Create("pocket")
+  local pocket = M.Create("pocket", { shown = true })   -- (a player from before boards: as it was)
   if type(ln) == "table" and type(s.liveNumberPos) == "table" then
     pocket.pos = { s.liveNumberPos[1], s.liveNumberPos[2] or 0, s.liveNumberPos[3] or 0 }
   end
@@ -1110,15 +1167,15 @@ function M.AddTile(board, kind, extra)
   return t
 end
 
---- Take tile i off the board. A reading tile stays in the collection, Window only (HC-67); a label or splits row
---- goes. Returns the tile (the collection's, for a reading tile).
+--- Delete tile i of the board: off the board and, for a reading tile, out of the collection (v8: no tile without a
+--- board; to keep one off the screen, M.SetTileOnHud). Returns the tile.
 function M.RemoveTile(board, i)
   local p = board.tiles[i]
   if not p then return nil end
   table.remove(board.tiles, i)
   if getmetatable(p) ~= PLACEMENT then return p end
   local t = liveTile(p)
-  offBoard(t, rawget(p, "size"))
+  M.DeleteTile(rawget(p, "ref"))
   return t
 end
 
@@ -1159,24 +1216,8 @@ end
 --- The collection tile by id.
 function M.Tile(id) return M.Store().tiles[id] end
 
---- A new tile in the collection only (Window only): the reading on the session (or its first scope but the
---- board's timer, which needs a board), a line number. Returns the tile.
-function M.NewTile(readingId, arg)
-  local r = ns.readings[readingId]
-  if not r then return nil end
-  local t = { kind = "reading", reading = readingId, arg = arg }
-  offBoard(t)
-  t.scope = r.scopeSet.session and "session" or nil
-  if not t.scope then for _, s in ipairs(r.scopes) do if s ~= "run" then t.scope = s; break end end end
-  t.scope = t.scope or r.scopes[1]
-  M.ApplyStyle(t, nil)
-  M.FoldAlias(t)
-  local p = adopt(M.Store(), t)
-  return liveTile(p)
-end
-
---- Put a collection tile on a board (at the end), or move it there from the board it is on: a tile is on one board
---- at most. It takes the board's scope when it has the same one. Returns its placement.
+--- Move a collection tile to a board (at the end) from the board it is on: a tile is on exactly one board. It
+--- takes the board's scope when it has the same one. Returns its placement.
 function M.Place(tile, board)
   local t = M.TileOf(tile)
   local id = t and rawget(t, "id")
@@ -1187,8 +1228,7 @@ function M.Place(tile, board)
     local p = M.MoveTo(from, i, board)
     return p
   end
-  local p = placement(id, t.lastSize)
-  t.lastSize = nil
+  local p = placement(id, nil)             -- (a stray: v8 leaves none, but never lose one)
   board.tiles[#board.tiles + 1] = p
   if t.scope == M.BoardScope(board) then t.follow = true end
   if ns.ready and M.TileWindow(p, board) then watchTiles(board) end
@@ -1251,7 +1291,7 @@ function M.MoveTo(board, i, target)
   if not tile or target == board then return nil end
   if not target then
     local name = tile.kind == "reading" and M.TileTitle(tile) or tile.text or "Board"
-    target = M.Create(nil, { name = name:sub(1, 32) })
+    target = M.Create(nil, { name = name:sub(1, 32), shown = board.shown })   -- on the HUD when its old board is
   end
   table.remove(board.tiles, i)
   target.tiles[#target.tiles + 1] = tile
@@ -1499,14 +1539,22 @@ function M.Layout(board, opts)
     rows[1] = { kind = "run", tiles = {}, h = M.HEIGHT.run }
   end
   local i, t = 1, board.tiles
+  -- (v8) a tile kept off the HUD ("Only here") takes no row; the next half tile on the HUD pairs up past it
+  local function nextOn(j)
+    while t[j] and rawget(t[j], "off") do j = j + 1 end
+    return j
+  end
   while i <= #t do
     local tile = t[i]
     local foot = tile.kind == "reading" and M.Footprint(tile)
-    if foot == "grid" then
-      local nxt = t[i + 1]
+    if rawget(tile, "off") then
+      i = i + 1
+    elseif foot == "grid" then
+      local j = nextOn(i + 1)
+      local nxt = t[j]
       if nxt and nxt.kind == "reading" and M.Footprint(nxt) == "grid" then
-        rows[#rows + 1] = { kind = "grid", tiles = { i, i + 1 }, h = M.HEIGHT.grid }
-        i = i + 2
+        rows[#rows + 1] = { kind = "grid", tiles = { i, j }, h = M.HEIGHT.grid }
+        i = j + 1
       else
         rows[#rows + 1] = { kind = "grid", tiles = { i }, h = M.HEIGHT.grid }
         i = i + 1
@@ -1536,6 +1584,7 @@ end
 --- whatever its rules, at full alpha, even one that is off.
 function M.Visibility(board, state)
   if state.peek then return true, 1 end
+  if state.editOwn then return true, 1 end       -- (v8) edited on its own: on screen meanwhile, even "Only here"
   if not board.shown then return false, 1, "off" end
   if state.editing then return true, 1 end
   local show = board.show or defaultShow()
@@ -1618,7 +1667,7 @@ end
 function M.HeroIndex(board)
   local first
   for i, t in ipairs(board.tiles) do
-    if t.kind == "reading" then
+    if t.kind == "reading" and not rawget(t, "off") then
       if t.size == "large" then return i end
       first = first or i
     end

@@ -39,7 +39,7 @@ local function ids(board)
 end
 
 describe("boards", function()
-  it("start a new character with the Leveling board only, in front of it, and the introduction pending (HC-74)", function()
+  it("start a new character with the Leveling board only, off the HUD (v8), and the introduction pending (HC-74)", function()
     local env = boot()
     local M = env.M
     assert.is_false(env.ns.knownCharacter)
@@ -48,7 +48,7 @@ describe("boards", function()
     local B = M.Store()
     assert.are.equal(1, #B.list)
     assert.are.equal("Leveling", B.list[1].name)
-    assert.is_true(B.list[1].shown)
+    assert.is_false(B.list[1].shown)                  -- (v8) nothing on the HUD at a first setup: Only here
     assert.are.same(M.STARTER_POS, B.list[1].pos)
     assert.are_not.equal(M.STARTER_POS, B.list[1].pos)
     assert.is_true(B.welcome)
@@ -73,7 +73,10 @@ describe("boards", function()
     env.HC:StartRun("manual")                         -- a run no longer brings a board with it (HC-30)
     assert.are.equal(1, #list)
     local run = M.Create("run")
-    assert.are.equal("Run", run.name)
+    assert.are.equal("Farming", run.name)             -- (2026-11-25: it was "Run", the word for a saved stretch)
+    assert.is_false(run.shown)                        -- (v8) a new board is not on the HUD unless asked
+    assert.is_true(M.Create("pocket", { shown = true }).shown)
+    M.Delete(M.Store().list[#M.Store().list].id)
     assert.is_true(M.UsesTimer(run))
     local lev = M.Create("leveling")
     assert.same({ "hc:xpgained@run:perHour:number:large", "hc:xplevel@now:-:bar:line", "hc:ttl@run:-:number:half",
@@ -90,7 +93,7 @@ describe("boards", function()
     local M = env.M
     M.Seed()
     local run, pocket = M.Store().list[1], M.Store().list[2]
-    assert.are.equal("Run", run.name)
+    assert.are.equal("Farming", run.name)
     assert.is_true(run.mini)
     assert.are.equal(320, run.width)
     assert.are.equal(1.2, run.scale)
@@ -139,7 +142,7 @@ describe("boards", function()
   it("decide visibility: combat, instances, run only, mouse-over fade; edit mode shows everything", function()
     local env = boot()
     local M = env.M
-    local b = M.Create("pocket")
+    local b = M.Create("pocket", { shown = true })
     assert.same({ true, 1 }, { M.Visibility(b, {}) })
     b.show.combat = "fade"
     assert.same({ true, 0.35 }, { M.Visibility(b, { combat = true }) })
@@ -367,10 +370,10 @@ describe("the board's timer", function()
     assert.are.equal(10, (M.TileValue(from, old)))    -- its member too: small dimensions are in the base
     assert.are.equal(0, #new.tiles)
     assert.are.equal(3, #old.tiles)
-    -- to a new board: named after the tile, shown, running from zero
+    -- to a new board: named after the tile, on the HUD when its old board is, running from zero
     local _, own = M.MoveTo(old, 2, nil)
     assert.are.equal("Gold in", own.name)
-    assert.is_true(own.shown)
+    assert.are.equal(old.shown, own.shown)
     assert.are.equal(0, (M.TileValue(gold, own)))
     assert.are.equal("running", (M.BoardState(own)))
     M.ControlAll(own, "pause")                         -- pausing it pauses that one tile only
@@ -388,7 +391,7 @@ describe("the board's timer", function()
     local b = M.Store().list[1]
     assert.are.equal(1, #b.tiles)                      -- the control-row tile went, at the profile's first use
     assert.is_nil(b.tiles[1].wid)                      -- and the tile's own window
-    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
+    assert.are.equal(8, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     local rows = M.Layout(b)
     assert.are.equal("run", rows[1].kind)
     assert.are.equal(0, #rows[1].tiles)
@@ -530,7 +533,7 @@ describe("the board's timer", function()
       nextId = 2, seeded = true, v = 3 } })
     local M, HC = env.M, env.HC
     local b = M.Store().list[1]
-    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
+    assert.are.equal(8, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     assert.are.equal("session", b.tiles[1].scope)
     assert.are.equal("today", b.tiles[2].scope)
     assert.are.equal("Gold in \194\183 session", M.TileLabel(b.tiles[1], b))
@@ -551,7 +554,7 @@ describe("the board's timer", function()
       nextId = 2, seeded = true, v = 4 } })
     local M = env.M
     local b = M.Store().list[1]
-    assert.are.equal(7, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
+    assert.are.equal(8, M.Store().v)                   -- (and on to v7, HC-67, HC-73)
     assert.are.equal("run", M.BoardScope(b))
     assert.is_nil(b.scope)
     assert.is_true(b.tiles[1].follow)
@@ -731,7 +734,7 @@ describe("the tile collection", function()
       looks[i] = { rows = rows, h = h, labels = labels }
     end
     local B = M.Store()
-    assert.are.equal(7, B.v)
+    assert.are.equal(8, B.v)
     assert.is_nil(B.sections)                                     -- (HC-73) no sections: the Overview groups by board
     assert.are.equal(7, #M.CollectionTiles())                     -- the seven reading tiles; heading and splits stay
     for i, b in ipairs(B.list) do
@@ -792,7 +795,7 @@ describe("the tile collection", function()
     local before = {}
     for _, e in ipairs(M.CollectionTiles()) do before[#before + 1] = { e.id, e.board and e.board.id } end
     M.Store()
-    assert.are.equal(7, B.v)
+    assert.are.equal(8, B.v)
     assert.is_nil(B.sections)
     local after = {}
     for _, e in ipairs(M.CollectionTiles()) do
@@ -802,155 +805,106 @@ describe("the tile collection", function()
     assert.are.same(before, after)
   end)
 
-  it("groups the collection by board for the Overview tab, in the boards' order, loose tiles last (HC-73)", function()
+  it("groups the collection by board for the Overview tab, in the boards' order; no tile is without a board (v8)", function()
     local env = boot(beta1())
     local M = env.M
     local B = M.Store()
     local leveling, pocket, today = B.list[1], B.list[2], B.list[3]
-    local gold = M.RemoveTile(leveling, 5)                         -- Window only now
+    local onLeveling = 0
+    for _, t in ipairs(leveling.tiles) do if M.IsPlacement(t) then onLeveling = onLeveling + 1 end end
     M.MoveTile(pocket, 1, 1)                                       -- the board's order, not the collection's
     local empty = M.Create(nil, { name = "Empty" })
-    local loose1 = M.NewTile("hc:xpgained")
     local groups, loose = M.TilesByBoard()
     local names = {}
     for _, g in ipairs(groups) do names[#names + 1] = g.board.name end
     assert.are.same({ "Leveling", "Pocket", "Today", "Empty" }, names)  -- every board, an empty one too
     assert.are.equal(empty, groups[4].board)
     assert.are.equal(0, #groups[4].entries)
-    assert.are.equal(3, #groups[1].entries)                        -- reading tiles only: no heading, no splits
+    assert.are.equal(onLeveling, #groups[1].entries)               -- reading tiles only: no heading, no splits
     for i, e in ipairs(groups[2].entries) do
       assert.are.equal(M.TileOf(pocket.tiles[i]), e.raw)
       assert.are.equal(pocket, e.board)
     end
     assert.are.equal(1, #groups[3].entries)
     assert.are.equal(today, groups[3].entries[1].board)
-    assert.are.same({ gold, loose1 }, { loose[1].raw, loose[2].raw })
-    assert.are.equal(2, #loose)
+    assert.are.equal(0, #loose)
   end)
 
-  it("keeps a tile that leaves its board, off the timer; deletes it only when asked", function()
+  it("keeps a tile off the HUD on its board; deletes a tile on its own or with its board (v8)", function()
     local env = boot(beta1())
     local M = env.M
     local B = M.Store()
     local leveling, pocket, today = B.list[1], B.list[2], B.list[3]
-    -- off the board: Window only, on the session instead of the board's timer, following nothing
-    local gold = M.RemoveTile(leveling, 5)
-    assert.is_false(M.IsPlacement(gold))
-    assert.are.equal("session", gold.scope)
-    assert.is_nil(gold.follow)
-    assert.are.equal("half", gold.lastSize)
-    assert.is_nil(M.BoardOf(gold))
-    local scopes = {}
-    for _, c in ipairs(M.ScopeChoices(gold)) do scopes[#scopes + 1] = c.scope end
-    assert.are_not.equal("run", scopes[1])                        -- no board, no timer to offer
-    local entry
-    for _, e in ipairs(M.CollectionTiles()) do if e.raw == gold then entry = e end end
-    assert.truthy(entry)
-    assert.is_nil(entry.board)
-    -- on a board again: its size comes back
-    local p = M.Place(gold, today)
-    assert.are.equal("half", rawget(p, "size"))
-    assert.are.equal(today, (M.BoardOf(gold)))
-    -- placed elsewhere, it moves (one board at most)
+    local n = #M.CollectionTiles()
+    -- off the HUD: still on its board and in the collection, its scope unchanged, no row in the board's layout
+    local p = leveling.tiles[5]
+    local scope = p.scope
+    assert.is_true(M.TileOnHud(p))
+    local key = M.LayoutKey(leveling)
+    assert.is_true(M.SetTileOnHud(p, false))
+    assert.is_false(M.TileOnHud(p))
+    assert.are_not.equal(key, M.LayoutKey(leveling))
+    for _, r in ipairs((M.Layout(leveling))) do for _, i in ipairs(r.tiles) do assert.are_not.equal(5, i) end end
+    assert.are.equal(leveling, (M.BoardOf(p)))
+    assert.are.equal(scope, p.scope)
+    assert.are.equal(n, #M.CollectionTiles())
+    assert.is_true(M.SetTileOnHud(p, true))
+    assert.are.equal(key, M.LayoutKey(leveling))
+    assert.is_false(M.SetTileOnHud({ kind = "label" }, false))    -- headings and splits are layout: always drawn
+    -- moved: on one board exactly
+    local gold = M.TileOf(p)
     M.Place(gold, pocket)
     assert.are.equal(pocket, (M.BoardOf(gold)))
-    assert.are.equal(1, #today.tiles)
-    -- a deleted board leaves its tiles in the collection; /hc board reset's delete takes them too
-    local n = #M.CollectionTiles()
-    M.Delete(leveling.id)
-    assert.are.equal(n, #M.CollectionTiles())
-    M.Delete(today.id, true)
+    -- removed from its board: gone for good (no tile without a board)
+    local _, i = M.BoardOf(gold)
+    M.RemoveTile(pocket, i)
+    assert.is_nil(M.Tile(gold.id))
     assert.are.equal(n - 1, #M.CollectionTiles())
-    -- a tile for the window only, and deleting one for good
-    local t = M.NewTile("hc:xpgained")
-    assert.are.equal("session", t.scope)
-    assert.is_nil(t.section)
-    assert.is_true(M.DeleteTile(t.id))
-    assert.is_nil(M.Tile(t.id))
-    assert.is_false(M.DeleteTile(t.id))
-    -- two boards from one preset share no tables
-    local a, b = M.Create("pocket"), M.Create("pocket")
-    assert.are_not.equal(a.tiles[1].extras, b.tiles[1].extras)
-    assert.are_not.equal(a.tiles[1].ref, b.tiles[1].ref)
-  end)
-end)
-
--- HC-68 (DESIGN §17.4): names, Duplicate, presets of the player's own, and why a board is hidden
-describe("boards: names, copies and your presets", function()
-  it("keeps board names unique ignoring case, at most 24 letters, and suggests '<name> 2'", function()
-    local env = boot()
-    local M = env.M
-    local a = M.Create("pocket")
-    assert.are.equal("Pocket", a.name)
-    local b = M.Create("pocket")
-    assert.are.equal("Pocket 2", b.name)                           -- a preset's name, made free
-    assert.is_true(M.NameTaken("  pocket "))
-    assert.is_false(M.NameTaken("pocket", a) and M.NameTaken("Pocket 2", b))
-    assert.are.equal("POCKET 3", M.FreeName("POCKET"))                 -- (the case typed)
-    assert.are.same({ false, "empty" }, { M.CheckName("   ") })
-    assert.are.same({ false, "long" }, { M.CheckName(string.rep("x", 25)) })
-    assert.are.same({ false, "taken" }, { M.CheckName("pocket 2") })
-    assert.is_true(M.CheckName("Pocket", a))                       -- its own name is fine
-    assert.are.same({ false, "taken" }, { M.Rename(b, "POCKET") })
-    assert.are.equal("Pocket 2", b.name)
-    assert.is_true(M.Rename(b, "  Farm  "))
-    assert.are.equal("Farm", b.name)
-    assert.are.equal(24, #M.FreeName(string.rep("y", 24)))
+    -- a deleted board takes its tiles with it
+    local k = 0
+    for _, t in ipairs(today.tiles) do if M.IsPlacement(t) then k = k + 1 end end
+    M.Delete(today.id)
+    assert.are.equal(n - 1 - k, #M.CollectionTiles())
+    local _, loose = M.TilesByBoard()
+    assert.are.equal(0, #loose)
+    assert.is_false(M.DeleteTile(gold.id))
   end)
 
-  it("duplicates a board with tiles of its own, and saves one as a preset to make boards from", function()
-    local env = boot()
+  it("moves tiles on no board to an Unsorted board, off the HUD, and renames the Run board (v8)", function()
+    local env = boot({ boards = { v = 7, nextId = 2, nextTile = 3, seeded = true,
+      tiles = { t1 = { id = "t1", kind = "reading", reading = "hc:gold", scope = "run", follow = true, display = "number" },
+        t2 = { id = "t2", kind = "reading", reading = "hc:gold", scope = "session", display = "number", lastSize = "half" },
+        t3 = { id = "t3", kind = "reading", reading = "hc:xpgained", scope = "today", display = "number" } },
+      tileOrder = { "t1", "t2", "t3" },
+      list = { { id = "b1", name = "Run", preset = "run", shown = true, mini = false, width = 260, show = {},
+        tiles = { { ref = "t1", size = "large" } } } } } })
     local M = env.M
-    local a = M.Create("leveling")
-    a.mini, a.scope = true, "session"
-    a.show.combat = "hide"
-    M.AddTile(a, "label", { text = "Gold" })
-    local copy = M.Duplicate(a)
-    assert.are.equal("Leveling 2", copy.name)
-    assert.are.equal(#a.tiles, #copy.tiles)
-    assert.is_true(copy.mini)
-    assert.are.equal("session", copy.scope)
-    assert.are.equal("hide", copy.show.combat)
-    assert.are_not.equal(a.show, copy.show)
-    for i, t in ipairs(copy.tiles) do
-      local o = a.tiles[i]
-      if t.kind == "reading" then
-        assert.are_not.equal(o.ref, t.ref)                         -- its own tile, not shared
-        assert.are.same({ o.reading, o.scope, o.calc, rawget(o, "size") }, { t.reading, t.scope, t.calc, rawget(t, "size") })
-      else
-        assert.are.same(o, t)
-        assert.are_not.equal(o, t)
-      end
-    end
-    copy.tiles[1].calc = "total"
-    assert.are_not.equal("total", a.tiles[1].calc)                 -- editing the copy leaves the first alone
-    -- save as preset, make a board from it, rename and delete the preset
-    local key = M.SaveAsPreset(a, "My leveling")
-    local p = M.Preset(key)
-    assert.are.equal("My leveling", p.name)
-    assert.is_nil(p.tiles[1].id)
-    assert.are.equal("large", p.tiles[1].size)                     -- the placement's size travels with it
-    local groups = M.PresetGroups()
-    assert.are.equal("Activity", groups[1].title)             -- (HC-57: by category)
-    assert.are.equal("Your presets", groups[#groups].title)
-    assert.are.same({ key }, groups[#groups].keys)
-    local made = M.Create(key)
-    assert.are.equal("My leveling", made.name)
-    assert.are.equal(#a.tiles, #made.tiles)
-    assert.is_true(made.mini)
-    assert.are.equal("session", made.scope)
-    assert.are.equal("large", rawget(made.tiles[1], "size"))
-    assert.is_true(M.RenamePreset(key, "Lvl"))
-    assert.are.equal("Lvl", M.Preset(key).name)
-    assert.is_true(M.DeletePreset(key))
-    assert.is_nil(M.Preset(key))
-    assert.are.equal(1, #M.PresetGroups())                         -- no "Your presets" left
+    local B = M.Store()
+    assert.are.equal(8, B.v)
+    assert.are.equal(2, #B.list)
+    assert.are.equal("Farming", B.list[1].name)
+    assert.is_true(B.list[1].shown)                    -- a board on the HUD stays there
+    local u = B.list[2]
+    assert.are.equal("Unsorted", u.name)
+    assert.is_false(u.shown)                           -- as its tiles were: in the window only
+    assert.are.equal(u.id, B.unsorted)
+    assert.are.equal("session", u.scope)
+    assert.are.equal(2, #u.tiles)
+    assert.is_true(M.IsPlacement(u.tiles[1]))
+    assert.are.equal("half", rawget(u.tiles[1], "size"))
+    assert.is_nil(M.Tile("t2").lastSize)
+    assert.is_true(M.Tile("t2").follow)                -- on the board's scope: it follows the board
+    assert.are.equal("today", u.tiles[2].scope)        -- another scope keeps its own
+    local _, loose = M.TilesByBoard()
+    assert.are.equal(0, #loose)
+    assert.are.equal(3, B.nextId)
+    assert.are.equal("b3", M.Create(nil, { name = "X" }).id)
   end)
 
   it("says why a board is hidden, and shows any board while peeked at (Show now, a hovered row)", function()
     local env = boot()
     local M = env.M
-    local b = M.Create("pocket")
+    local b = M.Create("pocket", { shown = true })
     b.show.runOnly = true
     assert.are.same({ false, 1, "runOnly" }, { M.Visibility(b, {}) })
     b.show.runOnly, b.show.instance = false, "hide"
@@ -958,5 +912,7 @@ describe("boards: names, copies and your presets", function()
     b.shown = false
     assert.are.same({ false, 1, "off" }, { M.Visibility(b, {}) })
     assert.are.same({ true, 1 }, { M.Visibility(b, { peek = true }) })
+    assert.are.same({ true, 1 }, { M.Visibility(b, { editOwn = true }) })     -- (v8) edited on its own: on screen meanwhile
+    assert.are.same({ false, 1, "off" }, { M.Visibility(b, { editing = true }) })   -- /hc edit leaves "Only here" boards alone
   end)
 end)

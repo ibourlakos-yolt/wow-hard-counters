@@ -200,3 +200,21 @@ HC.RegisterCallback(owner, "HC_RUN_STOPPED", function() refresh() end)
 HC.RegisterCallback(owner, "HC_RUN_DELETED", function() refresh() end)
 
 ns.AddSlash("runs", function() ns.ToggleRunList() end, L["show the run list"])
+-- luacheck: push no max line length
+
+-- This tab's help and tour (UI/Help.lua): change them with the tab.
+local _ = ns.Help and ns.Help.Register(ID, {
+  what = "A run is a stretch of play you kept, with its numbers: how long you were active, the gold, the XP, what dropped. This tab lists the runs kept for this character.",
+  can = {
+    "Click a run for its {Run summary}: every number of that stretch, and its {Splits} if you marked any.",
+    "Tick runs and {Delete} them; {Select all} ticks every one.",
+    "Start and stop one by hand with /hc run start and /hc run stop; dungeons record themselves.",
+  },
+  effect = "Runs are your yardstick: a big per-hour tile on a board compares what you do now with your past runs in the same zone. Deleting a run only removes that record; your counters and history are untouched.",
+  tour = {
+    { title = "One row per run", text = "Each row is a run: its name ({Run}), {When} it ended and how long you were {Active} in it. A dungeon names its run after itself." },
+    { title = "Where runs come from", text = "Three ways: walk into a dungeon (it records itself and saves when you leave), a board's menu (Save as run keeps the stretch its clock counted), or /hc run start and /hc run stop." },
+    { title = "Look inside one", text = "Click a run to open its {Run summary}: totals and per-hour figures for everything counted during it. Tick runs you don't want and {Delete} them." },
+  },
+})
+-- luacheck: pop

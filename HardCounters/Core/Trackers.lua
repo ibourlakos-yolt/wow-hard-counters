@@ -167,6 +167,7 @@ local function trackerCopy(t)
     history = PRESET_NAMES[h], days = days, chosenHistory = type(c) == "table" and c.history or "off",
     lastHistory = type(c) == "table" and PRESETS[c.last] and c.last or "daily",
     needsHistory = t.needsHistory, icon = t.icon, category = t.category, description = t.description,
+    chosen = type(c) == "table" and c.on ~= nil,   -- the player switched it on or off themselves
     pack = t.pack, packTitle = t.packTitle, new = t.pack ~= nil and not t.builtin and not (type(c) == "table" and c.seen) }
 end
 

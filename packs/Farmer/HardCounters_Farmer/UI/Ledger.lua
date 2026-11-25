@@ -243,3 +243,22 @@ local function command(msg)
 end
 
 HC:RegisterSlash("ledger", command, "show or hide Farmer's Ledger", "Farmer")
+-- luacheck: push no max line length
+
+-- This tab's help and tour (Hard Counters' Help and Tab tour buttons): change them with the tab.
+if HC.RegisterWindowHelp then
+  HC:RegisterWindowHelp(WINDOW, {
+    what = "The Ledger is your money by where it came from and where it went: loot, quests, vendors, mail, the auction house, repairs, training, travel. It reads the history Farmer's Ledger tracker keeps.",
+    can = {
+      "Pick the period with the buttons on top: {Today}, {This week}, {This month}, {This year}, {Lifetime}.",
+      "Switch between {Character} and {Account} (top right) to see one character or all of them together.",
+      "Read {Income} and {Spending} side by side, with the net, the gold you own and gold per active hour under them.",
+    },
+    effect = "The Ledger needs its tracker on with history (it turns history on by itself): it shows days and weeks, which a board without history can't. Money you mail between your own characters is left out of the account view.",
+    tour = {
+      { title = "Two columns", text = "{Income} on the left, {Spending} on the right, each split by source. Under them: totals in and out, the net, what you own now and your gold per active hour for the period." },
+      { title = "Period and scope", text = "The buttons on top choose the period, from {Today} to {Lifetime}. The button at the top right switches between this {Character} and the whole {Account}." },
+    },
+  })
+end
+-- luacheck: pop

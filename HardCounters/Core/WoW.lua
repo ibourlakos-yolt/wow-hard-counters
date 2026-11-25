@@ -128,6 +128,74 @@ function W.inCombat() return InCombatLockdown() and true or false end
 -- GetCursorInfo() gives "item", id, link for a held item; C_Reputation lists factions by index.
 ---------------------------------------------------------------------------
 
+local MODIFIER = { SHIFT = "IsShiftKeyDown", CTRL = "IsControlKeyDown", ALT = "IsAltKeyDown" }
+
+--- Is a modifier key held? key: "SHIFT", "CTRL" or "ALT" (boards move while their move key is held).
+function W.modifierDown(key)
+  local fn = MODIFIER[key] and rawget(_G, MODIFIER[key])
+  if type(fn) ~= "function" then return false end
+  local ok, down = pcall(fn)
+  return ok and down and not W.isSecret(down) and true or false
+end
+
+--- Reload the interface (a click on our own button: the Packs tab, after choosing packs).
+function W.reload()
+  local ui = rawget(_G, "C_UI")
+  local fn = rawget(_G, "ReloadUI") or (type(ui) == "table" and ui.Reload)
+  if type(fn) == "function" then fn() end
+end
+
+--- The addons that belong to Hard Counters (TOC `## Group: HardCounters`, every pack's and Diagnostics'; not Hard
+--- Counters itself): { { name (folder), title, notes, enabled (for this character at the next load), loaded,
+--- missing (can't load: a dependency is absent) } }, by title. Reads the AddOn list; nothing is changed.
+function W.packAddons()
+  local A = rawget(_G, "C_AddOns")
+  local num = (type(A) == "table" and A.GetNumAddOns) or rawget(_G, "GetNumAddOns")
+  local info = (type(A) == "table" and A.GetAddOnInfo) or rawget(_G, "GetAddOnInfo")
+  local meta = (type(A) == "table" and A.GetAddOnMetadata) or rawget(_G, "GetAddOnMetadata")
+  local isLoaded = (type(A) == "table" and A.IsAddOnLoaded) or rawget(_G, "IsAddOnLoaded")
+  local state = (type(A) == "table" and A.GetAddOnEnableState) or rawget(_G, "GetAddOnEnableState")
+  local out = {}
+  if type(num) ~= "function" or type(info) ~= "function" or type(meta) ~= "function" then return out end
+  local okN, n = pcall(num)
+  if not okN or type(n) ~= "number" then return out end
+  local me = rawget(_G, "UnitName") and UnitName("player") or nil
+  for i = 1, n do
+    local ok, name, title, notes, _, reason = pcall(info, i)
+    if ok and type(name) == "string" and name ~= "HardCounters" then
+      local okG, group = pcall(meta, i, "Group")
+      if okG and group == "HardCounters" then
+        local enabled = true
+        if type(state) == "function" then
+          -- C_AddOns.GetAddOnEnableState(addon, character); the old global took (character, addon)
+          local okS, st
+          if type(A) == "table" and state == A.GetAddOnEnableState then okS, st = pcall(state, name, me)
+          else okS, st = pcall(state, me, name) end
+          if okS and type(st) == "number" then enabled = st > 0 end
+        end
+        local okL, loaded = pcall(isLoaded or function() return false end, name)
+        out[#out + 1] = { name = name, title = type(title) == "string" and title or name,
+          notes = type(notes) == "string" and notes or nil, enabled = enabled,
+          loaded = okL and loaded and true or false, missing = reason == "MISSING" or reason == "DEP_MISSING" }
+      end
+    end
+  end
+  table.sort(out, function(a, b) return a.title < b.title end)
+  return out
+end
+
+--- Turn one of those addons on or off for this character, from the next load (/reload). Returns true when the game
+--- took the call.
+function W.setAddonEnabled(name, on)
+  local A = rawget(_G, "C_AddOns")
+  local me = rawget(_G, "UnitName") and UnitName("player") or nil
+  local fn
+  if on then fn = (type(A) == "table" and A.EnableAddOn) or rawget(_G, "EnableAddOn")
+  else fn = (type(A) == "table" and A.DisableAddOn) or rawget(_G, "DisableAddOn") end
+  if type(fn) ~= "function" then return false end
+  return (pcall(fn, name, me))
+end
+
 --- The item id the cursor carries (picked up from a bag), or nil.
 function W.cursorItem()
   if not GetCursorInfo then return nil end

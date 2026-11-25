@@ -346,20 +346,20 @@ describe("windows", function()
         for _, t in ipairs(main.sideTabs) do if t:IsShown() then out[#out + 1] = t.hcId end end
         return out
       end
-      assert.are.same({ "overview", "boards", "trackers", "runs", "guide" }, sideIds())   -- (Overview HC-67, Boards HC-68)
+      assert.are.same({ "overview", "boards", "packs", "trackers", "runs", "guide" }, sideIds())   -- (Overview HC-67, Boards HC-68)
       local bottom = bottomTitles()
       assert.are.equal("Diagnostics", bottom[#bottom])              -- Diagnostics always last
       if ctx.farmer then assert.truthy(table.concat(bottom, " "):find("Ledger", 1, true)) end
       -- the open tab's name is in the title (its tab is an icon now)
       assert.truthy(main.hcTitleText:find("^Hard Counters: "))
       -- a window of ours sorts by its tabOrder down the side; a pack's window joins the bottom row before Diagnostics
-      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.5, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
+      Win.Register("t:ours", counting({ title = "Ours", tabOrder = 2.7, icon = "Interface\\Icons\\INV_Misc_Map_01" }))
       HC:RegisterWindow("t:pack", counting({ title = "Pack", icon = 134400 }))
-      assert.are.same({ "overview", "boards", "t:ours", "trackers", "runs", "guide" }, sideIds())
+      assert.are.same({ "overview", "boards", "packs", "t:ours", "trackers", "runs", "guide" }, sideIds())
       bottom = bottomTitles()
       assert.are.equal("Diagnostics", bottom[#bottom])
       assert.are.equal("Pack", bottom[#bottom - 1])
-      local ours = main.sideTabs[3]
+      local ours = main.sideTabs[4]                        -- (after Overview, Boards and Packs)
       assert.are.equal("LargeSideTabButtonTemplate", ours._template)
       assert.are.equal("Ours", ours.tooltipText)
       assert.is_true(ours._fill)
@@ -441,7 +441,7 @@ describe("boards on screen", function()
     UI.with(function(ctx)
       local B, M = ctx.hc.Boards, ctx.hc.BoardModel
       local list = M.Store().list
-      assert.are.equal("Run", list[1].name)
+      assert.are.equal("Farming", list[1].name)
       assert.is_true(list[1].mini)
       assert.are.equal(350, list[1].width)
       assert.are.equal("Pocket", list[2].name)
@@ -878,7 +878,7 @@ describe("the Trackers window", function()
       end
       assert.truthy(goldItem)                                        -- (HC-51: Gold/h is no row of its own)
       assert.are.equal("Add tile", goldItem.btn:GetText())
-      -- HC-36: one board (Pocket on a fresh install): Add tile adds there at once; a hidden board is shown
+      -- HC-36: one board (Pocket on a fresh install): Add tile adds there at once; a board that is Only here stays so (v8)
       local BM = ns.BoardModel
       local board = BM.AddTargets()[1]
       assert.are.equal(1, #BM.AddTargets())
@@ -887,7 +887,8 @@ describe("the Trackers window", function()
       goldItem.btn:GetScript("OnClick")(goldItem.btn)
       assert.are.equal(n + 1, #board.tiles)
       assert.are.equal("hc:gold", board.tiles[#board.tiles].reading)
-      assert.is_true(board.shown)
+      assert.is_false(board.shown)
+      board.shown = true
       -- several boards: a menu, boards on screen first, hidden ones marked, then "New board"
       local other = BM.Create(nil, { name = "Farm" })
       other.shown = false
@@ -897,7 +898,7 @@ describe("the Trackers window", function()
       goldItem.btn:GetScript("OnClick")(goldItem.btn)
       ns.Menu.Show = realShow
       assert.are.equal(n + 1, #board.tiles)                          -- nothing added before a choice
-      assert.are.equal("Farm (hidden)", shownMenu[3].text)
+      assert.are.equal("Farm (Only here)", shownMenu[3].text)
       assert.are.equal("New board", shownMenu[4].text)
       shownMenu[3].func()
       assert.are.equal("hc:gold", other.tiles[#other.tiles].reading)
@@ -988,7 +989,7 @@ end)
 
 -- HC-67 (DESIGN §17.4): the player's tiles, first tab of the window
 describe("the Overview tab", function()
-  it("shows every tile under its board or Window only, and edits, places, moves and deletes them", function()
+  it("shows every board with its tiles, puts boards and tiles on or off the HUD, and makes, moves and deletes them", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local BM, Bo = ns.BoardModel, ns.Boards
@@ -997,7 +998,7 @@ describe("the Overview tab", function()
       f:SetSize(762, 568)
       ns.RefreshOverview()
       local pocket = BM.Store().list[1]                              -- a fresh install's Pocket board
-      -- (HC-73) one framed panel per board, its cards filled; Window only below, empty but explained
+      -- (HC-73) one framed panel per board, its cards filled; (v8) no "Window only" section
       local all = BM.CollectionTiles()
       assert.are.equal(#pocket.tiles, #all)
       assert.are.equal(pocket, all[1].board)
@@ -1005,32 +1006,52 @@ describe("the Overview tab", function()
       assert.is_true(panel:IsShown())
       assert.are.equal(pocket, panel.head.board)
       assert.are.equal("Pocket", panel.head.text:GetText())
-      assert.truthy(panel.head.note:GetText():find("Shown", 1, true))   -- its status, coloured as in the Boards tab
-      assert.are.equal(#pocket.tiles .. " tiles", panel.head.count:GetText())
+      assert.truthy(panel.head.note:GetText():find("On HUD", 1, true))   -- its status, coloured as in the Boards tab
+      assert.are.equal(#pocket.tiles .. " tiles", panel.count:GetText())
       assert.is_false(panel.empty:IsShown())
+      assert.is_false(panel.info:IsShown())
+      assert.is_nil(f.loose)
       local shownCards = 0
       for _, c in ipairs(ns.OverviewCards) do
         if c:IsShown() then
           shownCards = shownCards + 1
           assert.is_false(c.dashed)
-          assert.are.equal("board timer", c.foot:GetText())         -- the scope, not "On HUD"
+          assert.are.equal("board timer", c.foot:GetText())         -- the scope
         end
       end
       assert.are.equal(#pocket.tiles, shownCards)
-      assert.is_true(f.loose:IsShown())
-      assert.is_true(f.loose.empty:IsShown())                        -- a fresh player reads what Window only is
+      -- the board's HUD switch: its text says where the board is; a click takes it off the HUD and back
+      local bf = Bo.Frame(pocket.id)
+      assert.are.equal("On HUD", panel.hud:GetText())
+      assert.is_true(bf:IsShown())
+      panel.hud:GetScript("OnClick")(panel.hud)
+      assert.is_false(pocket.shown)
+      assert.is_false(bf:IsShown())
+      assert.are.equal("Only here", panel.hud:GetText())
+      assert.truthy(panel.head.note:GetText():find("Only here", 1, true))
+      panel.hud:GetScript("OnClick")(panel.hud)
+      assert.is_true(pocket.shown)
+      assert.is_true(bf:IsShown())
       -- the board's header: that board's actions, as in the Boards tab
       local realShow0 = ns.Menu.Show
       local got
       ns.Menu.Show = function(_, items) got = items end
       ns.OverviewBoardMenu(panel.head, pocket)
-      ns.Menu.Show = realShow0
       local texts = {}
       for _, it in ipairs(got) do texts[#texts + 1] = it.text end
       assert.are.equal("Pocket", texts[1])
-      for _, t in ipairs({ "Hide", "Edit on screen", "Rename...", "Delete" }) do
+      for _, t in ipairs({ "Take off HUD", "Edit on screen", "Rename...", "Delete" }) do
         assert.truthy(table.concat(texts, "|"):find(t, 1, true), t)
       end
+      -- + Tile: the reading picker for that board, by tracker; a pick adds the tile here
+      got = nil
+      panel.add:GetScript("OnClick")(panel.add)
+      assert.truthy(got[1].title)
+      assert.truthy(got[1].text:find("Pocket", 1, true))
+      ns.Menu.Show = realShow0
+      local n = #pocket.tiles
+      Bo.AddReading(pocket, "hc:xpgained")
+      assert.are.equal(n + 1, #pocket.tiles)
       local menus = {}
       local realShow, realConfirm = ns.Menu.Show, Bo.Confirm
       ns.Menu.Show = function(_, items) menus[#menus + 1] = type(items) == "function" and items() or items end
@@ -1044,78 +1065,77 @@ describe("the Overview tab", function()
         for _, it in ipairs(m) do if it.text == text then return it end end
       end
       local gold = all[1].raw
-      -- the card menu: Edit (the board's own settings), Move to board, Take off HUD, Delete tile; no Section (HC-73)
+      -- the card menu: Edit (the board's own settings), On HUD (the tile's switch), Move to board, Delete tile
       local m = menuFor(gold)
-      for _, t in ipairs({ "Edit", "Move to board", "Take off HUD", "Delete tile" }) do assert.truthy(pick(m, t), t) end
-      assert.is_nil(pick(m, "Section"))
+      for _, t in ipairs({ "Edit", "On HUD", "Move to board", "Delete tile" }) do assert.truthy(pick(m, t), t) end
+      assert.is_nil(pick(m, "Take off HUD"))
+      assert.is_true(pick(m, "On HUD").checked)
       local edit = {}
       for _, it in ipairs(pick(m, "Edit").sub) do edit[#edit + 1] = it.text end
       assert.truthy(table.concat(edit, "|"):find("Scope", 1, true))
-      -- take it off the HUD: Window only, the board one tile shorter, still in the collection
-      local n = #pocket.tiles
-      pick(m, "Take off HUD").func()
-      assert.are.equal(n - 1, #pocket.tiles)
-      local e
-      m, e = menuFor(gold)
-      assert.is_nil(e.board)
-      assert.are.equal(n, #BM.CollectionTiles())
-      assert.is_nil(pick(m, "Take off HUD"))
-      for _, it in ipairs(pick(m, "Edit").sub) do assert.are_not.equal("Size", it.text) end   -- a size is the board's
-      -- off the board, its card is under Window only, dashed, on the session; the panel one card shorter
+      -- off the HUD: the tile stays on its board, its card dashed and marked; the HUD frame draws one row fewer
+      n = #pocket.tiles
+      local rowsBefore = #bf.rowFrames
+      pocket.mini = false
+      Bo.Refresh(pocket.id, true)
+      rowsBefore = #bf.rowFrames
+      pick(m, "On HUD").func()
+      assert.are.equal(n, #pocket.tiles)
+      assert.are.equal(pocket, (BM.BoardOf(gold)))
+      assert.is_true(#bf.rowFrames < rowsBefore)
       ns.RefreshOverview()
-      assert.are.equal((n - 1) .. " tiles", panel.head.count:GetText())
-      assert.is_false(f.loose.empty:IsShown())
       local dashed
       for _, c in ipairs(ns.OverviewCards) do if c:IsShown() and c.entry.raw == gold then dashed = c end end
       assert.is_true(dashed.dashed)
       assert.is_true(dashed.dash[1]:IsShown())
-      assert.are.equal("session", dashed.foot:GetText())
-      -- show it on the HUD again
-      pick(m, "Show on HUD").sub[1].func()                              -- Pocket
-      assert.are.equal(n, #pocket.tiles)
-      assert.are.equal(pocket, (BM.BoardOf(gold)))
-      -- an empty board shows, saying so
-      local empty = BM.Create(nil, { name = "Spare" })
-      ns.RefreshOverview()
+      assert.truthy(dashed.foot:GetText():find("Only here", 1, true))
+      m = menuFor(gold)
+      assert.is_false(pick(m, "On HUD").checked)
+      pick(m, "On HUD").func()
+      assert.are.equal(rowsBefore, #bf.rowFrames)
+      -- New board... opens the dialog; a board made there is here at once, Only here, saying it is empty
+      f.new:GetScript("OnClick")(f.new)
+      local D = ns.BoardDialog
+      assert.is_true(D.Frame():IsShown())
+      assert.is_false(D.Rules().hud)
+      D.Open({ empty = true })
+      D.Frame().name:SetText("Spare")
+      local empty = D.Create()
+      assert.is_false(empty.shown)
+      assert.is_false(Bo.IsEditing(empty.id))
       assert.are.equal(empty, ns.OverviewPanels[2].head.board)
       assert.is_true(ns.OverviewPanels[2].empty:IsShown())
+      assert.are.equal("Only here", ns.OverviewPanels[2].hud:GetText())
+      -- move a tile to it, and to a board of its own
+      m = menuFor(gold)
+      assert.are.equal("Spare (Only here)", pick(m, "Move to board").sub[1].text)
+      pick(m, "Move to board").sub[1].func()
+      assert.are.equal(empty, (BM.BoardOf(gold)))
+      assert.are.equal(n - 1, #pocket.tiles)
+      m = menuFor(gold)
+      local boards = #BM.Store().list
+      pick(pick(m, "Move to board").sub, "New board").func()
+      assert.are.equal(boards + 1, #BM.Store().list)
+      local own = BM.BoardOf(gold)
+      assert.is_false(own.shown)
+      -- delete a tile for good; delete a board with its tiles
+      local count = #BM.CollectionTiles()
+      m = menuFor(gold)
+      pick(m, "Delete tile").func()
+      assert.are.equal(count - 1, #BM.CollectionTiles())
+      BM.Delete(own.id)
       BM.Delete(empty.id)
       ns.RefreshOverview()
       assert.is_false(ns.OverviewPanels[2]:IsShown())
-      -- Add tile opens Trackers, whose Add tile then adds to Overview, Window only
-      f.add:GetScript("OnClick")(f.add)
-      assert.is_true(ns.Windows.IsShown("trackers"))
-      assert.is_true(ns.TrackersForOverview)
-      ns.Windows.Content("trackers"):SetSize(762, 568)
-      local br = ns.TrackersBrowser
-      br:Select("hc:xpph", "all")
-      local item
-      for _, it in ipairs(br.detail.items) do if it:IsShown() and it.btn:IsShown() then item = it; break end end
-      assert.truthy(item)
-      n = #BM.CollectionTiles()
-      local onBoard = #pocket.tiles
-      item.btn:GetScript("OnClick")(item.btn)
-      assert.are.equal(n + 1, #BM.CollectionTiles())
-      assert.are.equal(onBoard, #pocket.tiles)                         -- not on a board
-      local added = BM.CollectionTiles()[n + 1]
-      assert.is_nil(added.board)
-      assert.is_nil(added.raw.section)
-      ns.ShowOverview(true)
-      assert.is_nil(ns.TrackersForOverview)                            -- only until the Trackers tab goes
-      -- delete a tile for good
-      m = menuFor(added.raw)
-      pick(m, "Delete tile").func()
-      assert.are.equal(n, #BM.CollectionTiles())
       -- many tiles: the tab grows and the window scrolls it (HC-69)
-      for _ = 1, 40 do BM.NewTile("hc:gold") end
+      for _ = 1, 40 do BM.AddReading(pocket, "hc:gold") end
       ns.RefreshOverview()
       assert.is_true(ns.Windows.Host("_main").scrollMax > 0)
       -- the search narrows the cards
       f.search:SetText("zzz")
       f.search:GetScript("OnTextChanged")(f.search)
-      assert.truthy(f.empty:GetText():find("No tile matches", 1, true))
+      assert.truthy(f.empty:GetText():find("matches the search", 1, true))
       assert.is_false(panel:IsShown())
-      assert.is_false(f.loose:IsShown())
       -- a board's name finds its whole panel
       f.search:SetText("pock")
       f.search:GetScript("OnTextChanged")(f.search)
@@ -1123,6 +1143,11 @@ describe("the Overview tab", function()
       assert.are.equal("", f.empty:GetText())
       f.search:SetText("")
       f.search:GetScript("OnTextChanged")(f.search)
+      -- no boards at all: the tab says how to start
+      while BM.Store().list[1] do BM.Delete(BM.Store().list[1].id) end
+      Bo.RefreshAll(true)
+      ns.RefreshOverview()
+      assert.truthy(f.empty:GetText():find("No boards yet", 1, true))
       ns.Menu.Show, Bo.Confirm = realShow, realConfirm
       assert.are.same({}, ctx.env.errors)
     end)
@@ -1158,14 +1183,14 @@ describe("the Boards tab and the New board dialog", function()
       assert.truthy(nodes[3]:find("Activity", 1, true))          -- (HC-57: presets by category)
       local row = rowFor("^Pocket$")
       assert.truthy(row)
-      assert.truthy(row.cells[2]:GetText():find("Shown", 1, true))
+      assert.truthy(row.cells[2]:GetText():find("On HUD", 1, true))
       assert.are.equal("mini", row.cells[4]:GetText())
       -- off: the status says so; hovering its row shows it anyway, raised above the window, until the pointer leaves
       pocket.shown = false
       Bo.Refresh(pocket.id, true)
       ns.RefreshBoardsTab()
       row = rowFor("^Pocket$")
-      assert.truthy(row.cells[2]:GetText():find("Off", 1, true))
+      assert.truthy(row.cells[2]:GetText():find("Only here", 1, true))
       local bf = Bo.Frame(pocket.id)
       assert.is_false(bf:IsShown())
       row:GetScript("OnEnter")(row)
@@ -1182,7 +1207,7 @@ describe("the Boards tab and the New board dialog", function()
       -- select it: its actions; Show now shows it whatever its rules, then the rules again
       row = rowFor("^Pocket$")
       row:GetScript("OnClick")(row, "LeftButton")
-      assert.are.same({ "Hide", "Show now", "Edit on screen", "Reset position", "Duplicate", "Save as preset", "Delete" },
+      assert.are.same({ "Take off HUD", "Show now", "Edit on screen", "Reset position", "Duplicate", "Save as preset", "Delete" },
         actionTexts())
       Bo.ShowNow(pocket.id, 5)
       assert.is_true(bf:IsShown())
@@ -1211,7 +1236,7 @@ describe("the Boards tab and the New board dialog", function()
         if b:IsShown() and b:GetText() == "Save as preset" then b:GetScript("OnClick")(b) end
       end
       assert.are.equal("Your presets", BM.PresetGroups()[#BM.PresetGroups()].title)
-      -- the header: Hide all, Show all, Edit all (no Trackers tab switch)
+      -- the header: All off HUD, All on HUD, Edit all (no Trackers tab switch)
       local hideAll, showAll, editAll = br.headerBtns[2], br.headerBtns[3], br.headerBtns[1]
       hideAll:GetScript("OnClick")(hideAll)
       for _, b in ipairs(BM.Store().list) do assert.is_false(b.shown) end
@@ -1222,8 +1247,8 @@ describe("the Boards tab and the New board dialog", function()
       assert.is_true(ns.Windows.IsShown("boards"))                 -- the tab stays
       editAll:GetScript("OnClick")(editAll)
       assert.is_false(Bo.IsEditing())
-      -- Delete: its tiles stay in Overview
-      local n = #BM.CollectionTiles()
+      -- Delete: its tiles go with it (v8)
+      local n = #BM.CollectionTiles() - #pocket.tiles
       row = rowFor("^Pocket$")
       row:GetScript("OnClick")(row, "LeftButton")
       for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Delete" then b:GetScript("OnClick")(b) end end
@@ -1235,7 +1260,7 @@ describe("the Boards tab and the New board dialog", function()
     end)
   end)
 
-  it("makes boards through the dialog: unique names, a start, rules; centre and flash; empty ones open edited", function()
+  it("makes boards through the dialog: unique names, a start, on the HUD or not, rules; empty ones on the HUD open edited", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local BM, Bo, D = ns.BoardModel, ns.Boards, ns.BoardDialog
@@ -1268,22 +1293,42 @@ describe("the Boards tab and the New board dialog", function()
       f.name:GetScript("OnTextChanged")(f.name)
       for _, it in ipairs(menu) do if it.text == "  Leveling" then it.func() end end
       assert.are.equal("Farm", f.name:GetText())
+      -- Start from is a dropdown: its value on the left, an arrow on the right
+      assert.truthy(f.start.arrow)
+      assert.are.equal("Leveling", f.start:GetText())
+      -- not on the HUD unless ticked (v8); its rules are greyed until then
+      assert.is_false(D.Rules().hud)
+      assert.is_false(D.Rules().hud)
+      f.hud:GetScript("OnClick")(f.hud)
+      assert.is_true(D.Rules().hud)
       -- rules: not in combat
       f.checks[1]:GetScript("OnClick")(f.checks[1])
       local b = D.Create()
       assert.truthy(b)
+      assert.is_true(b.shown)
+      assert.is_true(Bo.Frame(b.id):IsShown())
       assert.is_false(f:IsShown())
       assert.are.equal("Farm", b.name)
       assert.are.equal("leveling", b.preset)
       assert.are.equal("hide", b.show.combat)
       assert.are.same({ "CENTER", 0, 0, "CENTER" }, b.pos)
       assert.is_false(Bo.IsEditing(b.id))
-      -- an empty board opens in edit mode
-      D.Open({ empty = true })
+      -- an empty board made for the HUD opens in edit mode; one made for the window only does not, and is not on screen
+      D.Open({ empty = true, hud = true })
       local e = D.Create()
       assert.are.equal("Board", e.name)
       assert.is_true(Bo.IsEditing(e.id))
       Bo.SetEditing(false)
+      D.Open({ empty = true })
+      local w = D.Create()
+      assert.is_false(w.shown)
+      assert.is_false(Bo.IsEditing(w.id))
+      assert.is_false(Bo.Frame(w.id):IsShown())
+      -- Edit on screen shows an "Only here" board while it is edited
+      Bo.EditBoard(w.id, true)
+      assert.is_true(Bo.Frame(w.id):IsShown())
+      Bo.EditBoard(w.id, false)
+      assert.is_false(Bo.Frame(w.id):IsShown())
       -- a copy has tiles of its own
       D.Open({ copy = b })
       assert.are.equal("Farm 2", f.name:GetText())
@@ -1338,7 +1383,7 @@ describe("a new character", function()
       local list = BM.Store().list
       assert.are.equal(1, #list)
       assert.are.equal("Leveling", list[1].name)
-      assert.is_true(list[1].shown)
+      assert.is_false(list[1].shown)                                   -- (v8) nothing on the HUD at a first setup
       assert.are.same(BM.STARTER_POS, list[1].pos)
       assert.is_nil(ns.TutorialFrame())                                -- not behind the loading screen
       ctx.env:advance(3)

@@ -398,6 +398,34 @@ context (HC-26), upgrade deltas as a tile.
 Later: the `form` dimension; the upgrade log; progression charts (Hard
 Counters' chart display, HC-12, parked); anchoring the window to the Character pane.
 
+### As built (2026-11-25): regeneration, the five-second rule, schools on the class boards
+
+From a look at the stat addons players use (Extended Character Stats, CharacterStatsClassic, DejaClassicStats, and
+on Forever: Forever Extended Character Stats, CharacterStats, SinStats) and at this client's own API documentation.
+What they show that this pack lacked was regeneration beyond mana per 5, healing crit and haste; none of the big
+ones shows health regen or the five-second rule.
+
+- **Health regen**: `GetHealthRegen()` (per second: out of combat, in combat): "Health regen (out of combat)" and
+  "(in combat)" per 5 seconds, and "Health per second" for boards. In the Attributes section.
+- **Mana**: "Mana per second" twins of the two per-5 readings; "Mana regen from spirit"
+  (`GetManaRegenFromSpirit()`). In the Spell section, where mana per 5 already was (a tile keeps working with the
+  trackers a player has on).
+- **Healing crit** (the spell crit of the class's healing school), **spell haste** (`UnitSpellHaste`), **melee
+  haste** (`GetMeleeHaste`).
+- **The five-second rule** (`hcstats:fsr`): seconds since the last spell that cost mana, 0 to 5, target 5. A clock,
+  not a stat: `UNIT_SPELLCAST_SUCCEEDED` for the player and the spell's power cost (`C_Spell.GetSpellPowerCost`),
+  never a comparison of mana (secret in combat). Unknown cost: the cast counts. While it runs the pack asks boards to
+  redraw four times a second (`HC:ReadingsChanged`), then stops.
+- **Rows:** per-second readings, haste, healing crit and the five-second rule are for boards only (`noRow`): the
+  window keeps every row without a scroll bar.
+- **Boards:** every role and class board of a caster ends with the five-second rule as a bar; class boards show
+  the class's schools side by side (damage and crit); healers get healing crit.
+- **Not offered:** spell hit by school (the game gives one number; the per-school part is talents, which this pack
+  does not read), miss and glancing tables (CS-15), MP5 split into gear and buffs.
+- **To see in game:** every call above answers on this client's documentation, not yet in a saved file; Diagnostics
+  probes them ("CS-1 GetHealthRegen", ...). Whether `GetSpellCritChance(school)` honours its argument on Forever is
+  open: the documentation lists it without one.
+
 ## 9. Open questions
 
 1. ~~Stocks with a `stat` dimension (CS-2)~~: closed 2026-11-18, one counter per stat (§4.1). Unbuffed vs buffed is

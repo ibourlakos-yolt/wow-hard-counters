@@ -3,6 +3,64 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+**Saved data:** kept. One change you will see: tiles that sat under "Window only" in the Overview tab are now on a
+board called **Unsorted** (not on your HUD, as before); a board called "Run" made from the ready-made board is now
+called "Farming".
+
+**Updating:** restart the game (two new addon files: `/reload` is not enough).
+
+### New
+- **Nothing lands on your screen unasked.** A new board is made in the Hard Counters window and stays there, "Only
+  here", until you put it on your HUD: tick **Put it on my HUD** in the New board dialog, use the board's **On HUD**
+  switch in the Overview tab, or `/hc board <name>`. A new character starts with its Leveling board in the window, not
+  on screen. Boards you already have on screen stay there.
+- **Make boards and tiles in the Overview tab.** **New board...** at the top; on each board's panel **+ Tile** (pick a
+  number by tracker) and a switch that reads **On HUD** or **Only here**.
+- **A tile can stay off the HUD while its board is on it.** In Overview, a card's menu has **On HUD**; on a board,
+  a tile's menu has **Hide from HUD**. The tile keeps counting and stays on its board in the window (dashed card).
+- **Move a board without editing it.** Hover a board on your HUD: a **Move** tab shows above its left corner (drag
+  it), **Edit** stays above its right corner. Or hold **Shift** and drag the board itself; Options, Boards chooses
+  Ctrl or Alt instead, or switches the key off. Boards stay click-through the rest of the time.
+- **The Packs tab.** Choose the packs you want inside the window: tick them, **Use these packs**. Their trackers
+  are switched on for you with history off; a pack that has to be loaded or unloaded shows **Reload now**. The tab
+  says what history is and where to turn it on. The tutorial has a step for it.
+- **Help and Tab tour on every tab.** At the top of the window, beside Tutorial: **Help** is one page about the open
+  tab (what it is, what you can do there, how it changes your play), **Tab tour** a few steps through that tab
+  alone. Farmer's Ledger, Character Stats and Diagnostics have theirs too. `/hc tour <tab>` does the same.
+- **Character Stats: regeneration.** Health regen out of combat and in combat (per 5 seconds, and per second for
+  boards), mana per second casting and not casting beside the per-5 readings, mana regen from spirit.
+- **Character Stats: the five-second rule.** A reading that counts the five seconds after a spell that cost mana,
+  until spirit regeneration is back; as a bar it fills while you wait. On every ready-made board of a class that
+  casts.
+- **Character Stats: more for casters and healers.** Healing crit, spell haste and melee haste as readings. The
+  class boards show schools side by side: a warlock's shadow and fire, a mage's fire, frost and arcane, each with
+  damage and crit; a priest's holy and shadow; a shaman's nature and fire; a druid's nature and arcane.
+
+### Changed
+- "Window only" is gone: every tile is on a board. Deleting a board deletes its tiles (the question says so);
+  "Remove from board" became **Hide from HUD** and **Delete tile**.
+- A board's status reads **On HUD** or **Only here** (it was "Shown" / "Off"), in the Boards and Overview tabs and in
+  `/hc board`. The Boards tab's buttons are Put on HUD / Take off HUD, All on HUD / All off HUD.
+- The ready-made board "Run" is called **Farming** ("run" already means a saved stretch of play).
+- **Start from** in the New board dialog is a dropdown that looks like one.
+- Adding a tile to a board from the Trackers tab no longer puts that board on your screen.
+- The Guide and the tutorial say all of the above; the tutorial has 11 steps.
+
+### Not checked in game yet
+- Turning packs on and off from the Packs tab uses the game's AddOn calls for one character, and Reload now calls
+  the game's reload from our button: if the game refuses, the tab says so and the AddOns list still works.
+- The five-second rule reads a spell's mana cost from the game; where it can't, any spell you cast starts it.
+- Health regen, mana from spirit and haste use calls this client documents; a call that is missing shows "n/a".
+- Per-school spell hit is not offered: the game reports one spell hit number, and the per-school part comes from
+  talents.
+
+### For pack authors
+- `HC:RegisterWindowHelp(id, def)`: the Help page and tour of your window (docs/API.md §9).
+- `HC:ReadingsChanged()` and `HC:Supports("readingsChanged")`: ask boards to redraw for a live reading that moves
+  with no event (a timer's progress).
+
 ## 0.2.4-beta1 (2026-11-25)
 
 A beta, **still experimental**: Hard Counters now shows you around. A tutorial opens at your first login, with a

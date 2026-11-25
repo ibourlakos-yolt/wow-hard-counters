@@ -62,6 +62,8 @@ files["HardCounters/UI/BoardModel.lua"] = { read_globals = {} }
 files["HardCounters/UI/Menu.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip" } }
 files["HardCounters/UI/Trackers.lua"] = { read_globals = { "CreateFrame", "GameTooltip" } }
 files["HardCounters/UI/Browser.lua"] = { read_globals = { "CreateFrame", "GameTooltip" } }
+files["HardCounters/UI/Help.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert" } }
+files["HardCounters/UI/Packs.lua"] = { read_globals = { "CreateFrame", "C_Timer" } }
 files["HardCounters/UI/Overview.lua"] = { read_globals = { "CreateFrame", "GameTooltip", "C_Timer" } }
 files["HardCounters/UI/BoardDialog.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert" } }
 files["HardCounters/UI/BoardsTab.lua"] = { read_globals = { "C_Timer" } }

@@ -46,6 +46,7 @@ UI\Options.lua
 UI\RunCommands.lua
 UI\Widgets.lua
 UI\Windows.lua
+UI\Help.lua
 UI\Menu.lua
 UI\BoardModel.lua
 UI\Boards.lua
@@ -54,6 +55,7 @@ UI\Trackers.lua
 UI\Overview.lua
 UI\BoardDialog.lua
 UI\BoardsTab.lua
+UI\Packs.lua
 UI\Guide.lua
 UI\Welcome.lua
 UI\RunList.lua

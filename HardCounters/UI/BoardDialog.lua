@@ -2,10 +2,12 @@
 -- board's [+] menu, Options, `/hc board new` without a name. Fields: Name (required, at most 24 letters, unique
 -- ignoring case: a taken name suggests "<name> 2"; it shows the `/hc board` command that will toggle it), Start from
 -- (presets by pack, your presets, Empty board, Copy of a board: its own tiles, not shared; this character's boards,
--- then each other character's and 0.2's shared ones, HC-74), Show it (in combat, in
--- instances, only during runs: the board's own rules). Create puts the board at the centre of the screen with one
--- flash; an empty board opens in edit mode. Enter creates, Escape cancels. DIALOG strata, above everything of ours
--- but menus.
+-- then each other character's and 0.2's shared ones, HC-74; a dropdown), Put it on my HUD (v8, the user
+-- 2026-11-25: off unless ticked, so a new board lives in the Hard Counters window until the player wants it on
+-- screen) and, under it, when it shows there (in combat, in instances, only during runs: the board's own rules).
+-- Create with the HUD ticked puts the board at the centre of the screen with one flash, an empty one in edit mode;
+-- unticked, the board is in the Overview and Boards tabs only. Enter creates, Escape cancels. DIALOG strata, above
+-- everything of ours but menus.
 local ADDON, ns = ...
 
 local L, Wd = ns.L, ns.Widgets
@@ -19,7 +21,7 @@ local f
 -- (from and who only for another character's board or 0.2's shared ones)
 local choice = { kind = "empty" }
 local nameTouched = false               -- the player typed a name: picking a start no longer replaces it
-local rules = { combat = true, instance = true, runOnly = false }
+local rules = { combat = true, instance = true, runOnly = false, hud = false }
 
 local function BM() return ns.BoardModel end
 
@@ -55,7 +57,7 @@ local function validate()
   local name = f.name:GetText() or ""
   local ok, why = BM().CheckName(name)
   if ok then
-    f.note:SetText(format(L["/hc board %s will show or hide it."], trim(name):lower()))
+    f.note:SetText(format(L["/hc board %s will put it on or off your HUD."], trim(name):lower()))
     f.note:SetTextColor(0.6, 0.6, 0.6)
   else
     local msg = L[WHY[why] or "?"]
@@ -125,7 +127,15 @@ local function startItems()
   return items
 end
 
-local function check(parent, label, y, key)
+--- The rules under "Put it on my HUD" only matter there: greyed while it is off.
+local function syncRules()
+  for _, c in ipairs(f.checks) do
+    c:SetEnabled(rules.hud)
+    c.label:SetTextColor(rules.hud and 1 or 0.5, rules.hud and 1 or 0.5, rules.hud and 1 or 0.5)
+  end
+end
+
+local function check(parent, label, y, key, x)
   local ok, c = pcall(CreateFrame, "CheckButton", nil, parent, "UICheckButtonTemplate")
   if not ok or type(c) ~= "table" then
     c = CreateFrame("CheckButton", nil, parent)
@@ -133,7 +143,7 @@ local function check(parent, label, y, key)
     c:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
   end
   c:SetSize(24, 24)
-  c:SetPoint("TOPLEFT", 100, y)
+  c:SetPoint("TOPLEFT", x or 100, y)
   c.label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   c.label:SetPoint("LEFT", c, "RIGHT", 2, 0)
   c.label:SetText(label)
@@ -141,6 +151,7 @@ local function check(parent, label, y, key)
   c:SetScript("OnClick", function(self)
     rules[self.key] = not rules[self.key]
     self:SetChecked(rules[self.key])
+    if self.key == "hud" then syncRules() end
   end)
   return c
 end
@@ -150,15 +161,15 @@ local function create()
   local name = trim(f.name:GetText())
   local M = BM()
   local b
-  if choice.kind == "copy" and choice.board then b = M.Duplicate(choice.board, name, choice.from)
-  else b = M.Create(choice.kind == "preset" and choice.key or nil, { name = name }) end
+  if choice.kind == "copy" and choice.board then b = M.Duplicate(choice.board, name, choice.from, rules.hud)
+  else b = M.Create(choice.kind == "preset" and choice.key or nil, { name = name, shown = rules.hud }) end
   b.show = b.show or {}
   local fade = b.show.combat == "fade"
   b.show.combat = rules.combat and (fade and "fade" or "show") or "hide"
   b.show.instance = rules.instance and "show" or "hide"
   b.show.runOnly = rules.runOnly and true or false
   b.pos = { "CENTER", 0, 0, "CENTER" }
-  b.shown = true
+  b.shown = rules.hud and true or false
   f:Hide()
   if ns.Boards then ns.Boards.Created(b, choice.kind == "empty") end
   return b
@@ -175,7 +186,7 @@ local function build()
     bg:SetColorTexture(0.05, 0.05, 0.07, 0.95)
   end
   f:Hide()
-  f:SetSize(380, 250)
+  f:SetSize(380, 280)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
   f:SetFrameStrata("DIALOG")
   f:SetToplevel(true)
@@ -217,13 +228,19 @@ local function build()
   f.note:SetWidth(260)
   f.note:SetJustifyH("LEFT")
   label(L["Start from"], -88)
-  f.start = Wd.Button(f, "", 226, function(self) ns.Menu.Show(self, startItems()) end)
-  f.start:SetPoint("TOPLEFT", 100, -84)
-  label(L["Show it"], -120)
+  -- a dropdown (it was a plain button that didn't look like one: the user, 2026-11-25)
+  f.start = Wd.Dropdown(f, 226, function(self) ns.Menu.Show(self, startItems()) end)
+  f.start:SetPoint("TOPLEFT", 102, -84)
+  Wd.Tip(f.start, function() return L["What the board starts with: a ready-made board, nothing, or a copy of another board."] end)
+  label(L["Where"], -120)
+  f.hud = check(f, L["Put it on my HUD (on screen while I play)"], -116, "hud")
+  Wd.Tip(f.hud, function()
+    return L["Off: the board is made in this window only (Overview, Boards). Its On HUD switch in the Overview tab puts it on screen later."]
+  end)
   f.checks = {
-    check(f, L["in combat"], -116, "combat"),
-    check(f, L["in instances"], -138, "instance"),
-    check(f, L["only while a run is open"], -160, "runOnly"),
+    check(f, L["in combat"], -140, "combat", 122),
+    check(f, L["in instances"], -162, "instance", 122),
+    check(f, L["only while a run is open"], -184, "runOnly", 122),
   }
   f.create = Wd.Button(f, L["Create"], 90, function() create() end)
   f.create:SetPoint("BOTTOMRIGHT", -16, 14)
@@ -233,13 +250,16 @@ local function build()
 end
 
 --- Open the dialog. opts: { preset = key } or { copy = board, from = its store, who = its character's name } to start
---- from; nil: the first of Hard Counters' presets. The name starts as the start's name, made free.
+--- from; nil: the first of Hard Counters' presets. opts.hud: "Put it on my HUD" starts ticked (asked for from a
+--- board on the HUD: its [+] menu). The name starts as the start's name, made free.
 function Dialog.Open(opts)
   opts = opts or {}
   if not f then build() end
   nameTouched = false
-  rules.combat, rules.instance, rules.runOnly = true, true, false
+  rules.combat, rules.instance, rules.runOnly, rules.hud = true, true, false, opts.hud and true or false
   for _, c in ipairs(f.checks) do c:SetChecked(rules[c.key]) end
+  f.hud:SetChecked(rules.hud)
+  syncRules()
   if opts.copy then
     setChoice({ kind = "copy", board = opts.copy, from = opts.from, who = opts.who })
   elseif opts.empty then
@@ -258,3 +278,4 @@ end
 
 function Dialog.Frame() return f end
 function Dialog.Choice() return choice end
+function Dialog.Rules() return rules end

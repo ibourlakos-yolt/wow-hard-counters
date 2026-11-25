@@ -1,6 +1,6 @@
 -- The Boards tab (DESIGN §17.4, HC-68): the second tab of the Hard Counters window, on the shared browser. Tree:
 -- "Your boards", then "Presets" with Hard Counters' own, each pack's and "Your presets". Your boards: Name, Status
--- (Shown; Hidden, naming the rule; Off; Off screen?), Tiles, Mini. Hovering a board's row shows that board, raised
+-- (On HUD; On HUD, hidden: naming the rule; Only here; Off screen?), Tiles, Mini. Hovering a board's row shows that board, raised
 -- above the window and flashing, until the pointer leaves. Actions follow the selection: Show or Hide, Show now
 -- (whatever its rules, for a while), Edit on screen, Reset position (centre, scale 1), Duplicate (the New board
 -- dialog, a copy), Save as preset, Delete; right-click adds Mini mode and Rename. At the top: New board..., Show all,
@@ -132,8 +132,8 @@ local function detail(row)
     local b = row.board
     local show = b.show or {}
     local lines = {
-      format(L["/hc board %s shows or hides it."], b.name:lower()),
-      format(L["In combat it %s; in instances it %s%s%s."], L[RULE_WORD[show.combat or "show"]],
+      format(L["/hc board %s puts it on or off your HUD."], b.name:lower()),
+      format(L["On the HUD: in combat it %s; in instances it %s%s%s."], L[RULE_WORD[show.combat or "show"]],
         L[RULE_WORD[show.instance or "show"]], show.runOnly and L["; only while a run is open"] or "",
         show.mouseoverFade and L["; faded until you hover it"] or ""),
     }
@@ -151,9 +151,10 @@ local function detail(row)
     }
     for _, t in ipairs(b.tiles) do
       local label = t.kind == "reading" and M.TileLabel(t, b) or (t.kind == "label" and ("[" .. (t.text or "") .. "]") or L["Splits"])
-      items[#items + 1] = { text = "  " .. label }
+      local off = not M.TileOnHud(t)
+      items[#items + 1] = { text = "  " .. label .. (off and ("  (" .. L["Only here"] .. ")") or ""), grey = off }
     end
-    if #b.tiles == 0 then items[#items + 1] = { text = "  " .. L["(empty: Edit on screen, then its [+])"], grey = true } end
+    if #b.tiles == 0 then items[#items + 1] = { text = "  " .. L["(empty: + Tile in the Overview tab, or Edit on screen and its [+])"], grey = true } end
     return { title = b.name .. "   " .. row.cells.status, lines = lines, items = items }
   end
   local p = M.Preset(row.preset)
@@ -174,11 +175,15 @@ end
 local function boardActions(b)
   local editing = Bo().IsEditing(b.id)
   return {
-    { text = b.shown and L["Hide"] or L["Show"], func = function()
-      b.shown = not b.shown
-      Bo().Refresh(b.id, true)
-      refresh()
-    end },
+    { text = b.shown and L["Take off HUD"] or L["Put on HUD"],
+      tip = b.shown and L["It stays in this window (Only here), still counting."] or L["On your screen while you play."],
+      func = function()
+        b.shown = not b.shown
+        Bo().Refresh(b.id, true)
+        if b.shown then Bo().Flash(b.id) end
+        if ns.RefreshOverview then ns.RefreshOverview() end
+        refresh()
+      end },
     { text = L["Show now"], tip = format(L["Shows it for %d seconds whatever its rules, with a flash: to find it."], Bo().SHOW_NOW),
       func = function() Bo().ShowNow(b.id); refresh() end },
     { text = editing and L["Stop editing"] or L["Edit on screen"],
@@ -196,7 +201,7 @@ local function boardActions(b)
         end)
       end },
     { text = L["Delete"], func = function()
-      confirm(format(L["Delete the board %s? Its tiles stay in the Overview tab; your counts don't change."], b.name), function()
+      confirm(format(L["Delete the board %s and its tiles? Your counts don't change."], b.name), function()
         BM().Delete(b.id)
         Bo().RefreshAll()
         if ns.RefreshOverview then ns.RefreshOverview() end
@@ -270,12 +275,13 @@ local function footer()
   local list = BM().Store().list
   local shown = 0
   for _, b in ipairs(list) do if b.shown then shown = shown + 1 end end
-  return format(L["%d boards, %d shown. Hover a board's row to find it on screen."], #list, shown)
+  return format(L["%d boards, %d on your HUD. Hover a board's row to see where it is (or would be) on screen."], #list, shown)
 end
 
 local function setAll(on)
   for _, b in ipairs(BM().Store().list) do b.shown = on end
   Bo().RefreshAll(true)
+  if ns.RefreshOverview then ns.RefreshOverview() end
   refresh()
 end
 
@@ -301,13 +307,14 @@ local function build(f)
         Bo().SetEditing(not Bo().IsEditing(), true)
         refresh()
       end },
-      { text = L["Hide all"], width = 80, func = function() setAll(false) end },
-      { text = L["Show all"], width = 80, func = function() setAll(true) end },
+      { text = L["All off HUD"], width = 90, tip = L["Every board only here, in this window: a clean screen. They keep counting."],
+        func = function() setAll(false) end },
+      { text = L["All on HUD"], width = 90, func = function() setAll(true) end },
       { text = L["New board..."], width = 100, func = function() Bo().OpenNewBoard() end },
     },
     empty = function(node, search)
       if search ~= "" then return L["Nothing matches the search."] end
-      if node == "boards" then return L["No boards yet: New board... at the top right."] end
+      if node == "boards" then return L["No boards yet: New board... at the top right. A new board stays in this window until you put it on your HUD."] end
       return L["No presets here."]
     end,
     noSelection = L["Click a board for its tiles and what you can do with it. Hover its row to find it on screen."],
@@ -333,7 +340,27 @@ ns.Windows.Register(ID, {
 })
 
 function ns.ShowBoardsTab(show) ns.Windows.Show(ID, show) end
-ns.AddSlash("boards", function() ns.ShowBoardsTab() end, L["the Boards tab: every board, find one, presets"])
+ns.AddSlash("boards", function() ns.ShowBoardsTab() end, L["the Boards tab: every board, on or off your HUD, find one, presets"])
 
 local owner = {}
 HC.RegisterCallback(owner, "HC_TRACKERS_CHANGED", function() refresh() end)
+-- luacheck: push no max line length
+
+-- This tab's help and tour (UI/Help.lua): change them with the tab.
+local _ = ns.Help and ns.Help.Register(ID, {
+  what = "The Boards tab is the list of this character's boards, the ready-made boards you can start from, and the boards of your other characters.",
+  can = {
+    "Hover a board's row: the board flashes where it is, or would be, on your screen.",
+    "Click a board for its actions: {Put on HUD} or {Take off HUD}, {Show now}, {Edit on screen}, {Reset position}, {Duplicate}, {Save as preset}, {Delete}.",
+    "{New board...} makes one; {Presets} on the left lists the ready-made boards by activity, role and class.",
+    "{Other characters} (once you have several): copy a board from another character.",
+    "{All off HUD} clears your screen in one click; the boards keep counting.",
+  },
+  effect = "The Status column says what you see while you play: {On HUD}, {Only here} (in this window only), or on the HUD but hidden by one of the board's own rules (in combat, in instances, only during runs).",
+  tour = {
+    { title = "Your boards, and where they are", text = "The list has one row per board. Status reads {On HUD} or {Only here}; when a board is on the HUD but hidden right now, it names the rule that hides it." },
+    { title = "Find a board", text = "Hover a row and that board flashes on your screen, above this window. {Show now} keeps it visible for a few seconds whatever its rules; {Reset position} brings a lost board back to the centre." },
+    { title = "Start from a ready-made board", text = "Click {Presets} in the tree on the left: Activity, Roles, your class. Pick one and use New board from it. A board you like can become a preset of your own with {Save as preset}." },
+  },
+})
+-- luacheck: pop

@@ -12,15 +12,15 @@ For **World of Warcraft: Forever** (Interface 16001).
 
 ## What you get
 
-One download, five addon folders. Turn off any pack you don't want in the game's AddOns list.
+One download, five addon folders. Choose the packs you want in the window's **Packs** tab (or the game's AddOns list).
 
 | Folder | What it does |
 |---|---|
-| **Hard Counters** | The engine and the boards. Comes with **Hard Counters Basic**, always on: gold in and gold out (by source, if you like), net gold, gold owned, gold per hour, XP gained, XP this level, rested XP, time to level, your level. Ready-made Pocket, Leveling and Run boards. |
+| **Hard Counters** | The engine and the boards. Comes with **Hard Counters Basic**, always on: gold in and gold out (by source, if you like), net gold, gold owned, gold per hour, XP gained, XP this level, rested XP, time to level, your level. Ready-made Pocket, Leveling and Farming boards. |
 | **Hard Counters: Farmer** | Counts what you farm: a money Ledger by source (loot, vendor, quests, mail, ...), items looted (all, or one item) and their vendor value, your best drop, reputation gained (all, or one faction), "In bags: *item*" and "Standing progress: *faction*". |
 | **Hard Counters: Character Stats** | Your character sheet as readings: attributes, melee, ranged, spell and defense stats, weapon damage, speed and skills, resistances, durability and item level. Ready-made boards for each role (tanks, damage, healers) and each class. |
 | **Hard Counters: Traveler** | Counts how you travel: distance on foot, mounted, swimming, by flight path and by boat, instant travel such as blinks and teleports (each tile picks which), time moving, average and top speed (in yd/s or % of run speed), speed now (in combat too), jumps, falls, time in the air, corpse runs and flights. Ready-made Trip and Flight log boards. |
-| **Hard Counters: Diagnostics** | A console for finding problems: log, live values, storage use, game API checks. On in alpha and beta builds so reports are useful; turn it off in the AddOns list if you don't want it. |
+| **Hard Counters: Diagnostics** | A console for finding problems: log, live values, storage use, game API checks. On in alpha and beta builds so reports are useful; untick it in the Packs tab if you don't want it. |
 
 ## Getting started
 
@@ -54,7 +54,7 @@ One download, five addon folders. Turn off any pack you don't want in the game's
 | `/hc tutorial` | The tour, from its first step |
 | `/hc guide` | The Guide tab (`/hc guide commands`: straight to a page) |
 | `/hc boards`, `/hc trackers`, `/hc runs` | Those tabs |
-| `/hc board` | List your boards; `/hc board <name>` shows or hides one; `/hc board new` makes one |
+| `/hc board` | List your boards; `/hc board <name>` puts one on your HUD or takes it off; `/hc board new` makes one |
 | `/hc run start [label]`, `/hc run stop` | Record a run by hand |
 | `/hc ledger` | Farmer's money Ledger |
 | `/hc stats` | The Character Stats window |

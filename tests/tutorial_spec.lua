@@ -20,8 +20,8 @@ describe("the tutorial", function()
       assert.is_true(ns.globalSettings.tutorialSeen)
       local n, total = T.Step()
       assert.are.equal(1, n)
-      assert.are.equal(10, total)
-      assert.are.equal("Step 1 of 10", f.count:GetText())
+      assert.are.equal(11, total)
+      assert.are.equal("Step 1 of 11", f.count:GetText())
       for _, s in ipairs({ "reading", "tile", "board", "Hard Counters window", "/hc tutorial" }) do
         assert.truthy(f.body:GetText():find(s, 1, true), s)
       end
@@ -53,24 +53,24 @@ describe("the tutorial", function()
       else
         assert.are.equal("New board...", f.act:GetText())
       end
-      -- 4 to 8: the window, opened by the tour on each of Hard Counters' own tabs
-      for _, tab in ipairs({ "overview", "overview", "boards", "trackers", "runs" }) do
+      -- 4 to 9: the window, opened by the tour on each of Hard Counters' own tabs (Packs among them)
+      for _, tab in ipairs({ "overview", "overview", "boards", "packs", "trackers", "runs" }) do
         click(f.next)
         assert.is_true(Win.IsShown(tab), tab)
         assert.is_false(f.act:IsShown())
       end
       assert.are.equal(Win.Host("_main"), (select(2, f:GetPoint(1))))        -- beside the window
-      -- 9: the packs' tabs, by name
+      -- 10: the packs' tabs, by name
       click(f.next)
       for _, id in ipairs(Win.PackWindows()) do
         assert.truthy(f.body:GetText():find(Win.Def(id).title, 1, true), id)
       end
-      -- 10: the Guide tab; Finish closes the tour
+      -- 11: the Guide tab; Finish closes the tour
       click(f.next)
       assert.is_true(Win.IsShown("guide"))
       assert.are.equal("Finish", f.next:GetText())
       click(f.back)
-      assert.are.equal(9, (T.Step()))
+      assert.are.equal(10, (T.Step()))
       click(f.next)
       click(f.next)
       assert.is_false(f:IsShown())
@@ -151,7 +151,7 @@ describe("the tutorial", function()
 end)
 
 describe("the Guide tab", function()
-  it("is the fifth of Hard Counters' own tabs, with a page for each subject", function()
+  it("is the last of Hard Counters' own tabs, with a page for each subject", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local G, Win = ns.Guide, ns.Windows

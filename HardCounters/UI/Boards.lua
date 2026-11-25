@@ -359,14 +359,15 @@ local function layoutFull(f)
   if #rows == 0 then
     f.empty = f.empty or text(f, "GameFontDisableSmall")
     f.empty:SetPoint("TOPLEFT", 10, -M.PAD - 2)
-    f.empty:SetText(L["Empty board: Edit (/hc edit), then +"])
+    f.empty:SetText(#board.tiles > 0 and L["Every tile of this board is kept off the HUD (Overview tab)"]
+      or L["Empty board: Edit (/hc edit), then +"])
     f.empty:Show()
     h = h + 18
   elseif f.empty then
     f.empty:Hide()
   end
   f.fullH = h
-  f.layoutKey = #board.tiles
+  f.layoutKey = M.LayoutKey(board)
 end
 
 ---------------------------------------------------------------------------
@@ -635,7 +636,7 @@ end
 
 local function refreshFull(f)
   local board = f.board
-  if f.layoutKey ~= #board.tiles then
+  if f.layoutKey ~= M.LayoutKey(board) then
     layoutFull(f)
     f:SetHeight(f.fullH)
   end
@@ -785,61 +786,150 @@ local function setEditChrome(f, on)
     f:SetScript("OnDragStop", nil)
     f.bg:SetColorTexture(0.04, 0.04, 0.06, 0.72)
   end
-  if on and f.handle then f.handle:Hide() end
+  if on and f.handle then f.handle:Hide(); f.moveHandle:Hide() end
+  if on then f.moveArmed = nil end
   setMouse(f)
 end
 
--- The edit handle (HC-42 a): a small "Edit" tab above a full board's top-right corner, shown while the cursor is
--- over the board. Boards are click-through, so they get no OnEnter: Boards.Hover polls IsMouseOver ten times a
--- second instead (a handle that always took the mouse would eat clicks and camera drags on its spot). The handle
--- itself takes clicks only while it is shown. Not on mini boards (their strip's menu has "Edit this board"), not in
--- combat, not while the board is edited.
+-- The hover chrome of a locked board (HC-42 a; the move handle and the move key: the user, 2026-11-25). Boards are
+-- click-through, so they get no OnEnter: Boards.Hover polls IsMouseOver ten times a second instead (chrome that
+-- always took the mouse would eat clicks and camera drags on its spot). While the cursor is over a full board two
+-- small tabs show above it, at opposite corners so neither is clicked for the other: "Move" above the top-left
+-- corner (drag it: the board follows) and "Edit" above the top-right one (click: that board's edit mode). They take
+-- clicks only while shown. Not on mini boards (their strip's menu has "Edit this board"), not in combat, not while
+-- the board is edited.
+-- The move key (Options: Shift by default, Ctrl, Alt or none): while it is held with the cursor over a board, the
+-- board itself takes the mouse and drags, full or mini, in combat too; released, it is click-through again.
 local HANDLE_W, HANDLE_H = 40, 16
+local MOVE_W = 46
 
-local function ensureHandle(f)
-  if f.handle then return f.handle end
+Boards.MOVE_KEYS = { "SHIFT", "CTRL", "ALT", "NONE" }
+local MOVE_KEY_SET = { SHIFT = true, CTRL = true, ALT = true, NONE = true }
+local MOVE_KEY_WORD = { SHIFT = "Shift", CTRL = "Ctrl", ALT = "Alt" }
+
+--- The key that moves a locked board while held: "SHIFT" (default), "CTRL", "ALT" or "NONE".
+function Boards.MoveKey()
+  local k = ns.settings and ns.settings.boardMoveKey
+  return MOVE_KEY_SET[k] and k or "SHIFT"
+end
+
+--- The move key as a word ("Shift"), or nil when moving by key is off.
+function Boards.MoveKeyWord() return MOVE_KEY_WORD[Boards.MoveKey()] end
+
+local function moveKeyDown()
+  local k = Boards.MoveKey()
+  if k == "NONE" then return false end
+  return ns.wow.modifierDown and ns.wow.modifierDown(k) or false
+end
+
+local function startMove(f)
+  f:SetMovable(true)
+  f.dragging = true
+  f:StartMoving()
+end
+
+local function stopMove(f)
+  f:StopMovingOrSizing()
+  f.dragging = nil
+  savePos(f)
+end
+
+local function handleTab(f, label, width, point, rel)
   local h = CreateFrame("Button", nil, f)
-  h:SetSize(HANDLE_W, HANDLE_H)
-  h:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 0)
-  h:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  h:SetSize(width, HANDLE_H)
+  h:SetPoint(point, f, rel, 0, 0)
   local bg = h:CreateTexture(nil, "BACKGROUND")
   bg:SetAllPoints()
   bg:SetColorTexture(0.25, 0.19, 0.03, 0.9)
   h.text = text(h, "GameFontNormalSmall", "CENTER")
   h.text:SetAllPoints()
-  h.text:SetText(L["Edit"])
-  h:SetScript("OnClick", function() Boards.EditBoard(f.board.id, true) end)
-  Wd.Tip(h, function() return L["Edit this board: add, remove, restyle and move its numbers"] end)
+  h.text:SetText(label)
   h:Hide()
-  f.handle = h
   return h
 end
 
---- Can this board show its handle now?
+local function ensureHandle(f)
+  if f.handle then return f.handle end
+  local h = handleTab(f, L["Edit"], HANDLE_W, "BOTTOMRIGHT", "TOPRIGHT")
+  h:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  h:SetScript("OnClick", function() Boards.EditBoard(f.board.id, true) end)
+  Wd.Tip(h, function() return L["Edit this board: add, remove, restyle and move its numbers"] end)
+  f.handle = h
+  -- the move handle, at the other corner: drag it and the board follows
+  local m = handleTab(f, L["Move"], MOVE_W, "BOTTOMLEFT", "TOPLEFT")
+  m:RegisterForDrag("LeftButton")
+  m:SetScript("OnDragStart", function() startMove(f) end)
+  m:SetScript("OnDragStop", function() stopMove(f) end)
+  Wd.Tip(m, function()
+    local key = Boards.MoveKeyWord()
+    if key then return format(L["Drag this to move the board. Or hold %s and drag the board itself (Options: the key)."], key) end
+    return L["Drag this to move the board."]
+  end)
+  f.moveHandle = m
+  return h
+end
+
+--- Can this board show its handles now?
 local function handleFits(f)
   return f:IsShown() and not f.board.mini and not isEditing(f.board) and not state.combat
+end
+
+--- The board takes the mouse and drags while the move key is held over it (armed), and lets go after.
+local function armMove(f, on)
+  if (f.moveArmed or false) == on then return end
+  f.moveArmed = on or nil
+  local grab = (f.strip and f.strip:IsShown()) and f.strip or nil    -- a mini board: its strip has the mouse
+  if on then
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self) startMove(self) end)
+    f:SetScript("OnDragStop", function(self) stopMove(self) end)
+    if grab then
+      grab:RegisterForDrag("LeftButton")
+      grab:SetScript("OnDragStart", function() startMove(f) end)
+      grab:SetScript("OnDragStop", function() stopMove(f) end)
+    end
+  else
+    f:SetScript("OnDragStart", nil)
+    f:SetScript("OnDragStop", nil)
+    if f.strip then
+      f.strip:SetScript("OnDragStart", nil)
+      f.strip:SetScript("OnDragStop", nil)
+    end
+    setMouse(f)
+  end
 end
 
 local HOVER_GAP = 0.1
 local sinceHover = HOVER_GAP
 
---- Show or hide each board's edit handle by where the cursor is. Returns how many handles are shown (tests).
+--- Show or hide each board's Edit and Move tabs by where the cursor is, and arm the boards under the cursor for
+--- moving while the move key is held. Returns how many boards show their tabs (tests).
 function Boards.Hover(elapsed)
   sinceHover = sinceHover + (elapsed or 0)
   if sinceHover < HOVER_GAP then return nil end
   sinceHover = 0
   local shown = 0
+  local keyDown = moveKeyDown()
   for _, f in pairs(frames) do
+    local onBoard = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
     local over = false
     if handleFits(f) then
-      over = (f.IsMouseOver and f:IsMouseOver()) or (f.handle and f.handle:IsShown() and f.handle:IsMouseOver()) or false
+      over = onBoard or (f.handle and f.handle:IsShown() and (f.handle:IsMouseOver() or f.moveHandle:IsMouseOver()))
+        or f.dragging or false
     end
     if over then
       local h = ensureHandle(f)
-      if not h:IsShown() then h:Show() end
+      if not h:IsShown() then h:Show(); f.moveHandle:Show() end
       shown = shown + 1
     elseif f.handle and f.handle:IsShown() then
       f.handle:Hide()
+      f.moveHandle:Hide()
+    end
+    if not isEditing(f.board) then
+      armMove(f, (f.dragging or (onBoard and keyDown)) and true or false)
+    elseif f.moveArmed then
+      f.moveArmed = nil                 -- edit mode took over the drag scripts (setEditChrome)
     end
   end
   return shown
@@ -934,17 +1024,20 @@ function Boards.ResetPosition(board)
   Boards.Flash(board.id)
 end
 
-local REASON = { off = "Off", runOnly = "Hidden: only during runs", instance = "Hidden: in instances",
-  combat = "Hidden: in combat" }
+-- (2026-11-25, the user) "On HUD" / "Only here" say where a board is; "Shown" / "Off" said neither
+local REASON = { off = "Only here", runOnly = "On HUD, hidden: only during runs", instance = "On HUD, hidden: in instances",
+  combat = "On HUD, hidden: in combat" }
 
---- The board's status in words for the Boards tab: "Shown", "Off", "Hidden: in combat" (naming the rule),
---- "Off screen?" (shown but outside the screen), "Faded" (mouse-over fade), "Tiny?" (a scale under 0.5).
+--- The board's status in words for the Boards and Overview tabs: "On HUD"; "Only here" (in the Hard Counters window,
+--- not on screen); "On HUD, hidden: in combat" (naming the rule); "Off screen?" (on the HUD but outside the screen);
+--- "On HUD (faded)" (mouse-over fade); "Tiny?" (a scale under 0.5).
 function Boards.Status(board)
   local f = frames[board.id]
   local st = { combat = state.combat, instance = state.instance, runOpen = HC:GetRun() ~= nil, mouseOver = true,
-    editing = isEditing(board) }
+    editing = isEditing(board), editOwn = editIds[board.id] == true }
   local shown, _, why = M.Visibility(board, st)
   if not shown then return L[REASON[why] or "Hidden"], why end
+  if not board.shown then return L["Only here (on screen while edited)"], "off" end
   if (board.scale or 1) < 0.5 then return L["Tiny?"], "tiny" end
   if f and f:IsShown() then
     local l, r, t, b = f:GetLeft(), f:GetRight(), f:GetTop(), f:GetBottom()
@@ -956,8 +1049,8 @@ function Boards.Status(board)
       return L["Off screen?"], "offscreen"
     end
   end
-  if (board.show or {}).mouseoverFade then return L["Shown (faded)"], "faded" end
-  return L["Shown"], "shown"
+  if (board.show or {}).mouseoverFade then return L["On HUD (faded)"], "faded" end
+  return L["On HUD"], "shown"
 end
 
 --- Redraw one board: visibility, mode, values. rebuild = true re-lays its rows (tiles or width changed).
@@ -972,6 +1065,7 @@ function Boards.Refresh(id, rebuild)
   f = ensureFrame(board)
   local editingThis = isEditing(board)
   state.editing = editingThis
+  state.editOwn = editIds[id] == true           -- (v8) a board edited on its own shows meanwhile, "Only here" or not
   state.peek = peeking(id)                      -- (HC-68) Show now, or its row hovered in the Boards tab
   state.runOpen = HC:GetRun() ~= nil            -- "only while a run is open": a dungeon run, or /hc run start
   state.mouseOver = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
@@ -1171,10 +1265,10 @@ local function askText(prompt, current, fn)
 end
 Boards.AskText = askText
 
---- A board just added to from elsewhere (the Trackers window, HC-36): shown if it was hidden, and the new tile
---- flashes once (on a mini board, its strip). Nothing flashes when the board's own rules hide it (combat, ...).
+--- A board just added to from elsewhere (the Trackers tab, the Overview tab): the new tile flashes once (on a mini
+--- board, its strip). Nothing flashes when the board is not on the HUD (v8: adding to a board no longer puts it
+--- there) or its own rules hide it (combat, ...).
 function Boards.Reveal(board, tile)
-  if not board.shown then board.shown = true end
   Boards.Refresh(board.id, true)
   local f = frames[board.id]
   if not (f and f:IsShown()) then return end
@@ -1380,6 +1474,13 @@ function Boards.AddMenu(anchor, board)
   ns.Menu.Show(anchor, items)
 end
 
+--- The reading picker alone, by tracker (the Overview tab's "+ Tile" on a board's panel).
+function Boards.AddReadingMenu(anchor, board)
+  local items = readingItems(board, nil, anchor)
+  table.insert(items, 1, { text = format(L["Add a tile to %s"], board.name), title = true })
+  ns.Menu.Show(anchor, items)
+end
+
 --- "Move to": the other boards, then a new one (DESIGN §16.8). The tile keeps its settings; on the board's timer it
 --- reads its new board's period.
 local function moveItems(board, i)
@@ -1392,7 +1493,7 @@ local function moveItems(board, i)
     end
   end
   for _, b in ipairs(M.MoveTargets(board)) do
-    sub[#sub + 1] = { text = b.name .. (b.shown and "" or ("  |cff808080" .. L["(hidden)"] .. "|r")), func = go(b) }
+    sub[#sub + 1] = { text = b.name .. (b.shown and "" or ("  |cff808080" .. L["(Only here)"] .. "|r")), func = go(b) }
   end
   sub[#sub + 1] = { text = L["New board"], tip = L["A board of its own, with its own timer: to pause this tile alone."],
     func = go(nil) }
@@ -1571,14 +1672,29 @@ function Boards.TileMenu(anchor, board, i)
   items[#items + 1] = { text = L["Move down"], disabled = i == #board.tiles,
     func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move to"], sub = moveItems(board, i) }
-  -- (HC-67) a reading tile leaves the board but stays in the collection (the Overview tab); a heading just goes
+  -- (v8) a reading tile is taken off the HUD (it stays on this board in the Overview tab, counting) or deleted
   local reading = tile.kind == "reading"
-  items[#items + 1] = { text = reading and L["Remove from board"] or L["Remove"],
-    tip = reading and L["It stays in the Overview tab (Window only), from where you can put it back."] or nil,
+  if reading then
+    items[#items + 1] = { text = L["Hide from HUD"],
+      tip = L["It stays on this board in the Overview tab (Only here), still counting; put it back from there."],
+      func = function()
+        M.SetTileOnHud(tile, false)
+        Boards.Refresh(board.id, true)
+        if ns.RefreshOverview then ns.RefreshOverview() end
+      end }
+  end
+  items[#items + 1] = { text = reading and L["Delete tile"] or L["Remove"],
     func = function()
-      M.RemoveTile(board, i)
-      Boards.Refresh(board.id, true)
-      if ns.RefreshOverview then ns.RefreshOverview() end
+      local function go()
+        M.RemoveTile(board, i)
+        Boards.Refresh(board.id, true)
+        if ns.RefreshOverview then ns.RefreshOverview() end
+      end
+      if reading then
+        confirm(format(L["Delete the tile %s? Your counts don't change."], M.TileLabel(tile, board)), go)
+      else
+        go()
+      end
     end }
   ns.Menu.Show(anchor, items)
 end
@@ -1683,9 +1799,15 @@ function Boards.BoardMenu(anchor, board)
     { text = L["Rename"], func = function()
       askText(L["Board name"], board.name, function(s) Boards.Rename(board, s) end)
     end },
-    { text = L["Hide this board"], func = function() board.shown = false; Boards.Refresh(board.id) end },
+    { text = L["Take off the HUD"], tip = L["It stays in the Hard Counters window (Overview, Boards), still counting."],
+      func = function()
+        board.shown = false
+        if editIds[board.id] then editIds[board.id] = nil; Boards.SyncEscape() end
+        Boards.Refresh(board.id)
+        if ns.RefreshOverview then ns.RefreshOverview() end
+      end },
     { text = L["Delete this board"], func = function()
-      confirm(format(L["Delete the board %s? Its tiles stay in the Overview tab; your counts don't change."], board.name), function()
+      confirm(format(L["Delete the board %s and its tiles? Your counts don't change."], board.name), function()
         M.Delete(board.id)
         Boards.RefreshAll()
       end)
@@ -1704,7 +1826,7 @@ end
 --- A new board from a preset, or an empty one (presetKey nil), which opens in edit mode: it has nothing to show
 --- until the player adds to it.
 function Boards.NewBoard(presetKey)
-  local b = presetKey and M.Create(presetKey) or M.Create(nil, { name = L["Board"] })
+  local b = presetKey and M.Create(presetKey, { shown = true }) or M.Create(nil, { name = L["Board"], shown = true })
   if not presetKey and b then editIds[b.id] = true; Boards.SyncEscape() end
   Boards.RefreshAll(true)
   return b
@@ -1735,12 +1857,16 @@ function Boards.OpenNewBoard(opts)
   return Boards.NewBoard(opts and opts.preset)
 end
 
---- A board the dialog just made: on screen at once with one flash; an empty one opens in edit mode.
+--- A board the dialog just made. On the HUD (the dialog's choice): on screen at once with one flash, an empty one
+--- in edit mode. Else (v8, the default) it is in the Hard Counters window only, and the chat line says so.
 function Boards.Created(b, empty)
-  if empty then editIds[b.id] = true; Boards.SyncEscape() end
+  if empty and b.shown then editIds[b.id] = true; Boards.SyncEscape() end
   Boards.RefreshAll(true)
-  Boards.Flash(b.id)
-  if ns.Print then ns.Print(L["Board %s made: /hc board %s shows or hides it."], b.name, b.name:lower()) end
+  if b.shown then Boards.Flash(b.id) end
+  if ns.Print then
+    if b.shown then ns.Print(L["Board %s made, on your HUD: /hc board %s takes it off or puts it back."], b.name, b.name:lower())
+    else ns.Print(L["Board %s made, in the Overview tab only. Its On HUD switch there, or /hc board %s, puts it on screen."], b.name, b.name:lower()) end
+  end
   if ns.RefreshOverview then ns.RefreshOverview() end
   if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
 end
@@ -1776,7 +1902,7 @@ end
 function Boards.TogglePreset(key, show)
   local b = findBoard(key)
   if not b then
-    b = M.Create(key)
+    b = M.Create(key, { shown = true })
     if key == "run" then M.Store().runBoard = true end
     show = true
   end
@@ -1802,9 +1928,9 @@ ns.AddSlash("board", function(rest)
   local list = M.Store().list
   if cmd == "" then
     for i, b in ipairs(list) do
-      ns.Print("%d. %s%s%s", i, b.name, b.shown and "" or (" (" .. L["hidden"] .. ")"), b.mini and (" (" .. L["mini"] .. ")") or "")
+      ns.Print("%d. %s%s%s", i, b.name, " (" .. (b.shown and L["On HUD"] or L["Only here"]) .. ")", b.mini and (" (" .. L["mini"] .. ")") or "")
     end
-    ns.Print(L["/hc board <name or n> | new [name or run|pocket|leveling] | mini <n> | reset"])
+    ns.Print(L["/hc board <name or n> (on or off the HUD) | new [name or run|pocket|leveling] | mini <n> | reset"])
   elseif cmd == "new" then
     -- (HC-68) no name: the dialog; a preset's key: that preset; a name: an empty board of that name (unique)
     if arg == "" then Boards.OpenNewBoard(); return end
@@ -1817,10 +1943,7 @@ ns.AddSlash("board", function(rest)
       end
     end
     local b = M.Create(key, { name = (not key) and arg or nil })
-    if not key then editIds[b.id] = true; Boards.SyncEscape() end
-    Boards.RefreshAll(true)
-    Boards.Flash(b.id)
-    ns.Print(L["Board %s made: /hc board %s shows or hides it."], b.name, b.name:lower())
+    Boards.Created(b, not key)
   elseif cmd == "mini" then
     local b = findBoard(arg ~= "" and arg or "1")
     if b then b.mini = not b.mini; Boards.Refresh(b.id, true) end
@@ -1834,9 +1957,14 @@ ns.AddSlash("board", function(rest)
     end)
   else
     local b = findBoard(cmd)
-    if b then b.shown = not b.shown; Boards.Refresh(b.id, true) else ns.Print(L["no such board: %s"], cmd) end
+    if b then
+      b.shown = not b.shown
+      Boards.Refresh(b.id, true)
+      if ns.RefreshOverview then ns.RefreshOverview() end
+      ns.Print(b.shown and L["%s: on your HUD."] or L["%s: off the HUD (it stays in the Overview tab)."], b.name)
+    else ns.Print(L["no such board: %s"], cmd) end
   end
-end, L["list boards, show or hide one, add one from a preset"])
+end, L["list boards, put one on or off the HUD, add one from a preset"])
 
 ns.AddSlash("edit", function() Boards.SetEditing(not anyEditing()) end, L["edit every board (Escape or Done to leave)"])
 -- the commands of the panels boards replace (§6.4)
@@ -1844,7 +1972,7 @@ ns.AddSlash("panel", function(rest)
   local arg = (rest or ""):lower():match("^%s*(%S*)")
   local b = Boards.TogglePreset("run", (arg == "compact" or arg == "full") and true or nil)
   if arg == "compact" or arg == "full" then b.mini = arg == "compact"; Boards.Refresh(b.id, true) end
-end, L["show or hide the Run board (compact | full: its mini mode)"])
+end, L["show or hide the Farming board (compact | full: its mini mode)"])
 ns.AddSlash("live", function() Boards.TogglePreset("pocket") end, L["show or hide the Pocket board"])
 function ns.ShowRunPanel(show) Boards.TogglePreset("run", show) end
 function HC:ToggleRunPanel() Boards.TogglePreset("run") end
@@ -1915,7 +2043,13 @@ end, "Boards")
 ns.AddOptions("boards", function()
   local args = {
     intro = { type = "description", order = 0, fontSize = "medium",
-      name = L["Boards are your on-screen numbers. Hover a board and click Edit above it to change it; /hc edit edits every board."] },
+      name = L["Boards are your on-screen numbers. Hover a board: Edit above its right corner changes it, Move above "
+        .. "its left corner drags it; /hc edit edits every board."] },
+    moveKey = { type = "select", order = 0.5, name = L["Move a locked board with"],
+      desc = L["Hold this key with the cursor over a board on your HUD, then drag the board. Boards stay click-through the rest of the time."],
+      values = { SHIFT = L["Shift + drag"], CTRL = L["Ctrl + drag"], ALT = L["Alt + drag"], NONE = L["Off (the Move tab and edit mode only)"] },
+      get = function() return Boards.MoveKey() end,
+      set = function(_, v) ns.settings.boardMoveKey = v end },
     edit = { type = "execute", order = 1, name = L["Edit every board"], func = function() Boards.SetEditing(true) end },
     -- HC-68 (DESIGN §17.6): New board opens the dialog; each board's show and mini switches moved to the Boards tab
     new = { type = "execute", order = 2, name = L["New board..."],

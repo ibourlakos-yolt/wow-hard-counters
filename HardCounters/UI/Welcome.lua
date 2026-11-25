@@ -1,7 +1,9 @@
 -- The tutorial (the user, 2026-11-24; it replaces HC-74's one-page welcome window). A small window of steps, Back
 -- and Next, that walks through Hard Counters where it is: the boards on screen (the first one flashes), a first
 -- board for the character's class (one click makes it, from Character Stats' class preset), then the Hard Counters
--- window, opened by the tour on each of its tabs in turn (Overview, Boards, Trackers, Runs, the packs' tabs, Guide).
+-- window, opened by the tour on each of its tabs in turn (Overview, Boards, Packs, Trackers, Runs, the packs' tabs,
+-- Guide). Since 2026-11-25 nothing is on the HUD at a first setup: the boards step says so, the class-board step
+-- puts that one board on screen (the player's click), and the Packs step is where a new player chooses packs.
 -- It shows by itself once per account, at the first login that hasn't run it (`ns.globalSettings.tutorialSeen`,
 -- set when it opens: closing it early counts), and again from the window's Tutorial button, the Guide tab's Run the
 -- tutorial button, and /hc tutorial. A new character on an account that has seen it gets HC-74's chat line.
@@ -80,7 +82,7 @@ end
 function Tutorial.MakeClassBoard()
   local key = Tutorial.ClassPreset()
   if not key then return nil end
-  local b = BM().Create(key)
+  local b = BM().Create(key, { shown = true })      -- (the player's click: "makes it and puts it on your HUD")
   b.pos = ns.U.copy(CLASS_POS)
   made = b.id
   if Bo() then Bo().Created(b) end
@@ -127,12 +129,22 @@ STEPS = {
   { title = L["Boards: the numbers on your screen"], hud = true, board = firstBoard,
     text = function()
       local b = firstBoard()
+      local first
+      if not b then
+        first = L["A board is a panel of tiles on your screen. This character has none yet: the next step makes one."]
+      elseif b.shown then
+        first = format(L["The flashing panel is a board, called %s. It is this character's own: every character has its own boards."], gold(b.name))
+      else
+        first = format(L["The flashing panel is a board, called %s. It is flashing for this tour only: a new board is not on your screen until you put it there (the Overview tab, its %s switch)."], gold(b.name), gold(L["On HUD"]))
+      end
+      local key = ns.Boards and ns.Boards.MoveKeyWord()
       return lines(
-        b and format(L["The flashing panel is a board, called %s. It is this character's own: every character has its own boards."], gold(b.name))
-          or L["A board is a panel of tiles on your screen. This character has none yet: the next step makes one."],
+        first,
         "",
-        L["While you play a board is locked: clicks go through it to the world."],
-        bullet(format(L["Hover a board and click the gold %s tab above it to change it. Drag it by its name bar; Done or Escape ends it."], gold(L["Edit"]))),
+        L["On your screen a board is locked: clicks go through it to the world."],
+        bullet(format(L["Hover a board: two small tabs show above it. %s, above its left corner, drags it."], gold(L["Move"]))
+          .. (key and (" " .. format(L["So does holding %s and dragging the board itself."], gold(key))) or "")),
+        bullet(format(L["%s, above its right corner, opens it for changes; Done or Escape ends it."], gold(L["Edit"]))),
         bullet(format(L["While editing, %s adds a tile, and a right-click on a tile changes it: total or per hour, number, bar or gauge, its size, this character or the whole account."], gold("[+]"))),
         bullet(L["The buttons on a board are its clock. Its tiles count since the clock started: pause it, reset it, or save the stretch as a run."]),
         bullet(L["A right-click on the name bar opens the board's menu: mini mode (one line), when it shows (combat, instances), what period it counts."]))
@@ -147,23 +159,23 @@ STEPS = {
       local key, p = Tutorial.ClassPreset()
       if not key then
         return lines(
-          L["Hard Counters has ready-made boards: Leveling, Pocket and Run for gold and XP, and with the Character Stats pack one for each role and each class."],
+          L["Hard Counters has ready-made boards: Leveling, Pocket and Farming for gold and XP, and with the Character Stats pack one for each role and each class."],
           "",
-          L["Character Stats isn't loaded on this character (the game's AddOns list turns it on), so there is no class board to offer. New board... lists the ready-made boards you do have, or starts an empty one."])
+          L["Character Stats isn't loaded on this character (the Packs tab turns it on), so there is no class board to offer. New board... lists the ready-made boards you do have, or starts an empty one."])
       end
       local b = classBoard(key)
       if b then
         return lines(
           format(L["This character has its class board: %s, flashing now. Its stats are live, and most keep updating in combat."], gold(b.name)),
           "",
-          L["Try what the last step said: hover it, click Edit, drag it where you want it, right-click a tile."],
+          L["Try what the last step said: hover it, drag it by its Move tab, click Edit, right-click a tile."],
           "",
           L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
       end
       return lines(
         format(L["Hard Counters has a ready-made board for every class. Yours is %s: the stats this class uses, live."], gold(p.name)),
         "",
-        L["The button below makes it, left of this window. It is yours to change: move it, drop tiles you don't want, add others."],
+        L["The button below makes it and puts it on your HUD, left of this window. It is yours to change: move it, drop tiles you don't want, add others, or take it off the screen again."],
         "",
         L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
     end,
@@ -185,34 +197,50 @@ STEPS = {
       return lines(
         format(L["This is the Hard Counters window. %s opens it; so do the minimap button and the game's AddOns menu."], gold("/hc")),
         "",
-        bullet(L["The icon tabs down its right edge are Hard Counters' own: Overview, Boards, Trackers, Runs and Guide. Hover one for its name."]),
+        bullet(L["The icon tabs down its right edge are Hard Counters' own: Overview, Boards, Packs, Trackers, Runs and Guide. Hover one for its name."]),
         bullet(L["The tabs along the bottom belong to the packs you have (Farmer's Ledger, Character Stats, ...)."]),
         bullet(L["The title bar names the open tab. Drag the window by it; Escape closes it."]),
+        bullet(format(L["At the top right, on every tab: %s for one page about the open tab, %s for a few steps through it."], gold(L["Help"]), gold(L["Tab tour"]))),
         "",
         L["The next steps open each tab in turn. It opened on the first one: Overview."])
     end },
 
-  { title = L["Overview: everything you follow"], tab = "overview",
+  { title = L["Overview: make boards, choose what is on screen"], tab = "overview",
     text = function()
       return lines(
-        L["Overview shows every tile you have as a card with its number now, grouped by the board it is on."],
+        L["Overview shows each of your boards as a panel and each tile as a card with its number now. This is where boards and tiles are made; nothing goes on your screen until you say so."],
         "",
-        bullet(L["Click a card to edit the tile, move it to another board or take it off the screen."]),
-        bullet(L["Click a board's heading for that board's actions: show, hide, edit, rename."]),
-        bullet(format(L["Tiles on no board sit under %s: numbers you want to keep an eye on here without having them on screen."], gold(L["Window only"]))),
-        bullet(L["Add tile takes you to the Trackers tab to pick a number."]))
+        bullet(format(L["%s (top right) makes a board: ready-made, empty, or a copy."], gold(L["New board..."]))),
+        bullet(format(L["%s on a board's panel adds a number to it: pick it by tracker."], gold(L["+ Tile"]))),
+        bullet(format(L["The switch beside it says %s or %s: click it to put that board on your screen, or take it off. It counts either way."], gold(L["On HUD"]), gold(L["Only here"]))),
+        bullet(L["Click a card to edit the tile, keep that one tile off the screen, move it to another board, or delete it."]),
+        bullet(L["Click a board's name for that board's actions: edit on screen, rename, duplicate, delete."]))
     end },
 
   { title = L["Boards: find, make, copy"], tab = "boards",
     text = function()
       return lines(
-        L["The Boards tab lists this character's boards and whether each one is on screen."],
+        L["The Boards tab lists this character's boards and where each one is: On HUD, or Only here."],
         "",
-        bullet(L["Hover a board's row and it flashes on screen: the quick way to find one."]),
+        bullet(L["Hover a board's row and it flashes where it is, or would be, on screen: the quick way to find one."]),
         bullet(format(L["%s (top right) makes one: from a ready-made board, empty, or as a copy."], gold(L["New board..."]))),
         bullet(format(L["%s on the left lists the ready-made boards: Activity, Roles, your class, and any you saved yourself."], gold(L["Presets"]))),
         bullet(format(L["%s appears once you have several: copy a board from one character to another."], gold(L["Other characters"]))),
-        bullet(L["Click a board for its actions: Show, Edit on screen, Reset position, Duplicate, Save as preset, Delete."]))
+        bullet(L["Click a board for its actions: Put on HUD, Edit on screen, Reset position, Duplicate, Save as preset, Delete."]))
+    end },
+
+  { title = L["Packs: choose what you want"], tab = "packs",
+    text = function()
+      local chosen = ns.Packs and ns.Packs.Chosen()
+      return lines(
+        L["Packs are where the numbers come from: Farmer counts loot, vendor value and reputation; Character Stats your stats; Traveler distance and speed. Gold and experience are built in."],
+        "",
+        bullet(format(L["Tick the packs you want, then %s. Their trackers are switched on for you."], gold(L["Use these packs"]))),
+        bullet(format(L["When a pack has to be loaded or unloaded the tab shows %s: a few seconds, nothing is lost (/reload does the same)."], gold(L["Reload now"]))),
+        bullet(L["History starts off: you get this session and each board's own clock. The next step says where to turn it on."]),
+        "",
+        chosen and L["You have chosen your packs already; change your mind here any time."]
+          or L["Do it now if you like: this window stays open, and the tour waits."])
     end },
 
   { title = L["Trackers: what is counted"], tab = "trackers",
@@ -241,12 +269,12 @@ STEPS = {
     text = function()
       local packs = packLines()
       local out = { L["Packs add readings, and some add a tab of their own along the bottom of this window. On this character:"], "" }
-      if #packs == 0 then out[#out + 1] = bullet(L["(none loaded: the game's AddOns list turns the packs on)"]) end
+      if #packs == 0 then out[#out + 1] = bullet(L["(none loaded: the Packs tab turns the packs on)"]) end
       for _, s in ipairs(packs) do out[#out + 1] = s end
       out[#out + 1] = ""
       out[#out + 1] = L["Farmer counts loot, vendor value and reputation; Character Stats your stats; Traveler distance and speed. A pack with no tab still adds its numbers to Trackers and its ready-made boards to New board..."]
       out[#out + 1] = ""
-      out[#out + 1] = L["Don't want one? Turn it off in the game's AddOns list. Options: the Tab labels choice (icon, title or both)."]
+      out[#out + 1] = L["Don't want one? Untick it in the Packs tab. Options: the Tab labels choice (icon, title or both)."]
       return table.concat(out, "\n")
     end },
 
@@ -256,6 +284,7 @@ STEPS = {
         L["That's the tour. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, runs, the packs, every /hc command, and where pack authors start."],
         "",
         bullet(format(L["%s, at the top of this window on every tab, starts the tour again. So do the Guide tab's button and %s."], gold(L["Tutorial"]), gold("/hc tutorial"))),
+        bullet(format(L["%s and %s, beside it, are about the open tab only: one page, or a few steps."], gold(L["Help"]), gold(L["Tab tour"]))),
         bullet(format(L["%s lists every command; %s makes a report to paste when something breaks."], gold("/hc help"), gold("/hc report"))),
         "",
         L["Now play: your boards count while you do."])
@@ -378,7 +407,7 @@ function Tutorial.Steps() return STEPS end
 
 --- After a login: the account's first login that hasn't run the tour gets it (a character Hard Counters already
 --- knew too: the tour is newer than they are). After that a new character, whose starter board M.Seed just made
---- (boards.welcome), gets a chat line. Returns "window", "line", "later" (in combat: asked again shortly) or nil.
+--- (boards.welcome), gets a chat line (its board is in the Overview tab, not on the HUD). Returns "window", "line", "later" (in combat: asked again shortly) or nil.
 function Tutorial.Check()
   local M = BM()
   if not (M and ns.charSettings) then return nil end
@@ -398,7 +427,7 @@ function Tutorial.Check()
   if not B.welcome then return nil end
   B.welcome = nil
   if ns.Print then
-    ns.Print(L["A Leveling board for this character. To copy another character's board: /hc boards, New board... (/hc tutorial: the tour again)"])
+    ns.Print(L["A Leveling board for this character, in the Overview tab (/hc): its On HUD switch puts it on your screen. To copy another character's board: New board... there. (/hc tutorial: the tour again)"])
   end
   return "line"
 end

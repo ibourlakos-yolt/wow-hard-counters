@@ -1930,3 +1930,43 @@ tutorial." Not seen in game.
   TOC: the first load needs a full client restart; on a `/reload` alone the tour works and its last step finds no
   Guide tab. The tour's window can cover the left of the Hard Counters window on a narrow screen (it is movable).
 - **Not done:** per-step pointers (an arrow at the Edit tab or a tab's icon); a tour per pack; localisation.
+
+### 17.14 As built (2026-11-25): boards off the HUD by default, tiles on or off it, moving, packs, help
+
+The user's nine points (A to I), built in one round. What was decided on the way is marked **call**.
+
+- **A board lives in the window first** (A). `M.Create` and `M.Duplicate` make boards with `shown = false` unless
+  asked (`opts.shown`, the dialog's "Put it on my HUD"); `M.Seed` gives a new character its Leveling board the same
+  way. `board.shown` now reads "on the HUD"; the words everywhere are **On HUD** and **Only here** (C). A board edited
+  on its own (`state.editOwn`) shows while it is edited even when it is Only here; `/hc edit` leaves those alone.
+  `Boards.Reveal` no longer puts a board on screen. **Call:** the tutorial's "Make my <class> board" does put that
+  board on the HUD: the button says so and the click is the player's.
+- **No tile without a board** (B). BoardModel **v8**: tiles on no board ("Window only": left there by Remove from
+  board, by Take off HUD, or by a deleted board, with nothing saying how) move once to a board named "Unsorted",
+  `shown = false`, scope session (`B.unsorted`: its Overview panel explains it). `M.NewTile` and `offBoard` are gone;
+  `M.RemoveTile` and `M.Delete` delete reading tiles. A placement has `off = true` when the tile is kept off the HUD
+  (`M.TileOnHud`, `M.SetTileOnHud`): `M.Layout` and `M.HeroIndex` skip it, `M.LayoutKey` changes with it, presets and
+  copies carry it. The board's timer still counts such a tile. **Call:** deleting a board deletes its tiles; the
+  confirmation says so.
+- **Overview makes things** (A). Per board: the HUD switch, "+ Tile" (`Boards.AddReadingMenu`: the [+] menu's
+  reading picker), the tile count; top right "New board...". A card's menu: Edit, On HUD, Move to board, Delete tile.
+- **The New board dialog**: "Start from" is `Widgets.Dropdown` (a field with an arrow); "Put it on my HUD" is off by
+  default and greys the visibility rules under it.
+- **Moving a locked board** (D). `Boards.Hover` (ten times a second) shows two tabs above a hovered full board: Move
+  above the left corner (a drag handle), Edit above the right one, never side by side. While the move key
+  (`settings.boardMoveKey`: SHIFT, CTRL, ALT or NONE; `ns.wow.modifierDown`) is held with the cursor on a board, the
+  board is armed: it takes the mouse and drags (a mini board by its strip), in combat too; released, it is
+  click-through again. **Call:** Shift is the default.
+- **The Packs tab** (E, `UI/Packs.lua`, tab order 2.5). Rows from the AddOn list (`## Group: HardCounters`) plus the
+  built-in Basic. "Use these packs": a ticked, loaded pack gets the trackers the player never switched (`chosen`)
+  turned on, history untouched (off by default); a pack to load or unload goes through `ns.wow.setAddonEnabled` for
+  this character and waits for a reload (`globalSettings.packsPending`, finished at the next login);
+  `globalSettings.packsChosen`. The history paragraph is always on the tab. Not verified in game: the AddOn calls
+  and `ReloadUI` from our click.
+- **Help and Tab tour** (F, G, H; `UI/Help.lua`). One window, two uses. Each tab registers `{ what, can, effect,
+  tour }` at the end of its own file; packs through `HC:RegisterWindowHelp`. Keeping them true: a `{name}` in the
+  text is the exact label of a button, menu item or tab, and `tests/help_spec.lua` fails when no Lua source has that
+  string any more, or when a registered window has no help. Ground rule as for the tutorial.
+- **Character Stats** (I): its DESIGN §8 "As built (2026-11-25)". Hard Counters' part: `HC:ReadingsChanged()`.
+- **Not done:** per-school spell hit (one number from the game; the rest is talents), per-school rows in the stats
+  window (they are tiles), a mana tick bar after the five seconds, dragging tiles between boards in Overview.

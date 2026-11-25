@@ -41,7 +41,7 @@ local function commandLines()
 end
 
 local PACK_WORDS = {
-  hc = "Gold in and out (by source, if you like), net gold, gold owned, XP gained, XP this level, rested XP, time to level, your level. Always on. The Pocket, Leveling and Run boards.",
+  hc = "Gold in and out (by source, if you like), net gold, gold owned, XP gained, XP this level, rested XP, time to level, your level. Always on. The Pocket, Leveling and Farming boards.",
   hcfarm = "What you farm: the money Ledger by source, items looted (all, or one item) and their vendor value, your best drop, reputation gained (all, or one faction), In bags: an item, Standing progress: a faction.",
   hcstats = "Your character sheet as readings: attributes, melee, ranged, spell and defense stats, weapon damage, speed and skills, resistances, durability, item level. A board for each role and each class.",
   hctravel = "How you travel: distance on foot, mounted, swimming, by flight and by boat, time moving, average and top speed, speed now, jumps, falls, corpse runs, flights. The Trip and Flight log boards.",
@@ -69,8 +69,9 @@ local PAGES = {
       format(L["%s (top right) is a short tour: the boards on your screen, a first board for your class, then this window tab by tab. It showed by itself the first time you logged in with it; the Tutorial button at the top of the window runs it from any tab."], gold(L["Run the tutorial"])),
       head(L["In a hurry"]),
       item(format(L["%s opens this window. So do the minimap button and the game's AddOns menu."], gold("/hc"))),
-      item(L["Hover a board on screen and click its Edit tab to move it or change it."]),
-      item(L["Boards tab, New board...: another board, ready-made or empty."]),
+      item(L["Overview tab: New board... makes a board, + Tile on it adds a number, its On HUD switch puts it on your screen."]),
+      item(L["Hover a board on screen: Edit above its right corner changes it, Move above its left corner drags it."]),
+      item(L["Packs tab: tick the packs you want, Use these packs."]),
       item(L["Trackers tab: click a tracker, then Add tile beside the number you want."]),
       item(L["Turn history on for a tracker (Trackers tab) to get today, this week, this month."]),
       head(L["Good to know"]),
@@ -110,12 +111,15 @@ local PAGES = {
   { key = "boards", title = L["Boards"], text = function()
     return join({
       gold(L["Boards: the panels on your screen"]),
-      L["While you play a board is locked: it is text, and clicks go through it to the world. Only its clock's buttons take clicks."],
+      L["A board is made in this window (Overview) and stays there, Only here, until you put it on your HUD: its On HUD switch in Overview, the box in the New board dialog, or /hc board <name>. On the HUD it is locked while you play: it is text, and clicks go through it to the world. Only its clock's buttons take clicks."],
+      head(L["Moving a board"]),
+      item(L["Hover it: a Move tab shows above its left corner. Drag that tab and the board follows."]),
+      item(L["Or hold Shift and drag the board itself. Options, Boards: choose Ctrl or Alt instead, or switch the key off."]),
       head(L["Changing a board"]),
-      item(L["Hover it and click the gold Edit tab above it (not in combat). Done on its name bar, or Escape, ends it."]),
+      item(L["Hover it and click the gold Edit tab above its right corner (not in combat). Done on its name bar, or Escape, ends it."]),
       item(L["/hc edit edits every board at once. So does ctrl-click on the minimap button, and opening the game's own Edit Mode."]),
       item(L["While editing: drag the name bar to move it, drag its side grip for the width, [+] to add a tile, right-click a tile to change it."]),
-      item(L["Right-click the name bar for the board's menu: Scope, Mini mode, Visibility, Rename, Hide, Delete."]),
+      item(L["Right-click the name bar for the board's menu: Scope, Mini mode, Visibility, Rename, Take off the HUD, Delete."]),
       head(L["The board is the clock"]),
       item(L["Every board has one timer, and its tiles count over it. Its buttons start and pause it; the board's menu also has Stop, Reset and Save as run."]),
       item(L["Reset starts from zero. If there was real play since the last start, it is saved as a run first."]),
@@ -125,10 +129,10 @@ local PAGES = {
       head(L["When a board shows"]),
       item(L["Its menu, Visibility: show, fade or hide in combat; show or hide in instances; only while a run is open; faded until the mouse is over it."]),
       item(L["Mini mode folds a board into one line. Hover it to see the whole board; click it to pause or start its clock; right-click it for its menu."]),
-      item(format(L["%s shows or hides one from the chat line."], gold("/hc board <name>"))),
+      item(format(L["%s puts one on your HUD or takes it off, from the chat line."], gold("/hc board <name>"))),
       head(L["More boards"]),
-      item(L["New board... (the Boards tab, a right-click on the minimap button, /hc board new) starts from a ready-made board, an empty one, or a copy."]),
-      item(L["Ready-made boards come grouped: Activity (Leveling, Pocket, Run, Trip...), Roles, Your class, Other classes."]),
+      item(L["New board... (the Overview and Boards tabs, a right-click on the minimap button, /hc board new) starts from a ready-made board, an empty one, or a copy. Tick Put it on my HUD there, or leave it for later."]),
+      item(L["Ready-made boards come grouped: Activity (Leveling, Pocket, Farming, Trip...), Roles, Your class, Other classes."]),
       item(L["A board you like can be saved as a preset of your own (Boards tab), to make others from, on any character."]),
       item(L["Each character has its own boards. Boards tab, Other characters: copy one over."]),
       head(L["Lost a board?"]),
@@ -158,7 +162,7 @@ local PAGES = {
       head(L["Other things a board can hold"]),
       item(L["Heading: a line of text to group tiles. Splits: the laps of the open run."]),
       head(L["Off the screen"]),
-      item(L["A tile doesn't have to be on a board. Overview keeps tiles that are Window only: there when you look, never on screen."]),
+      item(L["Every tile is on a board, but not every tile has to be on your screen. In Overview, a tile's menu has On HUD: off, it stays on its board in the window, still counting. A whole board can be Only here the same way. On a board on your HUD, a tile's menu has Hide from HUD."]),
     })
   end },
 
@@ -170,8 +174,9 @@ local PAGES = {
       gold(L["The Hard Counters window"]),
       format(L["%s, the minimap button and the game's AddOns menu open it. It is one window with tabs; Escape closes it, its title bar drags it."], gold("/hc")),
       head(L["Hard Counters' own tabs (the icons down the right edge)"]),
-      term(L["Overview"], L["every tile you have, as cards with their numbers now, board by board, then the tiles on no board."]),
+      term(L["Overview"], L["your boards as panels, their tiles as cards with their numbers now. Make boards and tiles here; put them on or off your HUD."]),
       term(L["Boards"], L["your boards and where they are, the ready-made boards, other characters' boards."]),
+      term(L["Packs"], L["choose the packs you want; their trackers are switched on for you, with history off."]),
       term(L["Trackers"], L["what is counted, what keeps history and how much room it takes, and every reading with Add tile."]),
       term(L["Runs"], L["your saved runs and dungeons, newest first. Click one for its summary."]),
       term(L["Guide"], L["this."]),
@@ -180,8 +185,10 @@ local PAGES = {
       item(L["Options has Tab labels for them: icon and title, title only, or icon only."]),
       head(L["The Tutorial button"]),
       item(L["At the top of the window on every tab: the tour again, from its first step."]),
+      head(L["Help and Tab tour"]),
+      item(L["Beside it, also on every tab. Help: one page on the open tab, what it is, what you can do there, how it changes your play. Tab tour: a few steps through that tab alone. /hc tour <tab> does the same."]),
       head(L["The minimap button"]),
-      item(L["Click: this window. Shift-click: show or hide your boards. Ctrl-click: edit every board. Right-click: New board..., the Boards tab, Options."]),
+      item(L["Click: this window. Shift-click: all your boards on or off the HUD. Ctrl-click: edit every board. Right-click: New board..., the Boards tab, Options."]),
       item(format(L["%s shows or hides the button. The AddOns menu entry is always there."], gold("/hc minimap"))),
       item(L["Titan Panel, ElvUI and other data broker bars get a Hard Counters feed with the same clicks."]),
       head(L["Options"]),
@@ -230,13 +237,13 @@ local PAGES = {
   { key = "packs", title = L["Packs"], text = function()
     local out = {
       gold(L["Packs: where the numbers come from"]),
-      L["Hard Counters itself is the engine, the boards and this window. Packs give it readings. One download brings several; each is its own entry in the game's AddOns list, to turn off if you don't want it."],
+      L["Hard Counters itself is the engine, the boards and this window. Packs give it readings. One download brings several. The Packs tab is where you choose: tick the ones you want and click Use these packs; their trackers are switched on, with history off. A pack you untick is not loaded any more after a reload (the tab has a Reload now button)."],
       head(L["Loaded on this character"]),
     }
     add(out, packLines())
     add(out, {
       head(L["Diagnostics"]),
-      item(L["A companion for finding problems: a log, live values, storage use and checks of the game's API. With it loaded, /hc report carries those checks, which helps most in a bug report. Turn it off in the AddOns list if you don't want it."]),
+      item(L["A companion for finding problems: a log, live values, storage use and checks of the game's API. With it loaded, /hc report carries those checks, which helps most in a bug report. Untick it in the Packs tab if you don't want it."]),
       head(L["What a pack adds"]),
       item(L["Trackers and readings (Trackers tab), ready-made boards (New board...), sometimes a tab along the bottom of this window and a /hc command."]),
       item(L["Tiles from a pack that isn't loaded are left out, not lost: they come back with the pack."]),
@@ -254,7 +261,7 @@ local PAGES = {
     add(out, {
       head(L["Examples"]),
       item(gold("/hc board") .. " - " .. L["list your boards with their numbers"]),
-      item(gold("/hc board leveling") .. " - " .. L["show or hide the board called Leveling (or /hc board 2, by its number)"]),
+      item(gold("/hc board leveling") .. " - " .. L["the board called Leveling on or off your HUD (or /hc board 2, by its number)"]),
       item(gold("/hc board new") .. " - " .. L["the New board dialog"]),
       item(gold("/hc board new pocket") .. " - " .. L["a board from a ready-made one: run, pocket or leveling"]),
       item(gold("/hc board new Herbs") .. " - " .. L["an empty board called Herbs, open for editing"]),
@@ -393,7 +400,7 @@ local function build(f)
 end
 
 ns.Windows.Register(ID, {
-  title = L["Guide"], icon = "Interface\\Icons\\INV_Misc_QuestionMark", tabOrder = 5,
+  title = L["Guide"], icon = "Interface\\Icons\\INV_Misc_QuestionMark", tabOrder = 5,   -- (the sixth tab: Packs is 2.5)
   width = 720, height = 440, minWidth = 600, minHeight = 360,
   build = build,
   onShow = function()
@@ -419,3 +426,18 @@ ns.AddSlash("guide", function(rest)
   local page = (rest or ""):match("^%s*(.-)%s*$")
   Guide.Show(page ~= "" and true or nil, page)
 end, L["the Guide tab: concepts, how-tos, every command (add a page: /hc guide commands)"])
+
+-- This tab's help and tour (UI/Help.lua): change them with the tab.
+local _ = ns.Help and ns.Help.Register(ID, {
+  what = "The Guide is the manual: the words Hard Counters uses, boards and tiles in depth, trackers and history, runs, the packs, every /hc command, and where addon authors start.",
+  can = {
+    "Pick a page on the left; scroll the text with the mouse wheel.",
+    "{Run the tutorial} starts the general tour again, from its first step.",
+    "Open a page straight from chat: /hc guide commands.",
+  },
+  effect = "Nothing here changes your game: it is for reading. The {Commands} page is built from what is loaded, so it also lists the commands of your packs.",
+  tour = {
+    { title = "Pages on the left", text = "Each entry on the left is a page. {Concepts} is the place to start; {Boards} and {Tiles} go into every choice a board and a tile have." },
+    { title = "Three kinds of help", text = "The {Tutorial} button (top right, on every tab) is the general tour. {Tab tour} beside it walks through the open tab only. {Help} sums the open tab up on one page. The Guide is the long form of all three." },
+  },
+})

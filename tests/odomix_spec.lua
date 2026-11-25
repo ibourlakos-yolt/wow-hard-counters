@@ -52,7 +52,7 @@ describe("the odometer", function()
   it("is offered for counts and distances, the total only; a mix for readings with a small enum parameter", function()
     local env = boot()
     local M = env.M
-    local b = M.Create(nil, { name = "Trip" })
+    local b = M.Create(nil, { name = "Trip", shown = true })
     local d = M.AddReading(b, "t:travelled")
     local all = M.AddReading(b, "t:total")
     local gold = M.AddReading(b, "t:gold")
@@ -81,7 +81,7 @@ describe("the mix", function()
   it("splits the tile's set into parts, largest first, then other; a one-member reading splits by what it counted", function()
     local env = boot()
     local M, HC = env.M, env.HC
-    local b = M.Create(nil, { name = "Trip" })
+    local b = M.Create(nil, { name = "Trip", shown = true })
     local d = M.AddReading(b, "t:travelled", { display = "mix" })
     d.scope = "session"
     assert.is_nil(M.MixParts(d, b))                        -- nothing counted yet
@@ -127,7 +127,7 @@ describe("drawing the odometer and the mix", function()
         for _, m in ipairs(arg) do s = s + (shares[m] or 0) end
         return s
       end, param = { dim = "mode", multi = true, members = { "walk", "run", "swim" } } })
-      local b = M.Create(nil, { name = "Trip" })
+      local b = M.Create(nil, { name = "Trip", shown = true })
       local odo = M.AddReading(b, "hc:testodo", { display = "odometer" })
       odo.scope = "session"
       local mix = M.AddReading(b, "hc:testmix", { display = "mix" })

@@ -156,7 +156,7 @@ local function sync(id)
 end
 
 local attach   -- below; the shared frame's selected tab may not be built yet (it lands on a tab never opened)
-local refreshHeader
+local refreshHeader, refreshHelpButtons
 
 local function syncAll()
   local sel = main and main:IsShown() and conf(MAIN).selected
@@ -621,6 +621,7 @@ local function refreshTabs()
     if id == c.selected then main.sideSelected = i end
   end
   layoutSide(true)
+  refreshHelpButtons()
   setClamp()
   main.empty:SetShown(#ids == 0)
   -- (2026-11-24) Hard Counters' own tabs are icons now: the title says which one is open
@@ -628,8 +629,18 @@ local function refreshTabs()
   setTitle(main, sel and sel.title and format("%s: %s", L["Hard Counters"], sel.title) or L["Hard Counters"])
 end
 
+--- Help and Tab tour follow the open tab: greyed on a tab with no help registered (a pack that brought none).
+function refreshHelpButtons()
+  if not (main and main.help) then return end
+  local has = ns.Help and ns.Help.For(conf(MAIN).selected) ~= nil
+  main.help:SetEnabled(has)
+  main.tour:SetEnabled(has)
+end
+Win.RefreshHelpButtons = refreshHelpButtons
+
 --- Header buttons: one per window with def.mainButton, right to left; their text says shown or not.
 function refreshHeader()
+  refreshHelpButtons()
   if not (main and main.header) then return end
   for id, b in pairs(main.header) do
     b:SetText((Win.IsShown(id) and L["Hide %s"] or L["Show %s"]):format(defs[id].mainButton))
@@ -647,7 +658,19 @@ local function buildHeader()
     main.tutorial:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY)
     Wd.Tip(main.tutorial, function() return L["A short tour of Hard Counters: the boards on screen, this window and its tabs, your first board."] end)
   end
-  local prev = main.tutorial
+  -- (2026-11-25) the open tab's own tour and help, left of it: every tab has both (UI/Help.lua)
+  if not main.tour and ns.Help then
+    main.tour = Wd.Button(main, L["Tab tour"], 80, function() ns.Help.Tour(nil, 1) end)
+    main.tour:SetHeight(22)
+    if main.tutorial then main.tour:SetPoint("RIGHT", main.tutorial, "LEFT", -4, 0)
+    else main.tour:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY) end
+    Wd.Tip(main.tour, function() return L["A few steps through this tab only: what is where, and what to click."] end)
+    main.help = Wd.Button(main, L["Help"], 60, function() ns.Help.Show(nil) end)
+    main.help:SetHeight(22)
+    main.help:SetPoint("RIGHT", main.tour, "LEFT", -4, 0)
+    Wd.Tip(main.help, function() return L["What this tab is, what you can do in it, and how that changes what you see while you play."] end)
+  end
+  local prev = main.help or main.tutorial
   for _, id in ipairs(order) do
     local def = defs[id]
     if def.mainButton then
@@ -855,6 +878,8 @@ end
 function Win.HasDocked() return #dockedIds() > 0 end
 --- The packs' windows (and Diagnostics, last): the tabs along the bottom, in order. The tutorial and the Guide name them.
 function Win.PackWindows() return bottomIds() end
+--- The open tab of the shared window (its id), or nil before the window was ever built.
+function Win.Selected() return main and conf(MAIN).selected or nil end
 function Win.List() local out = {} for i, id in ipairs(order) do out[i] = id end return out end
 function Win.Def(id) return defs[id] end
 function Win.Content(id) return entries[id] and entries[id].content end

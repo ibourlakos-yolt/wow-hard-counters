@@ -147,3 +147,22 @@ function ns.ToggleWindow() HC:ToggleWindow(WINDOW) end
 if HC:Supports("slash") then
   HC:RegisterSlash("stats", function() ns.ToggleWindow() end, "the Character Stats window", "Character Stats")
 end
+-- luacheck: push no max line length
+
+-- This tab's help and tour (Hard Counters' Help and Tab tour buttons): change them with the tab.
+if HC.RegisterWindowHelp then
+  HC:RegisterWindowHelp(WINDOW, {
+    what = "Character Stats is your character sheet as readings: attributes, melee, ranged, spell and healing, mana and health regeneration, defense and resistances, each one a number you can put on a board. Some readings are for boards only (a spell school of your choice, per-second regeneration, haste, the five-second rule): find them under + Tile.",
+    can = {
+      "Read every stat this character uses, section by section; stats your class has no use for are left out.",
+      "{Turn on} a section that is off: its stats start reading, here and on your boards.",
+      "Hover a stat for what it means and where the number comes from.",
+    },
+    effect = "A section that is on can go on any board (Overview, + Tile, or the ready-made role and class boards). In combat the game hides some stats from addons: those grey out here with \"in combat\" and come back after the fight; most single values keep updating on boards.",
+    tour = {
+      { title = "Sections", text = "The sheet is cut into sections: Attributes, Melee, Ranged, Spell, Defense, Resistances, Gear. Each is a tracker; one that is off shows {Turn on} instead of numbers." },
+      { title = "From the sheet to your screen", text = "Every row here is a reading. To keep one in sight while you play, go to Overview, {+ Tile} on a board, and pick it under its section; or make your class board with New board..." },
+    },
+  })
+end
+-- luacheck: pop

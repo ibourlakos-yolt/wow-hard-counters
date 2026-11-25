@@ -186,6 +186,14 @@ function E:wow(ns)
   W.mapName = function(id) return "Map " .. tostring(id) end
   W.instanceType = function() return "none" end
   W.inCombat = function() return false end
+  W.modifierDown = function(key) return env.modifier == key end
+  W.reload = function() env.reloads = (env.reloads or 0) + 1 end
+  W.packAddons = function() return env.packAddons or {} end
+  W.setAddonEnabled = function(name, on)
+    env.addonEnabled = env.addonEnabled or {}
+    env.addonEnabled[name] = on and true or false
+    return true
+  end
   W.addonList = function() return { "HardCounters", "Other" } end
   W.encodeReport = function(t)
     env.lastReportBody = t

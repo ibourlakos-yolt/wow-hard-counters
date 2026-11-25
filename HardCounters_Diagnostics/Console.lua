@@ -331,3 +331,22 @@ end
 -- the older command, kept as an alias of /hc diag
 SLASH_HCDIAG1 = "/hcdiag"
 SlashCmdList.HCDIAG = command
+-- luacheck: push no max line length
+
+-- This tab's help and tour (Hard Counters' Help and Tab tour buttons): change them with the tab.
+if HardCounters.RegisterWindowHelp then
+  HardCounters:RegisterWindowHelp(WINDOW, {
+    what = "Diagnostics is the console for finding problems: what Hard Counters logged, its live values, what storage holds, and probes that check the game's API on this client.",
+    can = {
+      "Switch between {Log}, {Live}, {Storage} and {Probes} with the buttons on top.",
+      "In {Probes}: {Run all} runs every check now, {Copy all} gives them as text to paste into a bug report.",
+      "/hc diag mark drops a marker in the log just before you reproduce a problem; /hc report makes the report to paste.",
+    },
+    effect = "You only need this when something looks wrong or someone asks you for a report. It changes nothing about what is counted; turning the pack off in the Packs tab costs you nothing in play.",
+    tour = {
+      { title = "Four views", text = "{Log} is what happened, newest last. {Live} is the engine's state now. {Storage} is what is saved and how big it is. {Probes} checks which game functions answer on this client." },
+      { title = "When something breaks", text = "Type /hc diag mark, do the thing that goes wrong, then /hc report: it packs the log, your settings' shape and the probes into one string to paste where you report the bug. No names unless you tick them." },
+    },
+  })
+end
+-- luacheck: pop

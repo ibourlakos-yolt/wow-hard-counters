@@ -41,7 +41,7 @@ local today = HC:Query({ counter = "mypack:fish", grain = "day" }).total
 | `HC:RegisterView(id, def)` | A saved query; see §4. |
 | `HC:RegisterPhase(id, label, startUTC)` | Content phases for the `phase` grain. Forever's launch and the Dec 9 unlock are built in. |
 | `HC:RegisterDisplay(id, { title, accepts, create(parent, opts) })` | Display plugins; `HC:CreateDisplay(id, parent, opts)`, `HC:Displays()`. |
-| `HC:RegisterWindow(id, def)`, `HC:RegisterSlash(name, fn, help)` | A pack's windows and `/hc` subcommands; see §9. |
+| `HC:RegisterWindow(id, def)`, `HC:RegisterWindowHelp(id, def)`, `HC:RegisterSlash(name, fn, help)` | A pack's windows, their Help page and tour, and `/hc` subcommands; see §9. |
 
 **Hard Counters counter fields:** `title`, `category`, `icon`, `formatter` (`"money"`, `"duration"`, `"number"`,
 `"distance"`, `"speed"`, `"speedpct"`, `"seconds"`, `"decimal"`: as for readings, below),
@@ -294,6 +294,8 @@ since 2026-11-24 they carry `hidden`, `foldInto`, `unitOf`, `unitLabel` and `par
 `HC:Readings({ aliases = true })` includes aliases and hidden readings.
 Run, session and now are allocation-free apart from the text; storage scopes run one small query on open buckets.
 
+**A live reading that moves by itself** (`HC:Supports("readingsChanged")`). A reading computed from a clock of your own (Character Stats' five-second rule: seconds since the last spell that cost mana) changes with no event to list in `refresh`. Call `HC:ReadingsChanged()` while it moves: boards redraw on the next frame, four times a second at most. Stop calling when it stops moving.
+
 ## 6. Callbacks
 
 `HardCounters.RegisterCallback(owner, event, fn)` / `UnregisterCallback(owner, event)`; `fn(event, ...)`.
@@ -346,7 +348,7 @@ One root, `/hc` (also `/hardcounters`). `/hc` alone opens the Hard Counters wind
 no tabs); `/hc help` lists them, with the pack each one comes from.
 
 `/hc run start [label] | stop | pause | resume | split [label] | status`, `/hc runs`, `/hc board [n | new <preset> | mini <n> | reset]`,
-`/hc edit` (edit boards), `/hc panel [compact|full]` (the Run board), `/hc live` (the Pocket board), `/hc trackers`
+`/hc edit` (edit boards), `/hc panel [compact|full]` (the Farming board), `/hc live` (the Pocket board), `/hc trackers`
 (the Trackers window), `/hc track` (the same from the chat line),
 `/hc boards`, `/hc overview`, `/hc windows`, `/hc options`, `/hc minimap`, `/hc tutorial` (the tour a first login
 gets; `/hc welcome` is its old name), `/hc guide [page]` (the Guide tab, the manual in the game; pages `start`,
@@ -380,6 +382,7 @@ width makes the panel wider for every tab, a large height makes yours scroll. On
 | Call | Notes |
 |---|---|
 | `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's label or tooltip, and the frame's title while it is open), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
+| `HC:RegisterWindowHelp(id, def)` → ok, err | The Help page and the tour of a window you registered: the shared window's **Help** and **Tab tour** buttons show them while your tab is open (greyed on a tab without help). `def = { what = "what this tab is", can = { "a thing you can do here", ... } (two or more), effect = "how it changes the player's game", tour = { { title, text, before = function() end }, ... } (two or more steps) }`. Plain English strings; a name in braces, `{Turn on}`, is the exact text of one of your buttons or menu items and is drawn in gold. Returns false and why for an incomplete definition or an unknown window. Guard the call (`if HC.RegisterWindowHelp then`): Hard Counters before 0.2.5 has none. |
 | `HC:ShowWindow(id[, show])` | `show` nil toggles. A tab is shown by opening the shared frame on it. |
 | `HC:ToggleWindow(id)`, `HC:IsWindowShown(id)` | Shown = on screen (a tab counts only while it is the selected one). |
 | `HC:RelayoutWindow(id)` | Re-reads `minSize()` / `fixedHeight()` after the content changed shape. |

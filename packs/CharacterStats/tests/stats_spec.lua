@@ -8,7 +8,7 @@ local GAME = {
   "GetSpellHitModifier", "GetManaRegen", "UnitArmor", "GetDodgeChance", "GetParryChance", "GetBlockChance",
   "GetShieldBlock", "UnitClass", "GetInventoryItemID", "GetInventorySlotInfo", "C_SkillInfo", "GetItemInfoInstant",
   "UnitDamage", "UnitAttackSpeed", "UnitRangedDamage", "GetSpellPenetration", "UnitResistance", "GetInventoryItemDurability",
-  "GetAverageItemLevel",
+  "GetAverageItemLevel", "GetHealthRegen", "GetManaRegenFromSpirit", "GetMeleeHaste", "UnitSpellHaste", "C_Spell",
 }
 
 local function boot(class)
@@ -222,6 +222,113 @@ describe("Character Stats, phase 1 (live readings)", function()
     assert.are.equal("hcstats:resist", st.tiles[2].reading)
     assert.are.equal(2, st.tiles[2].arg)
     assert.are.same({ "total" }, env.HC:GetReading("hcstats:armor").calcs)   -- a stat is a stock: total only
+    -- (2026-11-25) casters see their schools side by side, and every board of a class that casts has the
+    -- five-second rule as a bar
+    local function has(key, reading, arg, display)
+      for _, t in ipairs(M.PRESETS[key].tiles) do
+        if t.reading == "hcstats:" .. reading and t.arg == arg and (display == nil or t.display == display) then return true end
+      end
+      return false
+    end
+    for _, k in ipairs({ 6, 3 }) do                             -- shadow and fire
+      assert.is_true(has("hcstats:warlock", "spelldmg", k))
+      assert.is_true(has("hcstats:warlock", "spellcrit", k))
+    end
+    for _, k in ipairs({ 3, 5, 7 }) do                          -- fire, frost, arcane
+      assert.is_true(has("hcstats:mage", "spelldmg", k))
+      assert.is_true(has("hcstats:mage", "spellcrit", k))
+    end
+    for _, key in ipairs({ "mage", "warlock", "priest", "druid", "shaman", "paladin", "caster", "healdirect", "healhot" }) do
+      assert.is_true(has("hcstats:" .. key, "fsr", nil, "bar"), key)
+    end
+    for _, key in ipairs({ "warrior", "rogue", "hunter", "melee", "tank" }) do
+      assert.is_false(has("hcstats:" .. key, "fsr", nil), key)
+    end
+    for _, key in ipairs({ "priest", "druid", "shaman", "paladin", "healdirect" }) do
+      assert.is_true(has("hcstats:" .. key, "healcrit", nil), key)
+    end
+  end)
+
+  it("reads regeneration per 5 seconds and per second, from spirit, haste and healing crit (2026-11-25)", function()
+    _G.GetHealthRegen = function() return 3.2, 0.4 end
+    _G.GetManaRegenFromSpirit = function() return 2, 0 end
+    _G.GetMeleeHaste = function() return 4 end
+    _G.UnitSpellHaste = function() return 6 end
+    local env = boot("PRIEST")
+    assert.are.equal(16, (read(env, "hp5")))                  -- 3.2 a second out of combat
+    assert.are.equal(2, (read(env, "hp5combat")))
+    assert.are.equal(3.2, (read(env, "hps")))
+    assert.are.equal(2.5, (read(env, "mps")))                 -- GetManaRegen: not casting, casting
+    assert.are.equal(0.5, (read(env, "mpscast")))
+    assert.are.equal(10, (read(env, "mp5spirit")))
+    assert.are.equal(4, (read(env, "haste")))
+    assert.are.equal(6, (read(env, "spellhaste")))
+    assert.are.equal(3, (read(env, "healcrit")))              -- holy for a priest
+    local _, text = read(env, "hp5")
+    assert.are.equal("16.0", text)
+    -- board-only readings take no row in the window
+    local rows = {}
+    for _, r in ipairs(env.pack.ROWS) do rows[r.id] = true end
+    assert.is_true(rows["hcstats:hp5"] and rows["hcstats:hp5combat"] and rows["hcstats:mp5spirit"])
+    for _, k in ipairs({ "hps", "mps", "mpscast", "fsr", "haste", "spellhaste", "healcrit" }) do
+      assert.is_nil(rows["hcstats:" .. k], k)
+    end
+    -- a warrior heals nothing and has no mana
+    env = boot("WARRIOR")
+    assert.are.equal("inapplicable", (select(4, read(env, "healcrit"))))
+    assert.are.equal("inapplicable", (select(4, read(env, "fsr"))))
+    -- a client without the call: no value, no error
+    _G.GetHealthRegen = nil
+    env = boot("PRIEST")
+    assert.are.equal("inapplicable", (select(4, read(env, "hp5"))))
+  end)
+
+  it("counts the five-second rule from a spell that cost mana, up to 5 (2026-11-25)", function()
+    local env = boot("MAGE")
+    local HC = env.HC
+    local realTime = _G.GetTime
+    _G.GetTime = function() return env.t end
+    _G.C_Spell = { GetSpellPowerCost = function(id)
+      if id == 1 then return { { type = 0, cost = 100 } } end            -- mana
+      if id == 2 then return { { type = 0, cost = 0 } } end              -- free now (a clearcast)
+      if id == 3 then return { { type = 3, cost = 40 } } end             -- energy
+      return nil
+    end }
+    assert.are.equal(5, (read(env, "fsr")))                    -- nothing cast yet: regeneration is running
+    assert.are.equal(5, HC:ReadingTarget("hcstats:fsr"))      -- its target: a bar fills toward 5
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-1", 1)
+    assert.are.equal(0, (read(env, "fsr")))
+    assert.is_true(env.ns.dirty)                               -- boards are told to redraw
+    env:advance(2)
+    assert.are.equal(2, (read(env, "fsr")))
+    local _, text, _, state = read(env, "fsr")
+    assert.are.equal("2.00 s", text)
+    assert.is_nil(state)                                       -- a clock of our own: never "in combat"
+    -- a free spell, an energy cost and someone else's cast don't restart it
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-2", 2)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-3", 3)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "target", "cast-4", 1)
+    assert.are.equal(2, (read(env, "fsr")))
+    env:advance(4)
+    assert.are.equal(5, (read(env, "fsr")))                    -- full: spirit regeneration is back
+    -- a spell whose cost the client can't tell starts it (said in the description)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-5", 99)
+    assert.are.equal(0, (read(env, "fsr")))
+    env:advance(6)
+    -- in combat too: nothing secret is read
+    env.game.combat = true
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-6", 1)
+    env:advance(1)
+    assert.are.equal(1, (read(env, "fsr")))
+    env.game.combat = false
+    -- with the Spell tracker off nothing is timed
+    env:advance(10)
+    HC:SetTrackerOn("hcstats:spell", false)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-7", 1)
+    HC:SetTrackerOn("hcstats:spell", true)
+    assert.are.equal(5, (read(env, "fsr")))
+    _G.GetTime = realTime
+    assert.are.same({}, env.errors)
   end)
 
   it("reads weapon damage and speed, schools, penetration, resistances and gear (2026-11-24)", function()

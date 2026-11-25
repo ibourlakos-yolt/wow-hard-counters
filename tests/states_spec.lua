@@ -91,7 +91,7 @@ describe("reading states on screen (HC-28)", function()
         compute = function() return 7 end })
 
       local M, B = ns.BoardModel, ns.Boards
-      local b = M.Create(nil, { name = "Stats" })
+      local b = M.Create(nil, { name = "Stats", shown = true })
       local ap = M.AddReading(b, "ts:ap", "row")
       ap.scope = "now"
       local parry = M.AddReading(b, "ts:parry", "row")
@@ -186,7 +186,7 @@ describe("what Character Stats' phase 1 needs from the engine (2026-11-19)", fun
     local n = 0
     for _, k in ipairs(M.PRESET_ORDER) do if k == "tp:melee" then n = n + 1 end end
     assert.are.equal(1, n)
-    local b = M.Create("tp:melee")
+    local b = M.Create("tp:melee", { shown = true })
     assert.are.equal("Melee", b.name)
     assert.are.equal(1, #b.tiles)
     -- (a pack's `style` is still read, HC-51: hero is a large number with its extras)
@@ -210,7 +210,7 @@ describe("live in combat by passing the value through (CS-9, 2026-11-19)", funct
         compute = function() return 1 end, live = 3 }) end)
       assert.is_true(HC:Supports("livePassThrough"))
       local M, B = ns.BoardModel, ns.Boards
-      local b = M.Create(nil, { name = "Live" })
+      local b = M.Create(nil, { name = "Live", shown = true })
       local t = M.AddReading(b, "tli:dodge", "row")
       t.scope = "now"
       inCombat = true

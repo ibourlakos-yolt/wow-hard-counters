@@ -4,6 +4,7 @@
 -- with "in combat" after its title (Hard Counters' `stale` state, HC-28), never a secret. Rows that don't apply to
 -- this character (parry for a mage) say so (`applies`, HC-28). No derived "≈" rows before CS-7.
 -- Built ONLY on Hard Counters' public API (docs/API.md at the repo root).
+-- luacheck: no max line length (descriptions: one sentence, one string)
 local ADDON, ns = ...
 
 local HC = HardCounters
@@ -87,6 +88,98 @@ local function manaRegen(casting)
     local v = num(casting and whileCasting or base)
     return v and v * 5 or nil
   end
+end
+
+--- A regeneration call that returns two rates per second (GetManaRegen: not casting, casting; GetHealthRegen: out
+--- of combat, in combat; GetManaRegenFromSpirit likewise): the first or the second, times `mult` (5: per five
+--- seconds, as players say it; 1: per second).
+local function regen(fnName, second, mult)
+  return function()
+    local fn = _G[fnName]
+    if type(fn) ~= "function" then return nil end
+    local a, b = fn()
+    if anySecret(a, b) then return SECRET end
+    local v = num(second and b or a)
+    return v and v * mult or nil
+  end
+end
+
+---------------------------------------------------------------------------
+-- The five-second rule (the user, 2026-11-25). Spending mana on a spell stops spirit regeneration for five seconds;
+-- the reading counts those seconds, 0 to 5, toward a target of 5, so as a bar it fills while you wait and is full
+-- once regeneration is back. It is a clock, not a stat: nothing secret, nothing read from the game but "my spell
+-- went off and it cost mana". The cost comes from the spell's own power cost (C_Spell.GetSpellPowerCost: no need to
+-- compare mana before and after, which may be secret in combat); where the client doesn't give one, any spell you
+-- cast starts the clock (a free spell then starts it too: said in the reading's description).
+-- Unverified on Forever (2026-11-25): that UNIT_SPELLCAST_SUCCEEDED carries the spell id as its third argument and
+-- that C_Spell.GetSpellPowerCost answers there. Both degrade to "any cast starts it".
+---------------------------------------------------------------------------
+
+local FSR = 5
+local fsrAt                       -- GetTime() of the last mana-spending cast
+local fsrTicker
+
+local function clockNow()
+  if type(GetTime) ~= "function" then return nil end
+  local t = GetTime()
+  if HC:IsSecret(t) then return nil end
+  return num(t)
+end
+
+--- Does this spell cost mana now? true, false, or nil when the client can't say.
+local function costsMana(spellID)
+  local f = (type(C_Spell) == "table" and C_Spell.GetSpellPowerCost) or GetSpellPowerCost
+  if type(f) ~= "function" or spellID == nil or HC:IsSecret(spellID) then return nil end
+  local ok, costs = pcall(f, spellID)
+  if not ok or type(costs) ~= "table" then return nil end
+  for i = 1, #costs do
+    local c = costs[i]
+    if type(c) == "table" then
+      if anySecret(c.type, c.cost) then return nil end
+      if c.type == 0 and (num(c.cost) or 0) > 0 then return true end
+    end
+  end
+  return false
+end
+ns.CostsMana = costsMana
+
+--- A spell of yours went off (UNIT_SPELLCAST_SUCCEEDED: unit, cast id, spell id): if it cost mana, the five seconds
+--- start again. Boards are told to redraw while they run.
+local function onCast(_, unit, _, spellID)
+  if HC:IsSecret(unit) or unit ~= "player" then return end
+  if costsMana(spellID) == false then return end
+  local t = clockNow()
+  if not t then return end
+  fsrAt = t
+  if HC.ReadingsChanged then
+    HC:ReadingsChanged()
+    if fsrTicker then fsrTicker:Cancel() end
+    if type(C_Timer) == "table" and C_Timer.NewTicker then
+      -- four redraws a second for the five seconds, and one after: then nothing runs until the next cast
+      fsrTicker = C_Timer.NewTicker(0.25, function() HC:ReadingsChanged() end, FSR * 4 + 1)
+    end
+  end
+end
+ns.OnCast = onCast
+
+--- Seconds since the last spell that cost mana, at most 5 (5: spirit regeneration is running).
+local function fsrElapsed()
+  local t = clockNow()
+  if not (t and fsrAt) then return FSR end
+  local d = t - fsrAt
+  if d >= FSR then return FSR end
+  return d > 0 and d or 0
+end
+
+--- Spell crit of the school this class heals with (Holy: priest, paladin; Nature: druid, shaman).
+local HEAL_SCHOOL = { PRIEST = 2, PALADIN = 2, DRUID = 4, SHAMAN = 4 }
+local function healCrit()
+  if type(UnitClass) ~= "function" then return nil end
+  local _, token = UnitClass("player")
+  if HC:IsSecret(token) then return nil end
+  local k = HEAL_SCHOOL[token]
+  if not k then return nil end
+  return first(GetSpellCritChance, k)
 end
 
 ---------------------------------------------------------------------------
@@ -223,12 +316,12 @@ local TARGET = {
 
 ns.TRACKERS = {
   { id = "hcstats:attributes", title = "Attributes",
-    description = "Strength, agility, stamina, intellect, spirit, health and mana, as the game reports them now." },
-  { id = "hcstats:melee", title = "Melee", description = "Attack power, crit and hit chance, weapon damage, speed and skill." },
+    description = "Strength, agility, stamina, intellect, spirit, health and mana, health regeneration, as the game reports them now." },
+  { id = "hcstats:melee", title = "Melee", description = "Attack power, crit, hit and haste, weapon damage, speed and skill." },
   { id = "hcstats:ranged", title = "Ranged",
     description = "Ranged attack power and crit, ranged damage, speed and weapon skill, with a ranged weapon equipped." },
   { id = "hcstats:spell", title = "Spell",
-    description = "Spell damage and healing (by school too), spell crit and hit, spell penetration, mana regeneration." },
+    description = "Spell damage and crit (by school too), healing and healing crit, spell hit, haste and penetration, mana regeneration and the five-second rule." },
   -- (the id keeps the old spelling; the player sees the game's)
   { id = "hcstats:defence", title = "Defense", description = "Armor, dodge, parry and block, Defense skill." },
   -- (CS-14, 2026-11-24) one reading, the school picked on the tile
@@ -363,12 +456,21 @@ ns.STATS = {
   { "health", "Max health", A, function() return first(UnitHealthMax, "player") end, "number", nil, "Maximum health." },
   { "power", "Max mana", A, function() return first(UnitPowerMax, "player", 0) end, "number", classIs(MANA),
     "Maximum mana." },
+  -- (2026-11-25) health regeneration: GetHealthRegen gives health per second, out of combat and in combat
+  { "hp5", "Health regen (out of combat)", A, regen("GetHealthRegen", false, 5), "decimal", hasCall("GetHealthRegen"),
+    "Health per 5 seconds while out of combat, from spirit, talents and gear." },
+  { "hp5combat", "Health regen (in combat)", A, regen("GetHealthRegen", true, 5), "decimal", hasCall("GetHealthRegen"),
+    "Health per 5 seconds while in combat." },
+  { "hps", "Health per second (out of combat)", A, regen("GetHealthRegen", false, 1), "decimal", hasCall("GetHealthRegen"),
+    "Health regenerated each second while out of combat: Health regen (out of combat) divided by 5.", { noRow = true } },
   { "ap", "Attack power", M, function() return apTotal(UnitAttackPower) end, "number", nil,
     "Melee attack power with buffs." },
   -- (2026-11-24) "Melee crit": there are ranged and spell crit too
   { "crit", "Melee crit", M, function() return first(GetCritChance) end, "percent", nil, "Melee crit chance." },
   { "hit", "Hit (melee and ranged)", M, function() return first(GetHitModifier) end, "percent", hasCall("GetHitModifier"),
     "Hit bonus from gear and talents, for melee and ranged attacks (spell hit is its own)." },
+  { "haste", "Melee haste", M, function() return first(GetMeleeHaste) end, "percent", hasCall("GetMeleeHaste"),
+    "Attack speed bonus from gear and buffs, in %. Weapon speeds below already include it.", { noRow = true } },
   { "mhdps", "Main-hand DPS", M, weaponDps(false), "decimal", nil,
     "Your main-hand weapon's damage per second, attack power and buffs included." },
   { "mhspeed", "Main-hand speed", M, weaponSpeed(false), "seconds", nil, "Seconds between main-hand swings." },
@@ -397,6 +499,9 @@ ns.STATS = {
     { param = schoolParam("Spell damage (best school)") } },
   { "healing", "Bonus healing", S, function() return first(GetSpellBonusHealing) end, "number", classIs(HEALER),
     "Bonus healing from gear." },
+  { "healcrit", "Healing crit", S, healCrit, "percent", classIs(HEALER),
+    "Crit chance of your healing spells: the spell crit of the school your class heals with (Holy or Nature).",
+    { noRow = true } },
   { "spellcrit", "Spell crit", S, bySchool("GetSpellCritChance"), "percent", classIs(CASTER),
     "Spell crit chance: of your best school, or one school picked on the tile.",
     { param = schoolParam("Spell crit (best school)") } },
@@ -405,9 +510,23 @@ ns.STATS = {
   { "spellpen", "Spell penetration", S, function() return first(GetSpellPenetration) end, "number",
     function() return classIs(CASTER)() and hasCall("GetSpellPenetration")() end,
     "Enemy resistance your spells ignore, from gear." },
+  { "spellhaste", "Spell haste", S, function() return first(UnitSpellHaste, "player") end, "percent",
+    function() return classIs(CASTER)() and hasCall("UnitSpellHaste")() end,
+    "Casting speed bonus from gear and buffs, in %.", { noRow = true } },
   { "mp5", "Mana regen (not casting)", S, manaRegen(false), "number", classIs(MANA), "Mana per 5 seconds while not casting." },
   { "mp5cast", "Mana regen (casting)", S, manaRegen(true), "number", classIs(MANA),
     "Mana per 5 seconds while casting (the five-second rule)." },
+  -- (2026-11-25) the same two per second, mana from spirit alone, and the five-second rule itself
+  { "mps", "Mana per second (not casting)", S, regen("GetManaRegen", false, 1), "decimal", classIs(MANA),
+    "Mana regenerated each second while not casting: Mana regen (not casting) divided by 5.", { noRow = true } },
+  { "mpscast", "Mana per second (casting)", S, regen("GetManaRegen", true, 1), "decimal", classIs(MANA),
+    "Mana regenerated each second while casting: Mana regen (casting) divided by 5.", { noRow = true } },
+  { "mp5spirit", "Mana regen from spirit", S, regen("GetManaRegenFromSpirit", false, 5), "decimal",
+    function() return classIs(MANA)() and hasCall("GetManaRegenFromSpirit")() end,
+    "The part of your mana per 5 seconds that comes from spirit: what the five-second rule switches off." },
+  { "fsr", "Five-second rule", S, fsrElapsed, "seconds", classIs(MANA),
+    "Seconds since your last spell that cost mana, up to 5. As a bar it fills while spirit regeneration is off and is full when it is back. Where the game doesn't tell a spell's cost, any spell you cast starts it.",
+    { target = function() return FSR end, noRow = true, plain = true } },
   { "armor", "Armor", D, function()
       if type(UnitArmor) ~= "function" then return nil end
       local _, eff = UnitArmor("player")
@@ -491,6 +610,8 @@ local LIVE = {
   rspeed = function() if UnitRangedDamage then return (UnitRangedDamage("player")) end end,
   spelldmg = schoolLive("GetSpellBonusDamage"), spellcrit = schoolLive("GetSpellCritChance"),
   spellpen = function() return GetSpellPenetration and GetSpellPenetration() end,
+  haste = function() return GetMeleeHaste and GetMeleeHaste() end,
+  spellhaste = function() return UnitSpellHaste and UnitSpellHaste("player") end,
   resist = function(arg) if UnitResistance and arg ~= nil then local _, total = UnitResistance("player", arg); return total end end,
 }
 ns.LIVE = LIVE
@@ -502,9 +623,12 @@ for i, s in ipairs(ns.STATS) do
   local o = s[8] or {}
   ns.IDS[i] = id
   HC:RegisterReading(id, { title = s[2], tracker = s[3], scopes = { "now" }, formatter = s[5], order = 300 + i,
-    description = s[7], compute = liveCompute(id, s[4]), applies = s[6], refresh = REFRESH,
+    description = s[7], compute = o.plain and function() return s[4]() end or liveCompute(id, s[4]),
+    applies = s[6], refresh = (not o.plain) and REFRESH or nil,
     param = o.param, pickTitle = o.pickTitle,
-    stale = function(arg) return inCombat[cacheKey(id, arg)] == true, "in combat" end, live = LIVE[s[1]],
+    -- (`plain`: a clock of our own, the five-second rule: never secret, redrawn by HC:ReadingsChanged)
+    stale = (not o.plain) and function(arg) return inCombat[cacheKey(id, arg)] == true, "in combat" end or nil,
+    live = LIVE[s[1]],
     target = o.target or TARGET[s[1]] })
   if o.rows then
     for _, row in ipairs(o.rows) do
@@ -513,6 +637,16 @@ for i, s in ipairs(ns.STATS) do
   elseif not o.noRow then
     ns.ROWS[#ns.ROWS + 1] = { id = id, title = s[2], tracker = s[3], tip = s[7] }
   end
+end
+
+-- The five-second rule's clock: your own spells going off. No counter is written (no `feeds`), and nothing is done
+-- while the Spell tracker is off.
+if HC.RegisterSource then
+  HC:RegisterSource("hcstats:casts", { mode = "event", events = { "UNIT_SPELLCAST_SUCCEEDED" },
+    handler = function(event, ...)
+      if HC.IsTrackerOn and not HC:IsTrackerOn(S) then return end
+      onCast(event, ...)
+    end })
 end
 
 ---------------------------------------------------------------------------
@@ -530,7 +664,10 @@ if HC.RegisterBoardPreset then
   local function bar(stat) return tile(stat, LINE, "bar") end
   local function school(stat, k, size) return tile(stat, size, nil, k) end
   local FIRE, NATURE, FROST, SHADOW, ARCANE = 2, 3, 4, 5, 6             -- (UnitResistance's numbers)
-  local S_NATURE, S_SHADOW = 4, 6                                       -- (GetSpellBonusDamage's numbers)
+  -- (GetSpellBonusDamage's and GetSpellCritChance's numbers)
+  local S_HOLY, S_FIRE, S_NATURE, S_FROST, S_SHADOW, S_ARCANE = 2, 3, 4, 5, 6, 7
+  -- (2026-11-25) the five-second rule, a bar on every board of a class that casts
+  local function fsr() return tile("fsr", LINE, "bar") end
   local function role(key, name, tip, tiles)
     HC:RegisterBoardPreset("hcstats:" .. key, { name = name, category = "role", tip = tip, tiles = tiles })
   end
@@ -551,29 +688,37 @@ if HC.RegisterBoardPreset then
   role("ranged", "Ranged DPS", "Ranged attack power, crit, hit and your ranged weapon.",
     { tile("rap", BIG), tile("rcrit"), tile("hit"), tile("rdps"), tile("agi"), tile("rspeed"), bar("rangedskill") })
   role("caster", "Caster DPS", "Spell damage, crit and hit, penetration and mana.",
-    { tile("spelldmg", BIG), tile("spellcrit"), tile("spellhit"), tile("int"), tile("spellpen"), tile("mp5cast"), tile("power", LINE) })
-  role("healdirect", "Healer (direct)", "Bonus healing and spell crit: direct heals can crit.",
-    { tile("healing", BIG), tile("spellcrit"), tile("int"), tile("power"), tile("mp5cast", LINE) })
+    { tile("spelldmg", BIG), tile("spellcrit"), tile("spellhit"), tile("int"), tile("spellpen"), tile("mp5cast"), tile("mp5"),
+      tile("power"), fsr() })
+  role("healdirect", "Healer (direct)", "Bonus healing and healing crit: direct heals can crit.",
+    { tile("healing", BIG), tile("healcrit"), tile("int"), tile("power"), tile("mp5cast"), tile("mp5"), fsr() })
   role("healhot", "Healer (over time)", "Bonus healing, spirit and regen: heals over time don't crit, long fights reward mana.",
-    { tile("healing", BIG), tile("spi"), tile("mp5cast"), tile("mp5"), tile("power"), tile("int") })
+    { tile("healing", BIG), tile("spi"), tile("mp5cast"), tile("mp5"), tile("power"), tile("int"), fsr() })
 
   -- The nine classes.
+
+  -- (2026-11-25) casters get their schools side by side (a warlock's shadow and fire, a mage's fire, frost and
+  -- arcane: damage and crit each), healers their healing crit, and every class that casts the five-second rule.
   class("warrior", "Warrior", "WARRIOR", { tile("ap", BIG), tile("crit"), tile("hit"), bar("mainskill"), tile("armor"),
     tile("dodge"), tile("parry"), bar("defense") })
-  class("paladin", "Paladin", "PALADIN", { tile("healing", BIG), tile("spellcrit"), tile("int"), tile("mp5cast"), tile("ap"),
-    tile("crit"), tile("armor"), tile("blockvalue") })
+  class("paladin", "Paladin", "PALADIN", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_HOLY), tile("int"),
+    tile("mp5cast"), tile("ap"), tile("crit"), tile("armor"), tile("blockvalue"), fsr() })
   class("hunter", "Hunter", "HUNTER", { tile("rap", BIG), tile("rcrit"), tile("hit"), tile("rdps"), tile("agi"), tile("mp5"),
     bar("rangedskill") })
   class("rogue", "Rogue", "ROGUE", { tile("ap", BIG), tile("crit"), tile("hit"), tile("agi"), tile("mhdps"), tile("dodge"),
     bar("mainskill"), bar("offskill") })
-  class("priest", "Priest", "PRIEST", { tile("healing", BIG), school("spelldmg", S_SHADOW), tile("spellcrit"), tile("int"),
-    tile("spi"), tile("mp5cast"), tile("power", LINE) })
-  class("shaman", "Shaman", "SHAMAN", { tile("healing", BIG), school("spelldmg", S_NATURE), tile("spellcrit"), tile("int"),
-    tile("mp5cast"), tile("ap"), tile("crit", LINE) })
-  class("mage", "Mage", "MAGE", { tile("spelldmg", BIG), tile("spellcrit"), tile("spellhit"), tile("int"), tile("power"),
-    tile("mp5cast") })
-  class("warlock", "Warlock", "WARLOCK", { school("spelldmg", S_SHADOW, BIG), tile("spellcrit"), tile("spellhit"), tile("sta"),
-    tile("int"), tile("health"), tile("spellpen") })
-  class("druid", "Druid", "DRUID", { tile("healing", BIG), school("spelldmg", S_NATURE), tile("spellcrit"), tile("ap"),
-    tile("crit"), tile("armor"), tile("dodge"), tile("power") })
+  class("priest", "Priest", "PRIEST", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_HOLY),
+    school("spelldmg", S_SHADOW), school("spellcrit", S_SHADOW), tile("int"), tile("spi"), tile("mp5cast"), tile("mp5"),
+    fsr() })
+  class("shaman", "Shaman", "SHAMAN", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_NATURE),
+    school("spellcrit", S_NATURE), school("spelldmg", S_FIRE), tile("int"), tile("mp5cast"), tile("ap"), tile("crit"), fsr() })
+  class("mage", "Mage", "MAGE", { tile("spelldmg", BIG), school("spelldmg", S_FIRE), school("spellcrit", S_FIRE),
+    school("spelldmg", S_FROST), school("spellcrit", S_FROST), school("spelldmg", S_ARCANE), school("spellcrit", S_ARCANE),
+    tile("spellhit"), tile("int"), tile("power"), tile("mp5cast"), fsr() })
+  class("warlock", "Warlock", "WARLOCK", { school("spelldmg", S_SHADOW, BIG), school("spellcrit", S_SHADOW),
+    school("spelldmg", S_FIRE), school("spellcrit", S_FIRE), tile("spellhit"), tile("spellpen"), tile("sta"), tile("int"),
+    tile("health"), tile("hp5combat"), fsr() })
+  class("druid", "Druid", "DRUID", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_NATURE),
+    school("spelldmg", S_ARCANE), tile("spellcrit"), tile("ap"), tile("crit"), tile("armor"), tile("dodge"), tile("power"),
+    fsr() })
 end

@@ -164,6 +164,48 @@ function W.Button(parent, text, width, onClick)
   return b
 end
 
+--- A button that looks like a dropdown: a dark field with the chosen value on the left and a down arrow on the
+--- right (plain frames: the client's dropdown templates differ between clients). onClick(self) opens its menu
+--- (ns.Menu.Show(self, items)); SetText sets the chosen value.
+function W.Dropdown(parent, width, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(width, 22)
+  local bg = b:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0, 0, 0, 0.55)
+  b.edges = {}
+  for i, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+    local t = b:CreateTexture(nil, "BORDER")
+    t:SetColorTexture(0.45, 0.45, 0.5, 0.9)
+    if i <= 2 then
+      t:SetPoint(side .. "LEFT", b, side .. "LEFT", 0, 0)
+      t:SetPoint(side .. "RIGHT", b, side .. "RIGHT", 0, 0)
+      t:SetHeight(1)
+    else
+      t:SetPoint("TOP" .. side, b, "TOP" .. side, 0, 0)
+      t:SetPoint("BOTTOM" .. side, b, "BOTTOM" .. side, 0, 0)
+      t:SetWidth(1)
+    end
+    b.edges[i] = t
+  end
+  local hl = b:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetAllPoints()
+  hl:SetColorTexture(1, 1, 1, 0.08)
+  b.arrow = b:CreateTexture(nil, "ARTWORK")
+  b.arrow:SetSize(20, 20)
+  b.arrow:SetPoint("RIGHT", -1, 0)
+  b.arrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+  b.value = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.value:SetPoint("LEFT", 8, 0)
+  b.value:SetPoint("RIGHT", b.arrow, "LEFT", -2, 0)
+  b.value:SetJustifyH("LEFT")
+  b.value:SetWordWrap(false)
+  b.SetText = function(self, text) self.value:SetText(text) end
+  b.GetText = function(self) return self.value:GetText() end
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
 --- Width from the button's text (plus padding), at least minW.
 function W.FitWidth(b, minW, pad)
   local fs = b.GetFontString and b:GetFontString()

@@ -176,37 +176,12 @@ end
 --- A reading's title for lists: one with a parameter reads "... rep" until a member is picked.
 local function listTitle(r) return (r.title:gsub("%%s", "...")) end
 
---- A tile for the Overview tab only (HC-67: on no board, Window only). Adding a reading whose tracker is off asks
---- first, as on a board (§7: "never silently").
-local function addToOverview(readingId, anchor)
-  local BM = ns.BoardModel
-  local r = ns.readings[readingId]
-  local function make(arg)
-    local function go()
-      local t = BM.NewTile(readingId, arg)
-      if t and ns.Print then ns.Print(L["%s added to the Overview tab."], BM.TileTitle(t)) end
-      if ns.RefreshOverview then ns.RefreshOverview() end
-    end
-    local tr = r and r.tracker and HC:GetTracker(r.tracker)
-    if tr and not tr.on then
-      confirm(format(L["Turn on %s? %s"], tr.title, tr.description or ""), function()
-        HC:SetTrackerOn(r.tracker, true)
-        go()
-      end)
-    else
-      go()
-    end
-  end
-  if ns.NeedsArg(r) and anchor then ns.Boards.MemberMenu(anchor, readingId, make) else make() end
-end
-
---- Add tile beside a reading (HC-36): with one board it adds there; with several a menu lists them, the ones on
---- screen first, then "New board" and "Overview only"; with none it makes one. A hidden board is shown and the new
---- tile flashes once. getBoard is called only when the tile is really added (a cancelled pick leaves no empty board
---- behind). Opened from the Overview tab's Add tile (HC-67), it adds there instead.
+--- Add tile beside a reading (HC-36; v8): with one board it adds there; with several a menu lists them, the ones on
+--- the HUD first, then "New board"; with none it makes one. The tile goes on the board; the board goes on the HUD
+--- only by the player's own switch (v8: a board that is "Only here" stays so, and the chat line says where the tile
+--- is). getBoard is called only when the tile is really added (a cancelled pick leaves no empty board behind).
 local function addToBoard(readingId, anchor)
   if not (ns.BoardModel and ns.Boards) then return end
-  if ns.TrackersForOverview then return addToOverview(readingId, anchor) end
   local BM = ns.BoardModel
   local r = ns.readings[readingId]
   local function newBoard() return BM.Create(nil, { name = L["Board"] }) end
@@ -216,7 +191,11 @@ local function addToBoard(readingId, anchor)
       ns.Boards.AddReading(board, readingId, nil, arg, function(tile)
         ns.Boards.Reveal(board, tile)
         if ns.Print and r then
-          ns.Print(L["%s added to the board %s (/hc edit to arrange it)."], ns.ReadingTitle(r, arg), board.name)
+          if board.shown then
+            ns.Print(L["%s added to the board %s, on your HUD (hover it, Edit, to arrange it)."], ns.ReadingTitle(r, arg), board.name)
+          else
+            ns.Print(L["%s added to the board %s. It is in the Overview tab; the board is not on your HUD."], ns.ReadingTitle(r, arg), board.name)
+          end
         end
       end)
     end
@@ -228,17 +207,15 @@ local function addToBoard(readingId, anchor)
   if #targets == 1 or not anchor then return addTo(function() return targets[1] end) end
   local items = { { text = L["Add to"], title = true } }
   for _, b in ipairs(targets) do
-    items[#items + 1] = { text = b.shown and b.name or format(L["%s (hidden)"], b.name),
+    items[#items + 1] = { text = b.shown and b.name or format(L["%s (Only here)"], b.name),
       func = function() addTo(function() return b end) end }
   end
   items[#items + 1] = { text = L["New board"], func = function() addTo(newBoard) end }
-  items[#items + 1] = { text = L["Overview only (no board)"], func = function() addToOverview(readingId, anchor) end }
   ns.Menu.Show(anchor, items)
 end
 
 --- The [+]'s tooltip names where it adds (HC-36), never "the board you last edited".
 local function addTip()
-  if ns.TrackersForOverview then return L["Add to the Overview tab"] end
   local targets = ns.BoardModel and ns.BoardModel.AddTargets() or {}
   if #targets == 0 then return L["Add to a new board"] end
   if #targets == 1 then return format(L["Add to %s"], targets[1].name) end
@@ -493,7 +470,6 @@ end
 local function onHide()
   for _, t in ipairs(HC:Trackers()) do if t.new then HC:MarkTrackerSeen(t.id) end end
   if ns.Menu then ns.Menu.Hide() end
-  ns.TrackersForOverview = nil              -- (opened from Overview's Add tile: only until the tab goes)
 end
 
 ns.Windows.Register(ID, {
@@ -532,3 +508,22 @@ ns.On("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReload)
   end
   if fresh then ns.ShowTrackers(true) end
 end, "Trackers")
+-- luacheck: push no max line length
+
+-- This tab's help and tour (UI/Help.lua): change them with the tab.
+local _ = ns.Help and ns.Help.Register(ID, {
+  what = "A tracker is a group of readings that count together: Gold, Experience, Loot, Reputation, Distance, a section of your character sheet. This tab lists them all, by category, with what each one costs.",
+  can = {
+    "Click a tracker: its readings appear on the right, each with {Add tile} to put that number on a board.",
+    "{Turn on} or {Turn off} a tracker. Off, it counts nothing and costs nothing.",
+    "{History...}: {Keep history} for one tracker, so its totals by day, week and month survive between sessions.",
+    "{Delete data} removes a tracker's saved history; {Not loaded} lists history left by packs you no longer use.",
+  },
+  effect = "Only trackers that are on feed your boards. History off (the default) still gives you this session and each board's own clock; history on adds today, this week, this month and beyond, and takes room on disk (the {Size} column).",
+  tour = {
+    { title = "Categories on the left", text = "The tree groups trackers by what they are about. {All trackers} shows every one. The list in the middle says for each: on or off, its history, its size on disk." },
+    { title = "A tracker's readings", text = "Click a tracker. On the right are its readings: the single numbers you can put on a board. {Add tile} beside one adds it to a board (you pick which when you have several)." },
+    { title = "On, off, and history", text = "The buttons at the bottom act on the selected tracker: {Turn on} or {Turn off}, and {History...}. History is off until you turn it on; a board on today, this week or this month needs it." },
+  },
+})
+-- luacheck: pop

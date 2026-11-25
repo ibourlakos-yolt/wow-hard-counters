@@ -12,6 +12,7 @@ local FEATURES = {
   boardPresets = true,            -- HC:RegisterBoardPreset (UI/BoardModel.lua)
   readingStates = true,           -- reading `applies` and `stale` (HC-28)
   livePassThrough = true,         -- reading `live`, HC:ReadingLive (CS-9: secrets handed straight to widgets)
+  readingsChanged = true,         -- HC:ReadingsChanged (a live reading that moves by itself: a timer's progress)
   hist = false, autoRuns = false, journal = false,
 }
 

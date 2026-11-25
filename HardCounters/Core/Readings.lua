@@ -1056,6 +1056,10 @@ end
 --- sets ns.dirty itself (Registry.lua); this is for readings with no counter.
 function ns.MarkDirty() ns.dirty = true end
 
+--- Public: a live reading of yours moved with no event to say so (a timer's progress, such as Character Stats'
+--- five-second rule): boards redraw on the next frame, four times a second at most. Cheap; call it while it moves.
+function HC:ReadingsChanged() ns.dirty = true end
+
 -- `refresh = { events }` of a computed reading (a value with no counter: an item count, a reputation standing):
 -- the engine listens only while the reading is on a board, and marks displays dirty.
 local listening = {}     -- event -> number of placed readings that want it
