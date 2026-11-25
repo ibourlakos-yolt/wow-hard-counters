@@ -3,7 +3,11 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.3.0-beta1 (2026-11-25)
+
+A beta, **still experimental**. Nothing lands on your screen unasked any more: boards are made in the window and you
+choose what goes on your HUD. The window gains a Packs tab, and Help and a short tour on every tab. Character Stats
+reads regeneration, the five-second rule and spell schools side by side.
 
 **Saved data:** kept. One change you will see: tiles that sat under "Window only" in the Overview tab are now on a
 board called **Unsorted** (not on your HUD, as before); a board called "Run" made from the ready-made board is now

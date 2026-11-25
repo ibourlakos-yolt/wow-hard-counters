@@ -2,7 +2,7 @@
 ## Title: Hard Counters: Traveler
 ## Notes: Count how you travel: distance on foot, mounted, swimming, by flight path and boat; blinks, teleports, jumps, falls and corpse runs.
 ## Author: Ioannis (John) Bourlakos
-## Version: 0.2.4-beta1
+## Version: 0.3.0-beta1
 ## X-License: MIT
 ## X-AI-Assisted: Claude (Anthropic), via Claude Code
 ## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters
