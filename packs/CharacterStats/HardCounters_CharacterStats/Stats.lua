@@ -208,6 +208,25 @@ local PARRY = set("WARRIOR", "PALADIN", "ROGUE", "HUNTER")
 local BLOCK = set("WARRIOR", "PALADIN", "SHAMAN")
 local RANGED = set("HUNTER", "WARRIOR", "ROGUE")
 
+-- (the user, 2026-11-25) The magic schools a class has abilities in, the ones worth a tile each, in the order its
+-- schools board shows them (GetSpellBonusDamage's numbers: 2 holy, 3 fire, 4 nature, 5 frost, 6 shadow, 7 arcane).
+-- Not only casters: a hunter's Arcane Shot, stings and traps, a rogue's poisons. A warrior has none.
+-- What the game reports per school is its own sum (CS-16 probes say how far that goes); a hunter's and a rogue's
+-- abilities mostly scale with attack power, so their spell damage often reads 0: the tiles show what there is.
+local CLASS_SCHOOLS = {
+  MAGE = { 3, 5, 7 }, WARLOCK = { 6, 3 }, PRIEST = { 2, 6 }, PALADIN = { 2 }, SHAMAN = { 4, 3, 5 }, DRUID = { 4, 7 },
+  HUNTER = { 7, 4, 3, 5 }, ROGUE = { 4 },
+}
+ns.CLASS_SCHOOLS = CLASS_SCHOOLS
+
+--- Does this class have abilities of a magic school? (The per-school readings apply to it.)
+local function usesSchools()
+  if type(UnitClass) ~= "function" then return true end
+  local _, token = UnitClass("player")
+  if type(token) ~= "string" or HC:IsSecret(token) then return true end
+  return CLASS_SCHOOLS[token] ~= nil
+end
+
 local rangedSlot
 --- Ranged rows: a class that uses a ranged weapon and has one equipped.
 local function usesRanged()
@@ -494,7 +513,7 @@ ns.STATS = {
   { "rspeed", "Ranged speed", R, ranged("speed"), "seconds", holdsWeapon(SLOT_RANGED), "Seconds between ranged shots." },
   { "rangedskill", "Ranged skill", R, slotSkill(SLOT_RANGED), "number", holdsWeapon(SLOT_RANGED),
     "Weapon skill of your ranged weapon (bow, gun, crossbow, thrown, wand). Its cap is the target." },
-  { "spelldmg", "Spell damage", S, bySchool("GetSpellBonusDamage"), "number", classIs(CASTER),
+  { "spelldmg", "Spell damage", S, bySchool("GetSpellBonusDamage"), "number", usesSchools,
     "Bonus spell damage: of your best school, or one school picked on the tile.",
     { param = schoolParam("Spell damage (best school)") } },
   { "healing", "Bonus healing", S, function() return first(GetSpellBonusHealing) end, "number", classIs(HEALER),
@@ -502,7 +521,7 @@ ns.STATS = {
   { "healcrit", "Healing crit", S, healCrit, "percent", classIs(HEALER),
     "Crit chance of your healing spells: the spell crit of the school your class heals with (Holy or Nature).",
     { noRow = true } },
-  { "spellcrit", "Spell crit", S, bySchool("GetSpellCritChance"), "percent", classIs(CASTER),
+  { "spellcrit", "Spell crit", S, bySchool("GetSpellCritChance"), "percent", usesSchools,
     "Spell crit chance: of your best school, or one school picked on the tile.",
     { param = schoolParam("Spell crit (best school)") } },
   { "spellhit", "Spell hit", S, function() return first(GetSpellHitModifier) end, "percent", classIs(CASTER),
@@ -721,4 +740,24 @@ if HC.RegisterBoardPreset then
   class("druid", "Druid", "DRUID", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_NATURE),
     school("spelldmg", S_ARCANE), tile("spellcrit"), tile("ap"), tile("crit"), tile("armor"), tile("dodge"), tile("power"),
     fsr() })
+
+  -- (the user, 2026-11-25) The per-school set: one board per class that has magic-school abilities, a pair of
+  -- tiles per school (damage, crit) in the class's own order, then what the game reports once for every school
+  -- (spell hit, penetration) where the class casts. Offered beside the class board ("Your class").
+  local SCHOOL_NAME = { MAGE = "Mage", WARLOCK = "Warlock", PRIEST = "Priest", PALADIN = "Paladin", SHAMAN = "Shaman",
+    DRUID = "Druid", HUNTER = "Hunter", ROGUE = "Rogue" }
+  local SCHOOLS_TIP = "Spell damage and spell crit for each magic school your class uses, side by side."
+  for _, token in ipairs({ "MAGE", "WARLOCK", "PRIEST", "PALADIN", "SHAMAN", "DRUID", "HUNTER", "ROGUE" }) do
+    local tiles = {}
+    for _, k in ipairs(CLASS_SCHOOLS[token]) do
+      tiles[#tiles + 1] = school("spelldmg", k)
+      tiles[#tiles + 1] = school("spellcrit", k)
+    end
+    if CASTER[token] then
+      tiles[#tiles + 1] = tile("spellhit")
+      tiles[#tiles + 1] = tile("spellpen")
+    end
+    HC:RegisterBoardPreset("hcstats:schools." .. token:lower(), { name = SCHOOL_NAME[token] .. ": schools",
+      category = "class", class = token, tip = SCHOOLS_TIP, tiles = tiles })
+  end
 end

@@ -37,6 +37,10 @@ called "Farming".
 - **Character Stats: more for casters and healers.** Healing crit, spell haste and melee haste as readings. The
   class boards show schools side by side: a warlock's shadow and fire, a mage's fire, frost and arcane, each with
   damage and crit; a priest's holy and shadow; a shaman's nature and fire; a druid's nature and arcane.
+- **Character Stats: a schools board per class.** New board..., Your class: "<Class>: schools" has a damage and a crit
+  tile for every magic school your class uses. Hunters (arcane, nature, fire, frost) and rogues (nature) get one
+  too, and Spell damage and Spell crit now read for them instead of "n/a". The numbers are what the game reports
+  per school; a hunter or rogue will often see 0 damage there, since their abilities run on attack power.
 
 ### Changed
 - "Window only" is gone: every tile is on a board. Deleting a board deletes its tiles (the question says so);

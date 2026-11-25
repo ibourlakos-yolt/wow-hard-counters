@@ -420,6 +420,11 @@ ones shows health regen or the five-second rule.
   window keeps every row without a scroll bar.
 - **Boards:** every role and class board of a caster ends with the five-second rule as a bar; class boards show
   the class's schools side by side (damage and crit); healers get healing crit.
+- **The per-school set (the user, 2026-11-25, later the same day):** `CLASS_SCHOOLS` names the magic schools each class
+  has abilities in (casters, and a hunter's arcane, nature, fire and frost, a rogue's nature; a warrior has none). Spell
+  damage and Spell crit apply to those classes; a board "<Class>: schools" (`hcstats:schools.<class>`, category
+  class) pairs damage and crit per school, with spell hit and penetration for casters. Still the game's own sums:
+  CS-16's probes say whether talents are in them.
 - **Not offered:** spell hit by school (the game gives one number; the per-school part is talents, which this pack
   does not read), miss and glancing tables (CS-15), MP5 split into gear and buffs.
 - **To see in game:** every call above answers on this client's documentation, not yet in a saved file; Diagnostics

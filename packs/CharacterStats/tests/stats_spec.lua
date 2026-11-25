@@ -201,13 +201,15 @@ describe("Character Stats, phase 1 (live readings)", function()
         local b = M.Create(key)
         assert.are.equal(#p.tiles, #b.tiles)                   -- every reading it names exists
         assert.are.equal("now", b.tiles[1].scope)
-        assert.are.equal("large", b.tiles[1].size)              -- (CS-11, DESIGN §16.9) a big number first
+        if not key:find("^hcstats:schools%.") then
+          assert.are.equal("large", b.tiles[1].size)            -- (CS-11, DESIGN §16.9) a big number first
+        end
         assert.are.equal("number", b.tiles[1].display)
         assert.is_false(M.UsesTimer(b) and true or false)       -- now tiles: no timer on these boards
       end
     end
     assert.are.equal(7, roles)
-    assert.are.equal(9, classes)
+    assert.are.equal(9 + 8, classes)                            -- a class board each, and a schools board for eight
     -- the old keys kept: a board remembers the preset it came from
     assert.are.equal("Tank (physical)", M.PRESETS["hcstats:tank"].name)
     assert.are.equal("Caster DPS", M.PRESETS["hcstats:caster"].name)
@@ -215,8 +217,19 @@ describe("Character Stats, phase 1 (live readings)", function()
     -- your class first
     local by = {}
     for _, g in ipairs(M.PresetGroups()) do by[g.title] = g end
-    assert.are.same({ "hcstats:mage" }, by["Your class"].keys)
-    assert.are.equal(8, #by["Other classes"].keys)
+    assert.are.same({ "hcstats:mage", "hcstats:schools.mage" }, by["Your class"].keys)   -- the class board first
+    assert.are.equal(8 + 7, #by["Other classes"].keys)
+    -- (2026-11-25) the schools board: a damage and a crit tile per school of the class, in its order
+    local sm = M.PRESETS["hcstats:schools.mage"]
+    assert.are.equal("Mage: schools", sm.name)
+    local got = {}
+    for _, tl in ipairs(sm.tiles) do got[#got + 1] = tl.reading:gsub("hcstats:", "") .. (tl.arg and (":" .. tl.arg) or "") end
+    assert.are.same({ "spelldmg:3", "spellcrit:3", "spelldmg:5", "spellcrit:5", "spelldmg:7", "spellcrit:7", "spellhit",
+      "spellpen" }, got)
+    assert.are.equal(8, #M.PRESETS["hcstats:schools.hunter"].tiles)     -- arcane, nature, fire, frost; no spell hit
+    assert.are.equal(2, #M.PRESETS["hcstats:schools.rogue"].tiles)      -- nature (poisons)
+    assert.is_nil(M.PRESETS["hcstats:schools.warrior"])
+    assert.are.equal("Spell damage: Fire", M.TileTitle(M.Create("hcstats:schools.mage").tiles[1]))
     -- a spell tank's resistances, one school each
     local st = M.Create("hcstats:spelltank")
     assert.are.equal("hcstats:resist", st.tiles[2].reading)
@@ -281,6 +294,18 @@ describe("Character Stats, phase 1 (live readings)", function()
     _G.GetHealthRegen = nil
     env = boot("PRIEST")
     assert.are.equal("inapplicable", (select(4, read(env, "hp5"))))
+  end)
+
+  it("offers the school readings to every class with magic-school abilities, hunters and rogues too (2026-11-25)", function()
+    for _, class in ipairs({ "HUNTER", "ROGUE", "MAGE", "PALADIN" }) do
+      local env = boot(class)
+      assert.are.equal(120, (env.HC:Reading("hcstats:spelldmg", "now", { arg = 3 })), class)
+      assert.is_nil((select(4, env.HC:Reading("hcstats:spellcrit", "now", { arg = 4 }))), class)
+    end
+    local env = boot("WARRIOR")
+    assert.are.equal("inapplicable", (select(4, read(env, "spelldmg"))))
+    assert.are.equal("inapplicable", (select(4, read(env, "spellcrit"))))
+    assert.are.equal("inapplicable", (select(4, read(boot("ROGUE"), "spellhit"))))   -- spell hit stays the casters'
   end)
 
   it("counts the five-second rule from a spell that cost mana, up to 5 (2026-11-25)", function()
