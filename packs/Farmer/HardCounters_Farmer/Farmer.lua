@@ -11,7 +11,7 @@ local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfo
 local GetTime = GetTime
 local tonumber, type, pairs = tonumber, type, pairs
 
-ns.VERSION = "0.3.0-beta1"
+ns.VERSION = "0.3.0-beta2"
 local pack = HC:RegisterPack("Farmer", { namespace = "hcfarm", version = ns.VERSION, title = "Farmer" })
 ns.pack = pack
 
@@ -21,6 +21,7 @@ ns.pack = pack
 ns.ID = {
   moneyIn = "hc:money.in", moneyOut = "hc:money.out", owned = "hc:money.owned", xp = "hc:xp",
   items = "hcfarm:loot.items", vendor = "hcfarm:loot.vendorvalue", rep = "hcfarm:rep",
+  fish = "hcfarm:fish.caught",
 }
 local ID = ns.ID
 
@@ -44,6 +45,15 @@ HC:RegisterCounter({ id = ID.vendor, version = 1, kind = "flow", unit = "copper"
   formatter = "money", accuracy = "exact", capture = { mode = "push-delta", source = "quantity x vendor price at loot time" },
   feasibility = CHAT, runBreakdowns = { "category" }, runLive = { max = true } })
 
+-- (2026-11-25) The Fishing basket: what you fished up, by item. `fish` is a small dimension (cap 200, every member
+-- kept per character), so a board's timer can split it per catch (the mix) and "Fish in bags" knows every catch.
+HC:RegisterCounter({ id = ID.fish, version = 1, kind = "flow", unit = "items", measures = { "sum", "count" },
+  dimensions = { { name = "fish", cap = 200 }, zone() },
+  aggregations = { {}, { "fish" }, { "zone" }, { "fish", "zone" } },
+  title = "Fished items", category = "Loot", formatter = "number", accuracy = "exact",
+  capture = { mode = "push-delta", source = "CHAT_MSG_LOOT while a fishing bobber's loot is open" }, feasibility = CHAT,
+  runBreakdowns = { "fish" } })
+
 HC:RegisterCounter({ id = ID.rep, version = 1, kind = "flow", unit = "reputation", measures = { "sum", "count" },
   dimensions = { { name = "faction", cap = 64 }, zone() }, aggregations = { {}, { "faction" } },
   title = "Reputation gained", category = "Progression", formatter = "number", accuracy = "exact",
@@ -62,6 +72,9 @@ HC:RegisterTracker("hcfarm:ledger", { title = "Ledger", category = "Farming", ic
 HC:RegisterTracker("hcfarm:loot", { title = "Loot", category = "Farming", icon = 133639,
   counters = { ID.items, ID.vendor }, default = "off",
   description = "Items looted, their vendor value and your best drop." })
+HC:RegisterTracker("hcfarm:fishing", { title = "Fishing", category = "Farming", icon = 136245,
+  counters = { ID.fish }, default = "off",
+  description = "What you fish up, item by item (fish, junk, clams, chests): your catch, its mix and the fish in your bags." })
 HC:RegisterTracker("hcfarm:rep", { title = "Reputation", category = "Farming", icon = 236681,
   counters = { ID.rep }, default = "off", description = "Reputation gained, by faction." })
 
@@ -276,6 +289,78 @@ HC:RegisterSource("hcfarm:loot", { mode = "event", events = { "CHAT_MSG_LOOT", "
 end })
 
 ---------------------------------------------------------------------------
+-- Fishing (2026-11-25, the Fishing basket). A catch is your own loot line (CHAT_MSG_LOOT, as above) while the loot
+-- window of a fishing bobber is open, or within FISH_GRACE seconds of it closing (with auto loot the lines can
+-- come just after the window shuts). The game says which loot is a bobber's: IsFishingLoot() at LOOT_READY /
+-- LOOT_OPENED. Where the client has no IsFishingLoot, the loot counts as fishing if it opens while your Fishing
+-- channel runs or within FISH_GRACE seconds of it ending (the channel ends as you click the bobber). Fishing is
+-- told by spell id (Classic ranks and the later single spell) or by the spell's name, so a rank we don't list
+-- still counts. Items from opening a fished clam or chest are not catches (that loot is no bobber's).
+---------------------------------------------------------------------------
+
+local FISH_GRACE = 2
+ns.FISHING_SPELLS = { [7620] = true, [7731] = true, [7732] = true, [18248] = true, [33095] = true, [51294] = true,
+  [88868] = true, [131474] = true }
+local fishOpen, fishClosedAt = false, nil      -- a bobber's loot window: open now, or when it closed
+local channelOn, channelEndAt = false, nil     -- your Fishing channel (only used without IsFishingLoot)
+local fishingName
+
+local function spellName(id)
+  local ok, name
+  if C_Spell and C_Spell.GetSpellName then ok, name = pcall(C_Spell.GetSpellName, id)
+  elseif GetSpellInfo then ok, name = pcall(GetSpellInfo, id) end
+  if ok and type(name) == "string" and not HC:IsSecret(name) then return name end
+  return nil
+end
+
+local function isFishingSpell(id)
+  if id == nil or HC:IsSecret(id) then return false end
+  if ns.FISHING_SPELLS[id] then return true end
+  fishingName = fishingName or spellName(7620)
+  local name = fishingName and spellName(id)
+  return name ~= nil and name == fishingName
+end
+ns.IsFishingSpell = isFishingSpell
+
+--- Is the loot window that just opened a fishing bobber's?
+local function bobberLoot(t)
+  if type(IsFishingLoot) == "function" then
+    local ok, yes = pcall(IsFishingLoot)
+    if ok and not HC:IsSecret(yes) then return yes and true or false end
+  end
+  if channelOn then return true end
+  return channelEndAt ~= nil and t ~= nil and t - channelEndAt <= FISH_GRACE
+end
+
+--- Is a loot line now a catch?
+local function catching(t)
+  if fishOpen then return true end
+  return fishClosedAt ~= nil and t ~= nil and t - fishClosedAt <= FISH_GRACE
+end
+
+HC:RegisterSource("hcfarm:fishing", { mode = "event", feeds = { ID.fish },
+  events = { "LOOT_READY", "LOOT_OPENED", "LOOT_CLOSED", "CHAT_MSG_LOOT",
+    "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" },
+  handler = function(event, a1, _, a3)
+    local t = GetTime()
+    if event == "LOOT_READY" or event == "LOOT_OPENED" then
+      if not fishOpen then fishOpen = bobberLoot(t) end
+      if fishOpen then fishClosedAt = nil end
+    elseif event == "LOOT_CLOSED" then
+      if fishOpen then fishClosedAt = t end
+      fishOpen = false
+    elseif event == "CHAT_MSG_LOOT" then
+      if not catching(t) or not HC:Readable(a1) then return end
+      local id, n = Parse.loot(pat, a1)
+      if id then HC:Emit(ID.fish, n, id, HC:ZoneKey()) end
+    elseif event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+      if HC:IsSecret(a1) or a1 ~= "player" or not isFishingSpell(a3) then return end
+      channelOn = event == "UNIT_SPELLCAST_CHANNEL_START"
+      if not channelOn then channelEndAt = t end
+    end
+  end })
+
+---------------------------------------------------------------------------
 -- XP: Basics diffs UnitXP; a kill line or QUEST_TURNED_IN (above) names the source
 ---------------------------------------------------------------------------
 
@@ -415,3 +500,42 @@ HC:RegisterView("hcfarm:goldph.today", { counter = ID.moneyIn, per = "activeHour
   formatter = "money", feed = true })
 HC:RegisterView("hcfarm:gold.today", { counter = ID.moneyIn, grain = "day", title = "Gold in today", formatter = "money" })
 HC:RegisterView("hcfarm:items.bycat", { counter = ID.items, groupBy = "category", grain = "day", title = "Items by category" })
+
+---------------------------------------------------------------------------
+-- The Fishing basket (2026-11-25, the user): a board that counts what you fish in a run (its timer: Reset empties
+-- the basket), each catch's count and share (a list mix), and the fish you carry.
+---------------------------------------------------------------------------
+
+local FISH = { dim = "fish", type = "enum", label = itemLabel, optional = true, anyLabel = "Every catch" }
+HC:RegisterReading("hcfarm:fished", { title = "Fish caught", rateTitle = "Fish/h", tracker = "hcfarm:fishing",
+  counter = ID.fish, param = FISH, scopes = ALL, formatter = "number", order = 32, mixList = true,
+  description = "What you fished up, each item counted (fish, junk, clams, chests): pick one catch on the tile, or count them all."
+    .. " As a mix: each catch with its count and share." })
+
+--- Fish in your bags: one catch, or every item you have ever fished on this character together.
+local function fishInBags(arg)
+  if arg ~= nil then return inBags(arg) end
+  local sum = 0
+  for _, id in ipairs(HC.CounterMembers and HC:CounterMembers(ID.fish, "fish") or {}) do
+    sum = sum + (inBags(id) or 0)
+  end
+  return sum
+end
+ns.FishInBags = fishInBags
+HC:RegisterReading("hcfarm:fishbags", { title = "Fish in bags", tracker = "hcfarm:fishing", counter = ID.fish,
+  param = FISH, scopes = { "now" }, formatter = "number", order = 33, mixList = true, refresh = { "BAG_UPDATE" },
+  description = "How many of the things you have fished you carry right now (bags only): one catch, or all of them."
+    .. " As a mix: each one with its count and share.",
+  compute = function(_, _, arg) return fishInBags(arg) end })
+
+if HC.RegisterBoardPreset then
+  HC:RegisterBoardPreset("hcfarm:fishing", { name = "Fishing basket", category = "activity",
+    tip = "What you fish in a run (Reset empties the basket), each catch's count and share, and the fish in your bags. Needs the Fishing tracker on.",
+    tiles = {
+      { reading = "hcfarm:fished", size = "large", extras = { "sparkline" } },
+      { reading = "hcfarm:fished", calc = "perHour", size = "half" },
+      { reading = "hcfarm:fishbags", scope = "now", size = "half" },
+      { reading = "hcfarm:fished", display = "mix" },
+      { reading = "hcfarm:fishbags", scope = "now", display = "mix" },
+    } })
+end

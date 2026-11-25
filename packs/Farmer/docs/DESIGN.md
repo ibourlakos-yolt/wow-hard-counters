@@ -258,6 +258,26 @@ Hard Counters v2 changed what Farmer owns ([`../../../docs/TRACKERS_AND_BOARDS.m
     **Gold out** (new) take a set of sources or sinks on the tile, which replaces "Gold from %s" and "Spent on %s";
     **XP gained** takes a set of sources (kills and quests are what Farmer books).
 
+### 4.10 The Fishing basket (the user, 2026-11-25; built the same day, not seen in game)
+
+The user: a resettable "Fishing Basket" board that counts the fishable items in a run, the fish in the bags and the
+fish looted, with a percentage breakdown of the catch.
+
+- **Counter** `hcfarm:fish.caught` (flow, items; dimensions `fish` (item id, cap 200: small, so every catch is kept
+  per character and per board timer) and `zone`; `runBreakdowns = { "fish" }`). **Tracker** "Fishing" (Farming,
+  off by default, like every pack tracker).
+- **What a catch is:** your own loot line (`CHAT_MSG_LOOT`, parsed as Loot does) while a fishing bobber's loot window
+  is open, or up to 2 s after it closes (auto loot). The bobber: `IsFishingLoot()` at `LOOT_READY`/`LOOT_OPENED`;
+  without it, loot that opens while your Fishing channel runs or within 2 s of it ending (Fishing by spell id,
+  Classic ranks and later, or by the name of spell 7620). Opening a fished clam or chest is not a catch. Unverified
+  on Forever: `IsFishingLoot`, and the order of the loot events against the chat lines with auto loot.
+- **Readings:** "Fish caught" (`hcfarm:fished`, all or one catch, every period, per hour) and "Fish in bags"
+  (`hcfarm:fishbags`, now: one catch's bag count, or the sum over every item this character has fished, from
+  `HC:CounterMembers`, new public API). Both `mixList`: their mix tile lists each catch with count and share (new
+  in Hard Counters: the mix's one-line legend could not hold item names with counts).
+- **Board** "Fishing basket" (Activity): Fish caught (large, sparkline), Fish/h, Fish in bags, then the two list
+  mixes. The board's timer is the run; Reset empties the basket.
+
 ## 5. Rules
 
 The rules for pack authors in `../../docs/PACKS.md` §3 apply in full: no arithmetic on possibly secret values, no per-event allocation, polling only through Hard Counters' scheduler, declare everything up front, privacy, label estimates, never persist creature GUIDs, log through Hard Counters' logger.

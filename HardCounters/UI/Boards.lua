@@ -291,6 +291,17 @@ local function buildRow(f, row, y)
     w.legend = text(w, "GameFontDisableSmall")
     w.legend:SetPoint("TOPLEFT", 10, -28)
     w.legend:SetPoint("TOPRIGHT", -10, -28)
+    -- (2026-11-25) a list mix (the reading's `mixList`): one line per part, the name left, amount and share right
+    w.lines = {}
+    for k = 1, ns.BoardModel.MIX_PARTS + 1 do
+      local ly = -28 - (k - 1) * ns.BoardModel.MIX_LINE_H
+      local amt = text(w, "GameFontHighlightSmall", "RIGHT")
+      amt:SetPoint("TOPRIGHT", -10, ly)
+      local name = text(w, "GameFontHighlightSmall")
+      name:SetPoint("TOPLEFT", 10, ly)
+      name:SetPoint("RIGHT", amt, "LEFT", -6, 0)
+      w.lines[k] = { name = name, amount = amt }
+    end
   elseif row.kind == "grid" then
     w.cells = {}
     for c = 1, 2 do
@@ -471,6 +482,19 @@ local function drawMix(w, board, i)
   local parts = st == nil and M.MixParts(tile, board) or nil
   local full = (w.GetWidth and w:GetWidth() or 0) - 20
   local x, legend = 0, {}
+  local list = M.MixIsList(tile)
+  local r = ns.readings[tile.reading]
+  for k, line in ipairs(w.lines or {}) do
+    local p = list and parts and parts[k]
+    if p then
+      local c = p.arg == false and MIX_OTHER or MIX_RGB[k] or MIX_OTHER
+      line.name:SetText(format("%s%s|r", hexColor(c), p.arg == false and L["other"] or p.label))
+      line.amount:SetText(format("%s  %d%%", ns.FormatValue(r and r.formatter or "number", p.v), floor(p.frac * 100 + 0.5)))
+    else
+      line.name:SetText("")
+      line.amount:SetText("")
+    end
+  end
   for k, tex in ipairs(w.parts) do
     local p = parts and parts[k]
     if p then
@@ -493,7 +517,8 @@ local function drawMix(w, board, i)
     end
   end
   w.track:SetShown(parts ~= nil)
-  if parts then w.legend:SetText(table.concat(legend, "  "))
+  if parts and list then w.legend:SetText("")
+  elseif parts then w.legend:SetText(table.concat(legend, "  "))
   elseif st == nil then w.legend:SetText(L["Nothing counted yet"])
   else w.legend:SetText("") end
 end

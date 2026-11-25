@@ -16,7 +16,8 @@ files["HardCounters_Farmer/Attribution.lua"] = { read_globals = {} }
 
 files["HardCounters_Farmer/Farmer.lua"] = {
   read_globals = { "HardCounters", "Enum", "C_Item", "GetItemInfo", "GetItemInfoInstant", "GetItemCount", "GetTime",
-    "C_Timer", "GetInboxInvoiceInfo", "GetInboxHeaderInfo", "GetSendMailMoney", "C_Reputation" },
+    "C_Timer", "GetInboxInvoiceInfo", "GetInboxHeaderInfo", "GetSendMailMoney", "C_Reputation",
+    "C_Spell", "GetSpellInfo", "IsFishingLoot" },
 }
 files["HardCounters_Farmer/UI/**"] = {
   read_globals = { "HardCounters", "CreateFrame" },   -- Hard Counters hosts the window (frame, Escape, BlizzMove)

@@ -372,6 +372,7 @@ function HC:RegisterReading(id, def)
   if def.pickTitle ~= nil and type(def.pickTitle) ~= "string" then misuse("RegisterReading('%s'): pickTitle must be a string", id) end
   if def.rateTitle ~= nil and type(def.rateTitle) ~= "string" then misuse("RegisterReading('%s'): rateTitle must be a string", id) end
   if def.recentTitle ~= nil and type(def.recentTitle) ~= "string" then misuse("RegisterReading('%s'): recentTitle must be a string", id) end
+  if def.mixList ~= nil and def.mixList ~= true then misuse("RegisterReading('%s'): mixList must be true", id) end
   local calcs
   if def.calcs ~= nil then
     if def.compute == nil then misuse("RegisterReading('%s'): only a computed reading lists its calcs", id) end
@@ -395,6 +396,7 @@ function HC:RegisterReading(id, def)
     hidden = (def.hidden or def.foldInto ~= nil or def.unitOf ~= nil) and true or nil,
     foldInto = def.foldInto, foldArg = def.foldArg, unitOf = def.unitOf, unitLabel = def.unitLabel,
     pickTitle = def.pickTitle,
+    mixList = def.mixList or nil,     -- (2026-11-25) its mix lists the parts one per line, with amounts
     -- `per = "activeHour"` (before HC-51): per hour by default; with no rateTitle its title is the rate's, so it
     -- offers only perHour
     defaultCalc = per and "perHour" or nil, legacyPer = per and not calcs and def.rateTitle == nil or nil,

@@ -8,6 +8,9 @@ local ITEMS = {
   [4306] = { name = "Silk Cloth", quality = 1, class = 7, sub = 5, price = 150 },
   [7909] = { name = "Aquamarine", quality = 2, class = 7, sub = 4, price = 1000 },
   [1234] = { name = "Grey Junk", quality = 0, class = 15, sub = 0, price = 5 },
+  [6291] = { name = "Raw Brilliant Smallfish", quality = 1, class = 7, sub = 8, price = 1 },
+  [6289] = { name = "Raw Longjaw Mud Snapper", quality = 1, class = 7, sub = 8, price = 1 },
+  [6303] = { name = "Raw Slitherskin Mackerel", quality = 1, class = 7, sub = 8, price = 1 },
 }
 
 local function boot(opts)
@@ -27,7 +30,7 @@ local function boot(opts)
   -- Farmer's trackers start off (TRACKERS_AND_BOARDS §0.3): these specs test counting, so all on, full history
   env.settings = env.ns.DefaultProfile()
   env.settings.trackers = {}
-  for _, id in ipairs(opts and opts.defaults and {} or { "hc:goldph", "hc:xpph", "hcfarm:ledger", "hcfarm:loot", "hcfarm:rep" }) do
+  for _, id in ipairs(opts and opts.defaults and {} or { "hc:goldph", "hc:xpph", "hcfarm:ledger", "hcfarm:loot", "hcfarm:rep", "hcfarm:fishing" }) do
     env.settings.trackers[id] = { on = true, history = "detailed", seen = true }
   end
   _G.C_Item = nil
@@ -81,9 +84,9 @@ describe("Farmer on Hard Counters", function()
   it("registers its pack, three counters, trackers, readings and views through the public API", function()
     local env = boot()
     local ids = env.HC:Counters()
-    assert.are.equal(8, #ids)                         -- hc:time.active, Basics' 4, Farmer's 3
+    assert.are.equal(9, #ids)                         -- hc:time.active, Basics' 4, Farmer's 4
     assert.truthy(env.HC:GetCounter("hcfarm:loot.items"))
-    assert.are.equal(13, #env.HC:RunReadings())       -- Basics' 8 with a run scope (Gold out: 2026-11-24), Farmer's 5 (vendorph: an alias)
+    assert.are.equal(14, #env.HC:RunReadings())       -- Basics' 8 with a run scope (Gold out: 2026-11-24), Farmer's 6 (vendorph: an alias)
     assert.truthy(env.HC:GetView("hcfarm:ledger.in"))
     assert.is_true(env.HC:Supports("bigDimensions"))
     assert.are.equal(100000, total(env, "hc:money.owned", { measure = "last" }))
@@ -288,6 +291,102 @@ describe("Farmer on Hard Counters", function()
     env:fire("PLAYER_MONEY")
     assert.is_nil(total(env, "hcfarm:loot.items"))
     assert.is_true(env.ns.health.session.secretsRejected >= 3)
+  end)
+end)
+
+describe("the Fishing basket (2026-11-25)", function()
+  local function loot(env, id, name, n)
+    if n and n > 1 then env:fire("CHAT_MSG_LOOT", S.enUS.LOOT_ITEM_SELF_MULTIPLE:format(S.link(id, name), n))
+    else env:fire("CHAT_MSG_LOOT", S.enUS.LOOT_ITEM_SELF:format(S.link(id, name))) end
+  end
+
+  it("counts loot from a fishing bobber only, by item, and the fish in your bags", function()
+    local env = boot()
+    local HC = env.HC
+    local bobber = false
+    _G.IsFishingLoot = function() return bobber end
+    local bags = { [6291] = 7, [6289] = 2, [2589] = 40 }
+    _G.GetItemCount = function(id) return bags[id] or 0 end
+    -- a mob's loot is no catch
+    env:fire("LOOT_OPENED", false)
+    loot(env, 2589, "Linen Cloth", 2)
+    env:fire("LOOT_CLOSED")
+    assert.are.equal(0, (HC:Reading("hcfarm:fished", "session")))
+    -- a bobber's: while the window is open, and just after it closes (auto loot)
+    bobber = true
+    env:fire("LOOT_READY", true)
+    env:fire("LOOT_OPENED", true)
+    loot(env, 6291, "Raw Brilliant Smallfish")
+    env:fire("LOOT_CLOSED")
+    bobber = false
+    loot(env, 6291, "Raw Brilliant Smallfish", 2)
+    env:advance(3)
+    loot(env, 2589, "Linen Cloth")                     -- too late: no catch
+    bobber = true
+    env:fire("LOOT_OPENED", true)
+    loot(env, 6289, "Raw Longjaw Mud Snapper")
+    env:fire("LOOT_CLOSED")
+    bobber = false
+    assert.are.equal(4, (HC:Reading("hcfarm:fished", "session")))
+    assert.are.equal(3, (HC:Reading("hcfarm:fished", "session", { arg = 6291 })))
+    assert.are.equal(1, (HC:Reading("hcfarm:fished", "session", { arg = 6289 })))
+    local _, text = HC:Reading("hcfarm:fished", "session", { arg = 6291 })
+    assert.are.equal("3", text)
+    -- in bags: one catch, or every item ever fished (the linen in the bags is no catch)
+    assert.are.equal(7, (HC:Reading("hcfarm:fishbags", "now", { arg = 6291 })))
+    assert.are.equal(9, (HC:Reading("hcfarm:fishbags", "now")))
+    assert.are.equal(9, env.farm.FishInBags())
+    assert.are.equal("Raw Brilliant Smallfish", env.ns.MemberLabel(env.ns.readings["hcfarm:fished"], 6291))
+    assert.are.equal("Every catch", env.ns.MemberLabel(env.ns.readings["hcfarm:fished"], nil))
+    _G.IsFishingLoot = nil
+    _G.GetItemCount = nil
+    assert.are.same({}, env.errors)
+  end)
+
+  it("without IsFishingLoot, loot right after your Fishing channel is a catch", function()
+    local env = boot()
+    local HC = env.HC
+    _G.IsFishingLoot = nil
+    _G.C_Spell = { GetSpellName = function(id) return (id == 7620 or id == 99999) and "Fishing" or "Frostbolt" end }
+    -- someone else's channel and another spell don't count
+    env:fire("UNIT_SPELLCAST_CHANNEL_START", "target", "c", 7620)
+    env:fire("UNIT_SPELLCAST_CHANNEL_START", "player", "c", 116)
+    env:fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "c", 116)
+    env:fire("LOOT_OPENED", false)
+    loot(env, 2589, "Linen Cloth")
+    env:fire("LOOT_CLOSED")
+    assert.are.equal(0, (HC:Reading("hcfarm:fished", "session")))
+    -- your Fishing (a rank told by name): the bobber clicked ends the channel, the loot opens
+    env:advance(5)
+    env:fire("UNIT_SPELLCAST_CHANNEL_START", "player", "c", 99999)
+    env:advance(10)
+    env:fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "c", 99999)
+    env:fire("LOOT_OPENED", false)
+    loot(env, 6303, "Raw Slitherskin Mackerel")
+    env:fire("LOOT_CLOSED")
+    assert.are.equal(1, (HC:Reading("hcfarm:fished", "session", { arg = 6303 })))
+    -- long after the channel: a mob's loot again
+    env:advance(30)
+    env:fire("LOOT_OPENED", false)
+    loot(env, 2589, "Linen Cloth")
+    env:fire("LOOT_CLOSED")
+    assert.are.equal(1, (HC:Reading("hcfarm:fished", "session")))
+    assert.is_true(env.farm.IsFishingSpell(7620))
+    assert.is_false(env.farm.IsFishingSpell(116))
+    _G.C_Spell = nil
+    assert.are.same({}, env.errors)
+  end)
+
+  it("offers the Fishing basket board: a run total, per hour, in bags and two list mixes", function()
+    local env = boot()
+    local HC = env.HC
+    assert.is_true(HC:Supports("boardPresets"))
+    local t = HC:GetTracker("hcfarm:fishing")
+    assert.are.equal("Fishing", t.title)
+    local r = env.ns.readings["hcfarm:fished"]
+    assert.is_true(r.mixList)
+    assert.is_true(env.ns.readings["hcfarm:fishbags"].mixList)
+    assert.are.same({ "BAG_UPDATE" }, env.ns.readings["hcfarm:fishbags"].refresh)
   end)
 end)
 

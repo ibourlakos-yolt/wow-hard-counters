@@ -8,7 +8,7 @@ local GAME = {
   "GetSpellHitModifier", "GetManaRegen", "UnitArmor", "GetDodgeChance", "GetParryChance", "GetBlockChance",
   "GetShieldBlock", "UnitClass", "GetInventoryItemID", "GetInventorySlotInfo", "C_SkillInfo", "GetItemInfoInstant",
   "UnitDamage", "UnitAttackSpeed", "UnitRangedDamage", "GetSpellPenetration", "UnitResistance", "GetInventoryItemDurability",
-  "GetAverageItemLevel", "GetHealthRegen", "GetManaRegenFromSpirit", "GetMeleeHaste", "UnitSpellHaste", "C_Spell", "C_UnitAuras",
+  "GetAverageItemLevel", "GetHealthRegen", "GetManaRegenFromSpirit", "GetMeleeHaste", "UnitSpellHaste", "C_Spell", "C_UnitAuras", "UnitPower",
 }
 
 local function boot(class)
@@ -337,15 +337,27 @@ describe("Character Stats, phase 1 (live readings)", function()
     local HC = env.HC
     local realTime = _G.GetTime
     _G.GetTime = function() return env.t end
+    local mana = 800
+    _G.UnitPower = function(_, kind)
+      if kind ~= 0 then return 0 end
+      if env.game.combat then return env:secretValue() end
+      return mana
+    end
     _G.C_Spell = { GetSpellPowerCost = function(id)
       if id == 1 then return { { type = 0, cost = 100 } } end            -- mana
-      if id == 2 then return { { type = 0, cost = 0 } } end              -- free now (a clearcast)
+      if id == 2 then return { { type = 0, cost = 0 } } end              -- free (a wand's Shoot)
       if id == 3 then return { { type = 3, cost = 40 } } end             -- energy
-      return nil
+      if id == 4 then return { { type = 0, cost = 0, costPerSec = 20 } } end -- a channel
+      if id == 5 then return { { type = 0, cost = 50, requiredAuraID = 99, hasRequiredAura = false } } end
+      return nil                                                          -- Fishing: no cost entry at all
     end }
+    local function spend(id, n) mana = mana - n; env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
+      env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", id) end
+    env:fire("PLAYER_ENTERING_WORLD")                          -- seeds the last mana seen
     assert.are.equal(5, (read(env, "fsr")))                    -- nothing cast yet: regeneration is running
     assert.are.equal(5, HC:ReadingTarget("hcstats:fsr"))      -- its target: a bar fills toward 5
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-1", 1)
+    -- the mana drop's event first, then the cast
+    spend(1, 100)
     assert.are.equal(0, (read(env, "fsr")))
     assert.is_true(env.ns.dirty)                               -- boards are told to redraw
     env:advance(2)
@@ -353,31 +365,76 @@ describe("Character Stats, phase 1 (live readings)", function()
     local _, text, _, state = read(env, "fsr")
     assert.are.equal("2.00 s", text)
     assert.is_nil(state)                                       -- a clock of our own: never "in combat"
-    -- a free spell, an energy cost and someone else's cast don't restart it
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-2", 2)
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-3", 3)
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "target", "cast-4", 1)
-    assert.are.equal(2, (read(env, "fsr")))
-    env:advance(4)
+    -- casts that spend no mana don't restart it: Fishing (no cost entry), a free spell, an energy cost, a
+    -- clearcast (listed cost, nothing paid), someone else's cast; nor a mana drop with no cast of ours
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 99)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 2)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 3)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 1)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "target", "c", 1)
+    env:advance(1)                                             -- the pending clearcast expires unmatched
+    mana = mana - 30; env:fire("UNIT_POWER_FREQUENT", "player", "MANA")   -- drained by a mob
+    env:fire("UNIT_POWER_FREQUENT", "target", "MANA")
+    assert.are.equal(3, (read(env, "fsr")))
+    env:advance(3)
     assert.are.equal(5, (read(env, "fsr")))                    -- full: spirit regeneration is back
-    -- a spell whose cost the client can't tell starts it (said in the description)
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-5", 99)
+    -- the cast first, the drop's event within half a second: the clock starts at the cast
+    env:advance(10)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 1)
+    env:advance(0.25)
+    mana = mana - 100; env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    assert.are.equal(0.25, (read(env, "fsr")))
+    -- the drop already in UnitPower when the cast arrives, its event later
+    env:advance(10)
+    mana = mana - 100
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 1)
     assert.are.equal(0, (read(env, "fsr")))
-    env:advance(6)
-    -- in combat too: nothing secret is read
+    env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    -- a regeneration tick (mana up) next to a cast of nothing starts nothing
+    env:advance(10)
+    mana = mana + 40; env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 99)
+    assert.are.equal(5, (read(env, "fsr")))
+    -- in combat, mana secret: the listed cost decides; Fishing, free spells and aura-only costs still don't
+    env:advance(10)
     env.game.combat = true
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-6", 1)
+    env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
+    for _, id in ipairs({ 99, 2, 3, 5 }) do env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", id) end
+    assert.are.equal(5, (read(env, "fsr")))
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 1)
     env:advance(1)
     assert.are.equal(1, (read(env, "fsr")))
-    env.game.combat = false
-    -- with the Spell tracker off nothing is timed
     env:advance(10)
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 4)     -- a channel's cost per second
+    assert.are.equal(0, (read(env, "fsr")))
+    env.game.combat = false
+    -- with the Spell tracker off nothing is timed, and a spend meanwhile isn't read as a drop afterwards
+    env:advance(10)
+    env:fire("UNIT_POWER_FREQUENT", "player", "MANA")
     HC:SetTrackerOn("hcstats:spell", false)
-    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast-7", 1)
+    spend(1, 100)
     HC:SetTrackerOn("hcstats:spell", true)
+    assert.are.equal(5, (read(env, "fsr")))
+    env:fire("UNIT_SPELLCAST_SUCCEEDED", "player", "c", 99)
     assert.are.equal(5, (read(env, "fsr")))
     _G.GetTime = realTime
     assert.are.same({}, env.errors)
+  end)
+
+  it("tells a listed mana cost from none (ns.CostsMana)", function()
+    local env = boot("PRIEST")
+    _G.C_Spell = { GetSpellPowerCost = function(id)
+      if id == 1 then return {} end
+      if id == 2 then return { { type = 0, cost = 0, costPercent = 5 } } end
+      if id == 3 then return { { type = 0, cost = 50, requiredAuraID = 7, hasRequiredAura = true } } end
+      if id == 4 then error("boom") end
+      return nil
+    end }
+    assert.is_false(env.pack.CostsMana(1))
+    assert.is_true(env.pack.CostsMana(2))
+    assert.is_true(env.pack.CostsMana(3))
+    assert.is_nil(env.pack.CostsMana(4))
+    assert.is_nil(env.pack.CostsMana(7620))                       -- Fishing: nil, and nil is not a spend
   end)
 
   it("reads weapon damage and speed, schools, penetration, resistances and gear (2026-11-24)", function()

@@ -233,7 +233,7 @@ STEPS = {
     text = function()
       local chosen = ns.Packs and ns.Packs.Chosen()
       return lines(
-        L["Packs are where the numbers come from: Farmer counts loot, vendor value and reputation; Character Stats your stats; Traveler distance and speed. Gold and experience are built in."],
+        L["Packs are where the numbers come from: Farmer counts loot, vendor value, reputation and your fishing catch; Character Stats your stats; Traveler distance and speed. Gold and experience are built in."],
         "",
         bullet(format(L["Tick the packs you want, then %s. Their trackers are switched on for you."], gold(L["Use these packs"]))),
         bullet(format(L["When a pack has to be loaded or unloaded the tab shows %s: a few seconds, nothing is lost (/reload does the same)."], gold(L["Reload now"]))),
@@ -272,7 +272,7 @@ STEPS = {
       if #packs == 0 then out[#out + 1] = bullet(L["(none loaded: the Packs tab turns the packs on)"]) end
       for _, s in ipairs(packs) do out[#out + 1] = s end
       out[#out + 1] = ""
-      out[#out + 1] = L["Farmer counts loot, vendor value and reputation; Character Stats your stats; Traveler distance and speed. A pack with no tab still adds its numbers to Trackers and its ready-made boards to New board..."]
+      out[#out + 1] = L["Farmer counts loot, vendor value, reputation and your fishing catch; Character Stats your stats; Traveler distance and speed. A pack with no tab still adds its numbers to Trackers and its ready-made boards to New board..."]
       out[#out + 1] = ""
       out[#out + 1] = L["Don't want one? Untick it in the Packs tab. Options: the Tab labels choice (icon, title or both)."]
       return table.concat(out, "\n")

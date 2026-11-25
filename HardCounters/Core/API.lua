@@ -13,6 +13,8 @@ local FEATURES = {
   readingStates = true,           -- reading `applies` and `stale` (HC-28)
   livePassThrough = true,         -- reading `live`, HC:ReadingLive (CS-9: secrets handed straight to widgets)
   readingsChanged = true,         -- HC:ReadingsChanged (a live reading that moves by itself: a timer's progress)
+  counterMembers = true,          -- HC:CounterMembers (2026-11-25: the members a small dimension has counted)
+  mixList = true,                 -- reading `mixList` (2026-11-25: a mix tile lists its parts with amounts)
   hist = false, autoRuns = false, journal = false,
 }
 
@@ -58,6 +60,14 @@ end
 
 function HC:ZoneName(key)
   return W.mapName(key)
+end
+
+--- (2026-11-25) The members of a counter's small dimension (cap up to 500) this character has counted, as a new list
+--- (unsorted; "other" and "none" left out): kept in the saved odometer, so a /reload or a login keeps them, with or
+--- without history. A big dimension gives only the members a tile watches. Farmer's "Fish in bags" sums them.
+function HC:CounterMembers(counterId, dim)
+  if type(counterId) ~= "string" or type(dim) ~= "string" or not ns.OdoMembers then return {} end
+  return ns.OdoMembers(counterId, dim, {})
 end
 
 --- UTC epoch seconds (the timestamp format of everything Hard Counters stores).

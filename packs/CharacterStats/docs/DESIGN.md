@@ -413,9 +413,18 @@ ones shows health regen or the five-second rule.
 - **Healing crit** (the spell crit of the class's healing school), **spell haste** (`UnitSpellHaste`), **melee
   haste** (`GetMeleeHaste`).
 - **The five-second rule** (`hcstats:fsr`): seconds since the last spell that cost mana, 0 to 5, target 5. A clock,
-  not a stat: `UNIT_SPELLCAST_SUCCEEDED` for the player and the spell's power cost (`C_Spell.GetSpellPowerCost`),
-  never a comparison of mana (secret in combat). Unknown cost: the cast counts. While it runs the pack asks boards to
-  redraw four times a second (`HC:ReadingsChanged`), then stops.
+  not a stat. While it runs the pack asks boards to redraw four times a second (`HC:ReadingsChanged`), then stops.
+  **The trigger, fixed for 0.3.0-beta2** (the user: Fishing started it). The rule is about spending mana, not
+  casting: it starts when a cast that cost mana completes (a channel: at its start, when the mana is taken), each
+  spend restarts it, and free spells, free casts (Clearcasting, Inner Focus), wands, mounts, food, potions and
+  cancelled casts leave regeneration running (the 1.4.0 patch note on warcraft.wiki.gg "Mana regeneration"; the
+  FiveSecondRule addon starts on `UNIT_SPELLCAST_SUCCEEDED` only when the player's mana fell). As built: with mana
+  readable (`UnitPower("player", 0)` not secret), a spend is your own `UNIT_SPELLCAST_SUCCEEDED` **and** a mana drop
+  (`UNIT_POWER_FREQUENT`), within 0.5 s of each other in either order (the clock starts at the cast); the listed cost
+  is not asked, so a clearcast doesn't count. With mana secret: the spell's power cost must list mana (`cost`,
+  `costPerSec` or `costPercent` above 0, an entry needing an aura the player lacks left out); a clearcast then counts.
+  Neither can tell: **no start** (before, an unknown cost counted, and Fishing's cost is nil). The last mana seen is
+  forgotten while the Spell tracker is off. Unverified on Forever: whether `UnitPower` turns secret in combat.
 - **Rows:** per-second readings, haste, healing crit and the five-second rule are for boards only (`noRow`): the
   window keeps every row without a scroll bar.
 - **Boards:** every role and class board of a caster ends with the five-second rule as a bar; class boards show

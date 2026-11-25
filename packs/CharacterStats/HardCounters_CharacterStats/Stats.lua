@@ -13,7 +13,7 @@ if not HC or (HC.API_VERSION or 0) < 1 or not (HC.Supports and HC:Supports("live
 
 local type, select, ipairs = type, select, ipairs
 
-ns.VERSION = "0.3.0-beta1"
+ns.VERSION = "0.3.0-beta2"
 ns.pack = HC:RegisterPack("CharacterStats", { namespace = "hcstats", version = ns.VERSION, title = "Character Stats" })
 
 ---------------------------------------------------------------------------
@@ -148,19 +148,34 @@ local function regen(fnName, second, mult)
 end
 
 ---------------------------------------------------------------------------
--- The five-second rule (the user, 2026-11-25). Spending mana on a spell stops spirit regeneration for five seconds;
--- the reading counts those seconds, 0 to 5, toward a target of 5, so as a bar it fills while you wait and is full
--- once regeneration is back. It is a clock, not a stat: nothing secret, nothing read from the game but "my spell
--- went off and it cost mana". The cost comes from the spell's own power cost (C_Spell.GetSpellPowerCost: no need to
--- compare mana before and after, which may be secret in combat); where the client doesn't give one, any spell you
--- cast starts the clock (a free spell then starts it too: said in the reading's description).
--- Unverified on Forever (2026-11-25): that UNIT_SPELLCAST_SUCCEEDED carries the spell id as its third argument and
--- that C_Spell.GetSpellPowerCost answers there. Both degrade to "any cast starts it".
+-- The five-second rule (the user, 2026-11-25; the trigger fixed 2026-11-25 for 0.3.0-beta2). Spending mana on a
+-- spell stops spirit regeneration for five seconds from the moment the cast completes (a channel: from its start,
+-- when its mana is taken); each spend restarts the five seconds. It is the spend that counts, not the cast: a spell
+-- that costs nothing (Fishing, a profession, a wand's Shoot, a mount, eating or drinking, a potion) and a free cast
+-- (Clearcasting, Inner Focus) leave regeneration running, and so does a cast that is cancelled or interrupted. Mp5
+-- from gear and buffs ignores the rule. (Sources: the 1.4.0 patch note on warcraft.wiki.gg "Mana regeneration", and
+-- the FiveSecondRule addon, which starts its timer on UNIT_SPELLCAST_SUCCEEDED only when the player's mana fell.)
+--
+-- The reading counts those seconds, 0 to 5, toward a target of 5, so as a bar it fills while you wait and is full
+-- once regeneration is back. How a spend is told:
+--   1. Mana readable (UnitPower not secret): your own cast succeeded AND your mana fell, either one first, within
+--      half a second of each other (the two events arrive in either order). This is the proof; the spell's listed
+--      cost is not asked, so a clearcast (listed cost, nothing paid) doesn't start it.
+--   2. Mana secret (in combat on Forever, possibly): the spell's own power cost (C_Spell.GetSpellPowerCost) must
+--      list mana. A clearcast then starts it too: the one known miss, said in the reading's description.
+--   3. Neither can tell: the clock does NOT start. Before 0.3.0-beta2 "can't tell" counted as a spend, so a spell
+--      with no cost entry at all (Fishing: the client answers nil) started the clock.
+-- Unverified on Forever: whether UnitPower("player", 0) turns secret in combat (then path 2 runs in fights).
 ---------------------------------------------------------------------------
 
 local FSR = 5
+local PAIR = 0.5                  -- seconds allowed between a cast and the mana drop that proves it cost mana
+local POWER_MANA = 0              -- Enum.PowerType.Mana
 local fsrAt                       -- GetTime() of the last mana-spending cast
 local fsrTicker
+local lastMana                    -- the player's mana when last seen plain (nil: unknown or secret)
+local dropAt                      -- GetTime() of the last mana drop not yet matched to a cast
+local castAt                      -- GetTime() of the last cast of ours not yet matched to a mana drop
 
 local function clockNow()
   if type(GetTime) ~= "function" then return nil end
@@ -169,7 +184,16 @@ local function clockNow()
   return num(t)
 end
 
---- Does this spell cost mana now? true, false, or nil when the client can't say.
+--- The player's mana now, or nil when the call is missing or the value is secret.
+local function manaNow()
+  if type(UnitPower) ~= "function" then return nil end
+  local ok, m = pcall(UnitPower, "player", POWER_MANA)
+  if not ok or HC:IsSecret(m) then return nil end
+  return num(m)
+end
+
+--- Does this spell list a mana cost? true, false, or nil when the client can't say (nil is NOT a spend).
+--- An entry that needs an aura the player hasn't got doesn't count; a cost per second (a channel) or in percent does.
 local function costsMana(spellID)
   local f = (type(C_Spell) == "table" and C_Spell.GetSpellPowerCost) or GetSpellPowerCost
   if type(f) ~= "function" or spellID == nil or HC:IsSecret(spellID) then return nil end
@@ -178,29 +202,71 @@ local function costsMana(spellID)
   for i = 1, #costs do
     local c = costs[i]
     if type(c) == "table" then
-      if anySecret(c.type, c.cost) then return nil end
-      if c.type == 0 and (num(c.cost) or 0) > 0 then return true end
+      if anySecret(c.type, c.cost, c.costPerSec, c.costPercent, c.requiredAuraID, c.hasRequiredAura) then return nil end
+      local needsAura = (num(c.requiredAuraID) or 0) ~= 0 and c.hasRequiredAura == false
+      if c.type == POWER_MANA and not needsAura
+        and ((num(c.cost) or 0) > 0 or (num(c.costPerSec) or 0) > 0 or (num(c.costPercent) or 0) > 0) then
+        return true
+      end
     end
   end
   return false
 end
 ns.CostsMana = costsMana
 
---- A spell of yours went off (UNIT_SPELLCAST_SUCCEEDED: unit, cast id, spell id): if it cost mana, the five seconds
---- start again. Boards are told to redraw while they run.
-local function onCast(_, unit, _, spellID)
-  if HC:IsSecret(unit) or unit ~= "player" then return end
-  if costsMana(spellID) == false then return end
-  local t = clockNow()
-  if not t then return end
+--- The five seconds start again at time t. Boards are told to redraw while they run.
+local function startFsr(t)
   fsrAt = t
+  dropAt, castAt = nil, nil
   if HC.ReadingsChanged then
     HC:ReadingsChanged()
     if fsrTicker then fsrTicker:Cancel() end
     if type(C_Timer) == "table" and C_Timer.NewTicker then
-      -- four redraws a second for the five seconds, and one after: then nothing runs until the next cast
+      -- four redraws a second for the five seconds, and one after: then nothing runs until the next spend
       fsrTicker = C_Timer.NewTicker(0.25, function() HC:ReadingsChanged() end, FSR * 4 + 1)
     end
+  end
+end
+
+--- Your mana changed (UNIT_POWER_FREQUENT: unit, power token) or you entered the world (seeds the last value).
+--- A drop right after a cast of ours proves that cast cost mana; a drop with no cast yet waits half a second for one.
+local function onPower(event, unit, powerType)
+  if event ~= "PLAYER_ENTERING_WORLD" then
+    if HC:IsSecret(unit) or unit ~= "player" then return end
+    if powerType ~= nil and (HC:IsSecret(powerType) or powerType ~= "MANA") then return end
+  end
+  local m = manaNow()
+  if not m then lastMana = nil return end
+  if lastMana and m < lastMana then
+    local t = clockNow()
+    if t then
+      if castAt and t - castAt <= PAIR then startFsr(castAt) else dropAt = t end
+    end
+  end
+  lastMana = m
+end
+ns.OnPower = onPower
+
+--- A spell of yours went off (UNIT_SPELLCAST_SUCCEEDED: unit, cast id, spell id). It starts the five seconds only
+--- if it spent mana: see the block comment above for how that is told.
+local function onCast(_, unit, _, spellID)
+  if HC:IsSecret(unit) or unit ~= "player" then return end
+  local t = clockNow()
+  if not t then return end
+  local m = manaNow()
+  if m then
+    if lastMana and m < lastMana then              -- the drop is already in UnitPower, its event not seen yet
+      lastMana = m
+      startFsr(t)
+    elseif dropAt and t - dropAt <= PAIR then      -- the drop's event came first
+      lastMana = m
+      startFsr(t)
+    else                                           -- no drop yet: wait half a second for one
+      lastMana = m
+      castAt = t
+    end
+  elseif costsMana(spellID) == true then           -- mana is secret: trust the listed cost
+    startFsr(t)
   end
 end
 ns.OnCast = onCast
@@ -588,7 +654,7 @@ ns.STATS = {
     function() return classIs(MANA)() and hasCall("GetManaRegenFromSpirit")() end,
     "The part of your mana per 5 seconds that comes from spirit: what the five-second rule switches off." },
   { "fsr", "Five-second rule", S, fsrElapsed, "seconds", classIs(MANA),
-    "Seconds since your last spell that cost mana, up to 5. As a bar it fills while spirit regeneration is off and is full when it is back. Where the game doesn't tell a spell's cost, any spell you cast starts it.",
+    "Seconds since you last spent mana on a spell, up to 5. As a bar it fills while spirit regeneration is off and is full when it is back. Spells that cost nothing (Fishing, professions, a wand, mounts, food, potions) and free casts leave it full. Where your mana is hidden in combat, a clearcast spell may start it.",
     { target = function() return FSR end, noRow = true, plain = true } },
   { "armor", "Armor", D, function()
       if type(UnitArmor) ~= "function" then return nil end
@@ -702,13 +768,19 @@ for i, s in ipairs(ns.STATS) do
   end
 end
 
--- The five-second rule's clock: your own spells going off. No counter is written (no `feeds`), and nothing is done
--- while the Spell tracker is off.
+-- The five-second rule's clock: your own spells going off, and your mana falling. No counter is written (no
+-- `feeds`), and nothing is done while the Spell tracker is off.
 if HC.RegisterSource then
   HC:RegisterSource("hcstats:casts", { mode = "event", events = { "UNIT_SPELLCAST_SUCCEEDED" },
     handler = function(event, ...)
       if HC.IsTrackerOn and not HC:IsTrackerOn(S) then return end
       onCast(event, ...)
+    end })
+  HC:RegisterSource("hcstats:mana", { mode = "event", events = { "UNIT_POWER_FREQUENT", "PLAYER_ENTERING_WORLD" },
+    handler = function(event, ...)
+      -- off: forget the last mana seen, or a spend made meanwhile would read as a drop at the next cast
+      if HC.IsTrackerOn and not HC:IsTrackerOn(S) then lastMana = nil return end
+      onPower(event, ...)
     end })
 end
 

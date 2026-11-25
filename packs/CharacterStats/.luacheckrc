@@ -11,7 +11,7 @@ ignore = {
 exclude_files = { "dist/**", ".luarocks/**" }
 
 files["HardCounters_CharacterStats/Stats.lua"] = {
-  read_globals = { "HardCounters", "UnitStat", "UnitHealthMax", "UnitPowerMax", "UnitAttackPower",
+  read_globals = { "HardCounters", "UnitStat", "UnitHealthMax", "UnitPowerMax", "UnitPower", "UnitAttackPower",
     "UnitRangedAttackPower", "GetCritChance", "GetHitModifier", "GetRangedCritChance", "GetSpellBonusDamage",
     "GetSpellBonusHealing", "GetSpellCritChance", "GetSpellHitModifier", "GetManaRegen", "GetTime", "C_Spell",
     "GetSpellPowerCost", "C_UnitAuras", "C_Timer", "GetMeleeHaste", "UnitSpellHaste", "GetHealthRegen", "GetManaRegenFromSpirit", "UnitArmor",

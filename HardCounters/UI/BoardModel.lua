@@ -1512,6 +1512,17 @@ end
 
 M.HEIGHT = { run = 24, hero = 74, heroCompare = 88, grid = 34, row = 18, bar = 26, gauge = 38, splits = 18, label = 18,
   strip = 22, odometer = 44, mix = 40 }
+--- (2026-11-25, Farmer's Fishing basket) a mix whose reading sets `mixList`: the bar, then one line per part (name,
+--- amount, share) instead of the shares in one line. A fixed height (every part's line), so the board doesn't jump
+--- as members appear.
+M.MIX_LINE_H = 12
+M.HEIGHT.mixList = 26 + M.MIX_LINE_H * 6 + 4
+
+--- Does this mix tile list its parts one per line? (its reading's `mixList`)
+function M.MixIsList(tile)
+  local r = tile and ns.readings[tile.reading]
+  return r ~= nil and r.mixList == true
+end
 M.PAD = 6
 
 --- How a reading tile is drawn (the layout row's kind): "hero" (a large number), "grid" (a half number), "row" (a
@@ -1562,6 +1573,7 @@ function M.Layout(board, opts)
     elseif foot then
       local h = M.HEIGHT[foot]
       if foot == "hero" and opts and opts.compare and opts.compare[i] then h = M.HEIGHT.heroCompare end
+      if foot == "mix" and M.MixIsList(tile) then h = M.HEIGHT.mixList end
       rows[#rows + 1] = { kind = foot, tiles = { i }, h = h }
       i = i + 1
     else

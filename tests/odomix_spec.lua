@@ -184,3 +184,64 @@ describe("drawing the odometer and the mix", function()
     end)
   end)
 end)
+
+describe("a list mix and the members counted (2026-11-25, Farmer's Fishing basket)", function()
+  it("lists each part on its own line with its amount and share, at a fixed height; HC:CounterMembers", function()
+    UI.with(function(ctx)
+      local HC, ns = ctx.HC, ctx.hc
+      local M, B = ns.BoardModel, ns.Boards
+      HC:RegisterPack("Test", { namespace = "t" })
+      HC:RegisterCounter({ id = "t:catch", version = 1, measures = { "sum", "count" },
+        dimensions = { { name = "fish", cap = 200 } }, aggregations = { {}, { "fish" } }, runBreakdowns = { "fish" } })
+      HC:RegisterTracker("t:fishing", { title = "Fishing", counters = { "t:catch" }, default = "off" })
+      HC:SetTrackerOn("t:fishing", true)
+      local names = { [1] = "Smallfish", [2] = "Mudsnapper", [3] = "Boot" }
+      HC:RegisterReading("t:caught", { title = "Caught", tracker = "t:fishing", counter = "t:catch", scopes = { "session" },
+        param = { dim = "fish", type = "enum", optional = true, label = function(k) return names[k] end }, mixList = true })
+      HC:RegisterReading("t:plain", { title = "Caught", tracker = "t:fishing", counter = "t:catch", scopes = { "session" },
+        param = { dim = "fish", type = "enum", optional = true, label = function(k) return names[k] end } })
+      assert.is_true(HC:Supports("mixList"))
+      assert.is_true(HC:Supports("counterMembers"))
+      assert.are.same({}, HC:CounterMembers("t:catch", "fish"))
+      HC:Emit("t:catch", 6, 1)
+      HC:Emit("t:catch", 3, 2)
+      HC:Emit("t:catch", 1, 3)
+      local members = HC:CounterMembers("t:catch", "fish")
+      table.sort(members)
+      assert.are.same({ 1, 2, 3 }, members)
+      assert.are.same({}, HC:CounterMembers("t:nope", "fish"))
+      local b = M.Create(nil, { name = "Basket", shown = true })
+      local list = M.AddReading(b, "t:caught", { display = "mix" })
+      list.scope = "session"
+      local plain = M.AddReading(b, "t:plain", { display = "mix" })
+      plain.scope = "session"
+      assert.is_true(M.MixIsList(list))
+      assert.is_false(M.MixIsList(plain))
+      local rows = M.Layout(b)
+      local hs = {}
+      for _, r in ipairs(rows) do if r.kind == "mix" then hs[#hs + 1] = r.h end end
+      assert.are.same({ M.HEIGHT.mixList, M.HEIGHT.mix }, hs)
+      B.Refresh(b.id, true)
+      local f = B.Frame(b.id)
+      local lw, pw
+      for _, w in ipairs(f.rowFrames) do
+        if w.row.kind == "mix" then if lw then pw = w else lw = w end end
+      end
+      local function clean(t) return (t or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+      assert.are.equal("10", lw.value:GetText())
+      assert.are.equal("", lw.legend:GetText())
+      assert.are.equal("Smallfish", clean(lw.lines[1].name:GetText()))
+      assert.are.equal("6  60%", lw.lines[1].amount:GetText())
+      assert.are.equal("Mudsnapper", clean(lw.lines[2].name:GetText()))
+      assert.are.equal("3  30%", lw.lines[2].amount:GetText())
+      assert.are.equal("Boot", clean(lw.lines[3].name:GetText()))
+      assert.are.equal("1  10%", lw.lines[3].amount:GetText())
+      assert.are.equal("", lw.lines[4].name:GetText())
+      -- the plain mix keeps its one-line shares
+      assert.are.equal("Smallfish 60%  Mudsnapper 30%  Boot 10%", clean(pw.legend:GetText()))
+      assert.are.equal("", pw.lines[1].name:GetText())
+      assert.has_error(function() HC:RegisterReading("t:bad", { title = "x", counter = "t:catch", mixList = "yes" }) end)
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)

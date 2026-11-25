@@ -42,6 +42,7 @@ local today = HC:Query({ counter = "mypack:fish", grain = "day" }).total
 | `HC:RegisterPhase(id, label, startUTC)` | Content phases for the `phase` grain. Forever's launch and the Dec 9 unlock are built in. |
 | `HC:RegisterDisplay(id, { title, accepts, create(parent, opts) })` | Display plugins; `HC:CreateDisplay(id, parent, opts)`, `HC:Displays()`. |
 | `HC:RegisterWindow(id, def)`, `HC:RegisterWindowHelp(id, def)`, `HC:RegisterSlash(name, fn, help)` | A pack's windows, their Help page and tour, and `/hc` subcommands; see §9. |
+| `HC:CounterMembers(counterId, dim)` → list | (2026-11-25, `HC:Supports("counterMembers")`) The members of a counter's **small** dimension (cap up to 500) this character has counted, a new unsorted list ("other" and "none" left out). Kept in the saved odometer: with or without history, across `/reload` and logins. A big dimension gives only the members a tile watches. Farmer's "Fish in bags" sums the bag counts of every item ever fished. |
 
 **Hard Counters counter fields:** `title`, `category`, `icon`, `formatter` (`"money"`, `"duration"`, `"number"`,
 `"distance"`, `"speed"`, `"speedpct"`, `"seconds"`, `"decimal"`: as for readings, below),
@@ -247,6 +248,7 @@ alias's calc when the alias is registered. Basics' `hc:goldph`, `hc:netph`, `hc:
 | `hidden` | `true`: registered and readable (`HC:Reading`), but out of the catalog (`HC:Readings()` without `{ aliases = true }`, the + menu, the Trackers tab) and the run lists (2026-11-24). Implied by `foldInto` and `unitOf` |
 | `foldInto`, `foldArg` | `foldInto = "<reading id>"`: this reading was merged into that one (2026-11-24). It is hidden; saved tiles and preset tiles on it move to the target, keeping their calc, display, size and name. `foldArg`: `"same"` (the argument carries over: "%s looted" with an item → "Items looted" with that item), `"set"` (it becomes a one-member set of a `multi` target: "Gold from %s" with `loot` → "Gold in" with `{ "loot" }`), or nil (dropped). The old id keeps answering `HC:Reading` |
 | `unitOf`, `unitLabel` | `unitOf = "<reading id>"`: a unit twin, the same value in other units (Traveler's speeds in yd/s and % of run speed). It is hidden; a tile on either has **Units** in its menu, listing the main reading and its twins by `unitLabel` (default their titles), and switching keeps everything else about the tile. Give the main reading a `unitLabel` too ("yd/s") |
+| `mixList` | `true` (2026-11-25, `HC:Supports("mixList")`): a **mix** tile of this reading lists its parts one per line, each with its amount (in the reading's formatter) and share, under the bar, instead of the shares on one line. The row has a fixed height (six lines), so the board doesn't jump as members appear. Farmer's Fishing basket |
 | `pickTitle` | The list name of a reading that needs a member picked, shown until one is ("In bags: pick an item"; default the title with "..." for `%s`) |
 | `scopes` | Any of `run`, `session`, `today`, `week` (the player's week choice), `month`, `year`, `lifetime`, `now`. Default `{ "run", "session" }`. `login` was renamed `session` by HC-49 (2026-11-19), with no alias: a pack listing `login` gets an error |
 | `best` | The run's best single value (from the counter's `runLive.max`); run scope only |
@@ -294,7 +296,7 @@ since 2026-11-24 they carry `hidden`, `foldInto`, `unitOf`, `unitLabel` and `par
 `HC:Readings({ aliases = true })` includes aliases and hidden readings.
 Run, session and now are allocation-free apart from the text; storage scopes run one small query on open buckets.
 
-**A live reading that moves by itself** (`HC:Supports("readingsChanged")`). A reading computed from a clock of your own (Character Stats' five-second rule: seconds since the last spell that cost mana) changes with no event to list in `refresh`. Call `HC:ReadingsChanged()` while it moves: boards redraw on the next frame, four times a second at most. Stop calling when it stops moving.
+**A live reading that moves by itself** (`HC:Supports("readingsChanged")`). A reading computed from a clock of your own (Character Stats' five-second rule: seconds since the last spell that cost mana) changes with no event to list in `refresh`. Call `HC:ReadingsChanged()` while it moves: boards redraw on the next frame, four times a second at most. Stop calling when it stops moving. (Since 0.3.0-beta2 the five-second rule starts only on a real mana spend: your cast succeeded and your mana fell, or, where mana is secret, the spell lists a mana cost; a cast whose cost the game can't tell, Fishing for one, no longer starts it.)
 
 ## 6. Callbacks
 

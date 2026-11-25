@@ -3,6 +3,32 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## 0.3.0-beta2 (2026-11-25)
+
+A beta, **still experimental**. A fishing board for Farmer, and the five-second rule fixed.
+
+**Saved data:** kept. **Updating:** `/reload` is enough (no new addon files).
+
+### New
+- **The Fishing basket** (Farmer; New board... ▸ Activity ▸ **Fishing basket**). Counts what you fish up on the
+  board's timer (**Reset** empties the basket): every catch (fish, junk, clams, chests), per hour, a bar of each
+  catch with its **count and share**, and the **fish in your bags** with theirs. Turn on the new **Fishing** tracker
+  (Trackers tab, Farming) for it to count. A catch is loot from a fishing bobber, as the game reports it; opening a
+  clam or chest you fished is not another catch.
+- Two readings for any board: **Fish caught** (all, or one catch; per hour too) and **Fish in bags** (every item you
+  have fished on this character, or one).
+
+### Fixed
+- **The five-second rule** (Character Stats) started on any spell the game didn't give a cost for, so **Fishing**,
+  professions and other free casts emptied the bar. It now starts only when you really spend mana: your spell went
+  off and your mana fell (either may come first). Free spells, a wand, mounts, food, potions and clearcast spells
+  leave the bar full. Where your mana is hidden in combat, the spell's listed mana cost decides, so a clearcast spell
+  may still start it there. The rule starts when the cast completes (a channel: when it starts), as in the game.
+
+### For pack authors
+- `HC:CounterMembers(counterId, dim)`: the members of a small dimension this character has counted.
+- A reading's `mixList = true`: its mix tile lists each part on its own line with amount and share.
+
 ## 0.3.0-beta1 (2026-11-25)
 
 A beta, **still experimental**. Nothing lands on your screen unasked any more: boards are made in the window and you
