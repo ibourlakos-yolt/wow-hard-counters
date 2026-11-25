@@ -14,7 +14,7 @@ files["HardCounters_CharacterStats/Stats.lua"] = {
   read_globals = { "HardCounters", "UnitStat", "UnitHealthMax", "UnitPowerMax", "UnitAttackPower",
     "UnitRangedAttackPower", "GetCritChance", "GetHitModifier", "GetRangedCritChance", "GetSpellBonusDamage",
     "GetSpellBonusHealing", "GetSpellCritChance", "GetSpellHitModifier", "GetManaRegen", "GetTime", "C_Spell",
-    "GetSpellPowerCost", "C_Timer", "GetMeleeHaste", "UnitSpellHaste", "GetHealthRegen", "GetManaRegenFromSpirit", "UnitArmor",
+    "GetSpellPowerCost", "C_UnitAuras", "C_Timer", "GetMeleeHaste", "UnitSpellHaste", "GetHealthRegen", "GetManaRegenFromSpirit", "UnitArmor",
     "GetDodgeChance", "GetParryChance", "GetBlockChance", "GetShieldBlock", "UnitClass", "GetInventoryItemID",
     "GetInventorySlotInfo", "C_SkillInfo", "C_Item", "GetItemInfoInstant",
     -- (2026-11-24) weapon damage and speed, penetration, resistances, gear

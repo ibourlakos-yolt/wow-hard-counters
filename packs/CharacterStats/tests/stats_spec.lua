@@ -8,7 +8,7 @@ local GAME = {
   "GetSpellHitModifier", "GetManaRegen", "UnitArmor", "GetDodgeChance", "GetParryChance", "GetBlockChance",
   "GetShieldBlock", "UnitClass", "GetInventoryItemID", "GetInventorySlotInfo", "C_SkillInfo", "GetItemInfoInstant",
   "UnitDamage", "UnitAttackSpeed", "UnitRangedDamage", "GetSpellPenetration", "UnitResistance", "GetInventoryItemDurability",
-  "GetAverageItemLevel", "GetHealthRegen", "GetManaRegenFromSpirit", "GetMeleeHaste", "UnitSpellHaste", "C_Spell",
+  "GetAverageItemLevel", "GetHealthRegen", "GetManaRegenFromSpirit", "GetMeleeHaste", "UnitSpellHaste", "C_Spell", "C_UnitAuras",
 }
 
 local function boot(class)
@@ -294,6 +294,30 @@ describe("Character Stats, phase 1 (live readings)", function()
     _G.GetHealthRegen = nil
     env = boot("PRIEST")
     assert.are.equal("inapplicable", (select(4, read(env, "hp5"))))
+  end)
+
+  it("adds flat mana-per-5 buffs to mana regen: Blessing of Wisdom, Mana Spring (the user, 2026-11-25)", function()
+    local auras = {}
+    _G.C_UnitAuras = { GetAuraDataByIndex = function(_, i) return auras[i] end }
+    local env = boot("PRIEST")
+    assert.are.equal(12.5, (read(env, "mp5")))                  -- no buff: 2.5 a second
+    auras = { { spellId = 1459 }, { spellId = 19854, points = { 30 } } }     -- an unrelated buff, Blessing of Wisdom
+    assert.are.equal(42.5, (read(env, "mp5")))
+    assert.are.equal(32.5, (read(env, "mp5cast")))              -- while casting too
+    assert.are.equal(8.5, (read(env, "mps")))
+    assert.are.equal(6.5, (read(env, "mpscast")))
+    assert.are.equal(10, (read(env, "mp5spirit")) or 10)        -- spirit's part is not touched (no call here: n/a)
+    -- the aura's own amount wins over the rank's figure; Mana Spring's is per 2 seconds
+    auras = { { spellId = 19854, points = { 36 } }, { spellId = 10494, points = { 10 } } }
+    assert.are.equal(12.5 + 36 + 25, (read(env, "mp5")))
+    -- no amount given: the rank's figure
+    auras = { { spellId = 19742 } }
+    assert.are.equal(22.5, (read(env, "mp5")))
+    -- auras hidden in combat: the last value, marked
+    auras = { { spellId = env:secretValue() } }
+    local v, _, _, state = read(env, "mp5")
+    assert.are.equal(22.5, v)
+    assert.are.equal("stale", state)
   end)
 
   it("offers the school readings to every class with magic-school abilities, hunters and rogues too (2026-11-25)", function()

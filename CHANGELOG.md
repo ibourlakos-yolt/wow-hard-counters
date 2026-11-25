@@ -23,14 +23,16 @@ called "Farming".
 - **Move a board without editing it.** Hover a board on your HUD: a **Move** tab shows above its left corner (drag
   it), **Edit** stays above its right corner. Or hold **Ctrl** and drag the board itself; Options, Boards chooses
   Shift or Alt instead, or switches the key off. Boards stay click-through the rest of the time.
-- **The Packs tab.** Choose the packs you want inside the window: tick them, **Use these packs**. Their trackers
-  are switched on for you with history off; a pack that has to be loaded or unloaded shows **Reload now**. The tab
-  says what history is and where to turn it on. The tutorial has a step for it.
+- **The Packs tab.** Choose the packs you want inside the window. A tick counts at once: the game is told, and
+  **Reload now** appears when a pack has to be loaded or unloaded (`/reload` does the same). **Use these packs**
+  switches on the trackers of the packs you kept, with history off. The tab says what history is and where to turn
+  it on. The tutorial has a step for it.
 - **Help and Tab tour on every tab.** At the top of the window, beside Tutorial: **Help** is one page about the open
   tab (what it is, what you can do there, how it changes your play), **Tab tour** a few steps through that tab
   alone. Farmer's Ledger, Character Stats and Diagnostics have theirs too. `/hc tour <tab>` does the same.
 - **Character Stats: regeneration.** Health regen out of combat and in combat (per 5 seconds, and per second for
-  boards), mana per second casting and not casting beside the per-5 readings, mana regen from spirit.
+  boards), mana per second casting and not casting beside the per-5 readings, mana regen from spirit. Mana regen
+  now counts Blessing of Wisdom and Mana Spring, which the game leaves out of its own figure.
 - **Character Stats: the five-second rule.** A reading that counts the five seconds after a spell that cost mana,
   until spirit regeneration is back; as a bar it fills while you wait. On every ready-made board of a class that
   casts.

@@ -315,6 +315,28 @@ FUNCS[#FUNCS + 1] = { "CS-16 talent calls", function()
   end
   return "ok", table.concat(out, ",")
 end }
+-- CS-18 (the user, 2026-11-25: Blessing of Wisdom didn't move Mana regen): Character Stats adds flat mana-per-5
+-- buffs by spell id. How many helpful auras you have, which of them carry a `points` amount (types only), and the
+-- spell ids of those whose name has "Wisdom" or "Mana Spring" in it (public spell ids, no amounts).
+FUNCS[#FUNCS + 1] = { "CS-18 mana per 5 auras", function()
+  local get = G("C_UnitAuras.GetAuraDataByIndex")
+  if type(get) ~= "function" then return "missing", "C_UnitAuras.GetAuraDataByIndex" end
+  local n, withPoints, ids = 0, 0, {}
+  for i = 1, 40 do
+    local ok, d = pcall(get, "player", i, "HELPFUL")
+    if not ok then return "error", tostring(d):sub(1, 120) end
+    if d == nil then break end
+    if W.isSecret(d) or type(d) ~= "table" then return "ok", "secret" end
+    n = n + 1
+    if type(d.points) == "table" and d.points[1] ~= nil then withPoints = withPoints + 1 end
+    local name, id = d.name, d.spellId
+    if type(name) == "string" and not W.isSecret(name) and not W.isSecret(id)
+        and (name:find("Wisdom", 1, true) or name:find("Mana Spring", 1, true)) then
+      ids[#ids + 1] = tostring(id) .. ":points=" .. describe(type(d.points) == "table" and d.points[1] or nil)
+    end
+  end
+  return "ok", format("%d auras, %d with points; %s", n, withPoints, #ids > 0 and table.concat(ids, ",") or "no Wisdom or Mana Spring")
+end }
 FUNCS[#FUNCS + 1] = { "CS-16 other stat addons", function()
   local out = {}
   -- (public addon names and whether a global of theirs is there; nothing about the player)

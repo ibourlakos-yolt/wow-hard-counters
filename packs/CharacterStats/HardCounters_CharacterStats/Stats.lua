@@ -79,14 +79,57 @@ local function bestSchool(fnName)
   end
 end
 
---- Mana regenerated per 5 seconds: GetManaRegen returns per second, (not casting, casting).
-local function manaRegen(casting)
+-- Mana per 5 seconds from buffs (the user, 2026-11-25: "Blessing of Wisdom doesn't seem to affect the mana regen").
+-- GetManaRegen leaves flat "mana per 5" buffs out, as it does on Classic, where the stat addons add them by hand.
+-- So do we: the player's own helpful auras are looked up by spell id. { mana per 5 of that rank, scale }: the
+-- aura's own amount (`points[1]`), where the client gives one, is used instead of the rank's figure, times `scale`
+-- (a blessing's amount is per 5 seconds: 1; Mana Spring's is per 2 seconds: 2.5).
+-- The ids are Classic's (Blessing of Wisdom and its Greater form, Mana Spring Totem): unverified on Forever; the
+-- Diagnostics probe "CS-18 mana per 5 auras" says which of your buffs matched.
+local MP5_AURAS = {
+  [19742] = { 10, 1 }, [19850] = { 15, 1 }, [19852] = { 20, 1 }, [19853] = { 25, 1 }, [19854] = { 30, 1 },
+  [25290] = { 33, 1 }, [25894] = { 30, 1 }, [25918] = { 33, 1 },
+  [5677] = { 10, 2.5 }, [10491] = { 15, 2.5 }, [10493] = { 20, 2.5 }, [10494] = { 25, 2.5 },
+}
+ns.MP5_AURAS = MP5_AURAS
+
+--- Mana per 5 seconds from the buffs on you that give a flat amount; 0 with none; SECRET when the game hides auras.
+local function auraMp5()
+  local A = C_UnitAuras
+  if type(A) ~= "table" or type(A.GetAuraDataByIndex) ~= "function" then return 0 end
+  local sum = 0
+  for i = 1, 40 do
+    local ok, d = pcall(A.GetAuraDataByIndex, "player", i, "HELPFUL")
+    if not ok or d == nil then break end
+    if HC:IsSecret(d) then return SECRET end
+    if type(d) ~= "table" then break end
+    local id = d.spellId
+    if anySecret(id) then return SECRET end
+    local known = MP5_AURAS[id]
+    if known then
+      local p = type(d.points) == "table" and d.points[1] or nil
+      if p ~= nil and anySecret(p) then return SECRET end
+      p = num(p)
+      sum = sum + ((p and p > 0) and p * known[2] or known[1])
+    end
+  end
+  return sum
+end
+ns.AuraMp5 = auraMp5
+
+--- Mana regenerated per 5 seconds (per second with `perSecond`): GetManaRegen returns per second, (not casting,
+--- casting); flat mana-per-5 buffs are added to both (they tick while you cast too).
+local function manaRegen(casting, perSecond)
   return function()
     if type(GetManaRegen) ~= "function" then return nil end
     local base, whileCasting = GetManaRegen()
     if anySecret(base, whileCasting) then return SECRET end
     local v = num(casting and whileCasting or base)
-    return v and v * 5 or nil
+    if not v then return nil end
+    local buffs = auraMp5()
+    if buffs == SECRET then return SECRET end
+    v = v * 5 + buffs
+    return perSecond and v / 5 or v
   end
 end
 
@@ -532,13 +575,14 @@ ns.STATS = {
   { "spellhaste", "Spell haste", S, function() return first(UnitSpellHaste, "player") end, "percent",
     function() return classIs(CASTER)() and hasCall("UnitSpellHaste")() end,
     "Casting speed bonus from gear and buffs, in %.", { noRow = true } },
-  { "mp5", "Mana regen (not casting)", S, manaRegen(false), "number", classIs(MANA), "Mana per 5 seconds while not casting." },
+  { "mp5", "Mana regen (not casting)", S, manaRegen(false), "number", classIs(MANA),
+    "Mana per 5 seconds while not casting, Blessing of Wisdom and Mana Spring included." },
   { "mp5cast", "Mana regen (casting)", S, manaRegen(true), "number", classIs(MANA),
-    "Mana per 5 seconds while casting (the five-second rule)." },
+    "Mana per 5 seconds while casting (the five-second rule), Blessing of Wisdom and Mana Spring included." },
   -- (2026-11-25) the same two per second, mana from spirit alone, and the five-second rule itself
-  { "mps", "Mana per second (not casting)", S, regen("GetManaRegen", false, 1), "decimal", classIs(MANA),
+  { "mps", "Mana per second (not casting)", S, manaRegen(false, true), "decimal", classIs(MANA),
     "Mana regenerated each second while not casting: Mana regen (not casting) divided by 5.", { noRow = true } },
-  { "mpscast", "Mana per second (casting)", S, regen("GetManaRegen", true, 1), "decimal", classIs(MANA),
+  { "mpscast", "Mana per second (casting)", S, manaRegen(true, true), "decimal", classIs(MANA),
     "Mana regenerated each second while casting: Mana regen (casting) divided by 5.", { noRow = true } },
   { "mp5spirit", "Mana regen from spirit", S, regen("GetManaRegenFromSpirit", false, 5), "decimal",
     function() return classIs(MANA)() and hasCall("GetManaRegenFromSpirit")() end,
