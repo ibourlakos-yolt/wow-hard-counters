@@ -282,6 +282,48 @@ FUNCS[#FUNCS + 1] = { "CS-8 skill functions", function()
   return "ok", skillFuncs
 end }
 
+-- CS-16 (the user, 2026-11-25): does the game already count school-specific gear, buffs and talents, or must
+-- Character Stats read them? Per school (2 holy .. 7 arcane): how many of the six values differ (never the values).
+-- A character with "+shadow damage" gear or a school crit talent answers it: 1 distinct means the game ignores the
+-- school. Then: which talent calls exist (the fallback for what the game leaves out), and which other stat addons
+-- are loaded with something an addon could read (the user's idea: offer their values on tiles).
+local function schoolSpread(fnName)
+  local fn = G(fnName)
+  if type(fn) ~= "function" then return "missing", "not a function" end
+  local seen, distinct, n = {}, 0, 0
+  for s = 2, 7 do
+    local ok, v = pcall(fn, s)
+    if not ok then return "error", tostring(v):sub(1, 120) end
+    if W.isSecret(v) then return "ok", "secret" end
+    if type(v) == "number" then
+      n = n + 1
+      if not seen[v] then seen[v] = true; distinct = distinct + 1 end
+    end
+  end
+  local bare = "n/a"
+  local okB, b = pcall(fn)
+  if okB and not W.isSecret(b) and type(b) == "number" then bare = seen[b] and "one of them" or "none of them" end
+  return "ok", format("%d numbers, %d distinct; no argument: %s", n, distinct, bare)
+end
+FUNCS[#FUNCS + 1] = { "CS-16 schools: spell damage", function() return schoolSpread("GetSpellBonusDamage") end }
+FUNCS[#FUNCS + 1] = { "CS-16 schools: spell crit", function() return schoolSpread("GetSpellCritChance") end }
+FUNCS[#FUNCS + 1] = { "CS-16 talent calls", function()
+  local out = {}
+  for _, name in ipairs({ "GetNumTalentTabs", "GetNumTalents", "GetTalentInfo", "C_SpecializationInfo.GetTalentInfo",
+    "C_ClassTalents", "C_Traits", "C_Spell.GetSpellPowerCost", "GetSpellPowerCost" }) do
+    out[#out + 1] = name .. "=" .. describe(G(name))
+  end
+  return "ok", table.concat(out, ",")
+end }
+FUNCS[#FUNCS + 1] = { "CS-16 other stat addons", function()
+  local out = {}
+  -- (public addon names and whether a global of theirs is there; nothing about the player)
+  for _, g in ipairs({ "ECSLoader", "CharacterStatsAddon", "DejaClassicStats", "SinStats", "ForeverExpandedStats" }) do
+    if G(g) ~= nil then out[#out + 1] = g .. "=" .. describe(G(g)) end
+  end
+  return "ok", #out > 0 and table.concat(out, ",") or "none"
+end }
+
 -- CS-8 (b), second step (2026-11-19 files): the scan found a C_SkillInfo namespace (GetNumSkillLines, Expand and
 -- CollapseSkillHeader, ...), which run 3's global-only check missed. Its function names in full, then the skill
 -- lines it lists: the shape of one entry (field names and types), headers with their line counts, Defense's rank
