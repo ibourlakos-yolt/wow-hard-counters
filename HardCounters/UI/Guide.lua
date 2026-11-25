@@ -114,7 +114,7 @@ local PAGES = {
       L["A board is made in this window (Overview) and stays there, Only here, until you put it on your HUD: its On HUD switch in Overview, the box in the New board dialog, or /hc board <name>. On the HUD it is locked while you play: it is text, and clicks go through it to the world. Only its clock's buttons take clicks."],
       head(L["Moving a board"]),
       item(L["Hover it: a Move tab shows above its left corner. Drag that tab and the board follows."]),
-      item(L["Or hold Shift and drag the board itself. Options, Boards: choose Ctrl or Alt instead, or switch the key off."]),
+      item(L["Or hold Ctrl and drag the board itself. Options, Boards: choose Shift or Alt instead, or switch the key off."]),
       head(L["Changing a board"]),
       item(L["Hover it and click the gold Edit tab above its right corner (not in combat). Done on its name bar, or Escape, ends it."]),
       item(L["/hc edit edits every board at once. So does ctrl-click on the minimap button, and opening the game's own Edit Mode."]),

@@ -1956,7 +1956,7 @@ The user's nine points (A to I), built in one round. What was decided on the way
   above the left corner (a drag handle), Edit above the right one, never side by side. While the move key
   (`settings.boardMoveKey`: SHIFT, CTRL, ALT or NONE; `ns.wow.modifierDown`) is held with the cursor on a board, the
   board is armed: it takes the mouse and drags (a mini board by its strip), in combat too; released, it is
-  click-through again. **Call:** Shift is the default.
+  click-through again. **Call:** Ctrl is the default (the user, 2026-11-25; Shift at first).
 - **The Packs tab** (E, `UI/Packs.lua`, tab order 2.5). Rows from the AddOn list (`## Group: HardCounters`) plus the
   built-in Basic. "Use these packs": a ticked, loaded pack gets the trackers the player never switched (`chosen`)
   turned on, history untouched (off by default); a pack to load or unload goes through `ns.wow.setAddonEnabled` for

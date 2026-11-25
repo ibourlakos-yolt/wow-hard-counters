@@ -798,7 +798,7 @@ end
 -- corner (drag it: the board follows) and "Edit" above the top-right one (click: that board's edit mode). They take
 -- clicks only while shown. Not on mini boards (their strip's menu has "Edit this board"), not in combat, not while
 -- the board is edited.
--- The move key (Options: Shift by default, Ctrl, Alt or none): while it is held with the cursor over a board, the
+-- The move key (Options: Ctrl by default, Shift, Alt or none): while it is held with the cursor over a board, the
 -- board itself takes the mouse and drags, full or mini, in combat too; released, it is click-through again.
 local HANDLE_W, HANDLE_H = 40, 16
 local MOVE_W = 46
@@ -807,10 +807,10 @@ Boards.MOVE_KEYS = { "SHIFT", "CTRL", "ALT", "NONE" }
 local MOVE_KEY_SET = { SHIFT = true, CTRL = true, ALT = true, NONE = true }
 local MOVE_KEY_WORD = { SHIFT = "Shift", CTRL = "Ctrl", ALT = "Alt" }
 
---- The key that moves a locked board while held: "SHIFT" (default), "CTRL", "ALT" or "NONE".
+--- The key that moves a locked board while held: "CTRL" (default), "SHIFT", "ALT" or "NONE".
 function Boards.MoveKey()
   local k = ns.settings and ns.settings.boardMoveKey
-  return MOVE_KEY_SET[k] and k or "SHIFT"
+  return MOVE_KEY_SET[k] and k or "CTRL"
 end
 
 --- The move key as a word ("Shift"), or nil when moving by key is off.

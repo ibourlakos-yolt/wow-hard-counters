@@ -220,11 +220,11 @@ describe("a locked board on the HUD", function()
       f.moveHandle:GetScript("OnDragStop")(f.moveHandle)
       assert.is_nil(f.dragging)
       assert.truthy(b.pos)
-      -- the move key (Shift unless changed): held over the board, the board itself drags; released, click-through again
-      assert.are.equal("SHIFT", B.MoveKey())
-      assert.are.equal("Shift", B.MoveKeyWord())
+      -- the move key (Ctrl unless changed): held over the board, the board itself drags; released, click-through again
+      assert.are.equal("CTRL", B.MoveKey())
+      assert.are.equal("Ctrl", B.MoveKeyWord())
       assert.is_nil(f.moveArmed)
-      ctx.env.modifier = "SHIFT"
+      ctx.env.modifier = "CTRL"
       B.Hover(1)
       assert.is_true(f.moveArmed)
       assert.truthy(f:GetScript("OnDragStart"))

@@ -18,7 +18,7 @@ ns.SETTINGS_DEFAULTS = {
     -- button there hides under another (BugSack's, 2026-11-15); start somewhere quieter.
     minimap = { hide = false, minimapPos = 290 },
     autoInstanceRuns = true,   -- entering an instance starts a run, leaving saves it (HC-2a, DESIGN §16.3)
-    boardMoveKey = "SHIFT",    -- held over a locked board on the HUD: drag it. "SHIFT", "CTRL", "ALT" or "NONE"
+    boardMoveKey = "CTRL",     -- held over a locked board on the HUD: drag it. "SHIFT", "CTRL", "ALT" or "NONE"
     tabLabels = "both",       -- the Hard Counters window's bottom tabs: "both" (icon and title), "title", "icon" (HC-69)
   },
 }

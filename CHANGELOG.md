@@ -21,8 +21,8 @@ called "Farming".
 - **A tile can stay off the HUD while its board is on it.** In Overview, a card's menu has **On HUD**; on a board,
   a tile's menu has **Hide from HUD**. The tile keeps counting and stays on its board in the window (dashed card).
 - **Move a board without editing it.** Hover a board on your HUD: a **Move** tab shows above its left corner (drag
-  it), **Edit** stays above its right corner. Or hold **Shift** and drag the board itself; Options, Boards chooses
-  Ctrl or Alt instead, or switches the key off. Boards stay click-through the rest of the time.
+  it), **Edit** stays above its right corner. Or hold **Ctrl** and drag the board itself; Options, Boards chooses
+  Shift or Alt instead, or switches the key off. Boards stay click-through the rest of the time.
 - **The Packs tab.** Choose the packs you want inside the window: tick them, **Use these packs**. Their trackers
   are switched on for you with history off; a pack that has to be loaded or unloaded shows **Reload now**. The tab
   says what history is and where to turn it on. The tutorial has a step for it.
