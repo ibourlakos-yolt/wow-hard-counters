@@ -277,6 +277,19 @@ fish looted, with a percentage breakdown of the catch.
   in Hard Counters: the mix's one-line legend could not hold item names with counts).
 - **Board** "Fishing basket" (Activity): Fish caught (large, sparkline), Fish/h, Fish in bags, then the two list
   mixes. The board's timer is the run; Reset empties the basket.
+- **Casts and timing (0.3.0-beta3; the user: "count failed casts too ... timing counts for cast durations").** A cast
+  is one Fishing channel of yours (`UNIT_SPELLCAST_CHANNEL_START`). **Caught:** a bobber's loot opens during the
+  channel or up to 2 s after it ends (either order). **Got away:** 2 s pass after the channel's end with no bobber
+  loot (a `C_Timer.After`), or a new cast starts first. A cast the game refuses never starts a channel and isn't
+  counted. Counters: `hcfarm:fish.casts` (every cast, 1 each), `hcfarm:fish.missed` (the misses: a counter of
+  their own, so the catch rate is two plain totals that any window serves), `hcfarm:fish.wait` (a catch's seconds
+  from the cast to the click, measures sum, count, max, `runLive = { max = true }` so a board's timer keeps the
+  longest). Readings: Fishing casts, Got away, Catch rate (compute), Average wait for a bite (measure avg; run and
+  session only: storage avg unproven), Longest wait for a bite (max; the board's timer or history), Time waiting
+  for bites (sum, duration). **No fastest bite:** windows keep a flow's max, never its min. The board gained Fishing
+  casts, Got away, Catch rate, Average wait (halves) and Longest wait (line) between Fish in bags and the mixes.
+  Unverified on Forever: that a Fishing cast fires `UNIT_SPELLCAST_CHANNEL_START/STOP` for the player with the
+  spell id, and the order of the channel's end against the loot window.
 
 ## 5. Rules
 

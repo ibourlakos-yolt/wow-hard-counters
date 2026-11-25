@@ -84,9 +84,9 @@ describe("Farmer on Hard Counters", function()
   it("registers its pack, three counters, trackers, readings and views through the public API", function()
     local env = boot()
     local ids = env.HC:Counters()
-    assert.are.equal(9, #ids)                         -- hc:time.active, Basics' 4, Farmer's 4
+    assert.are.equal(12, #ids)                        -- hc:time.active, Basics' 4, Farmer's 7
     assert.truthy(env.HC:GetCounter("hcfarm:loot.items"))
-    assert.are.equal(14, #env.HC:RunReadings())       -- Basics' 8 with a run scope (Gold out: 2026-11-24), Farmer's 6 (vendorph: an alias)
+    assert.are.equal(20, #env.HC:RunReadings())       -- Basics' 8 with a run scope (Gold out: 2026-11-24), Farmer's 12 (vendorph: an alias)
     assert.truthy(env.HC:GetView("hcfarm:ledger.in"))
     assert.is_true(env.HC:Supports("bigDimensions"))
     assert.are.equal(100000, total(env, "hc:money.owned", { measure = "last" }))
@@ -374,6 +374,57 @@ describe("the Fishing basket (2026-11-25)", function()
     assert.is_true(env.farm.IsFishingSpell(7620))
     assert.is_false(env.farm.IsFishingSpell(116))
     _G.C_Spell = nil
+    assert.are.same({}, env.errors)
+  end)
+
+  it("counts casts, the ones that got away, the catch rate and each catch's wait (0.3.0-beta3)", function()
+    local env = boot()
+    local HC = env.HC
+    local bobber = false
+    _G.IsFishingLoot = function() return bobber end
+    local function castFor(seconds, outcome, lootFirst)
+      env:fire("UNIT_SPELLCAST_CHANNEL_START", "player", "c", 7620)
+      env:advance(seconds)
+      if outcome == "caught" then
+        bobber = true
+        if lootFirst then env:fire("LOOT_OPENED", true) end
+        env:fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "c", 7620)
+        env:advance(0.3)
+        if not lootFirst then env:fire("LOOT_READY", true); env:fire("LOOT_OPENED", true) end
+        loot(env, 6291, "Raw Brilliant Smallfish")
+        env:fire("LOOT_CLOSED")
+        bobber = false
+      else
+        env:fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "c", 7620)
+      end
+      env:advance(3)                                        -- past the grace: a miss is settled by its timer
+    end
+    castFor(8, "caught")
+    castFor(20, "missed")                                   -- nothing bit, or clicked too late
+    castFor(4, "caught", true)                              -- the loot before the channel's end
+    -- a cast broken by a new one: settled as got away at once
+    env:fire("UNIT_SPELLCAST_CHANNEL_START", "player", "c", 7620)
+    env:advance(1)
+    castFor(12, "caught")
+    -- someone else's Fishing, and a mob's loot after the grace, count nothing
+    env:fire("UNIT_SPELLCAST_CHANNEL_START", "party1", "c", 7620)
+    env:fire("UNIT_SPELLCAST_CHANNEL_STOP", "party1", "c", 7620)
+    env:advance(3)
+    env:fire("LOOT_OPENED", false)
+    env:fire("LOOT_CLOSED")
+    local function r(id, scope) return (HC:Reading(id, scope or "session")) end
+    assert.are.equal(5, r("hcfarm:fishcasts"))
+    assert.are.equal(2, r("hcfarm:fishmissed"))
+    assert.are.equal(60, r("hcfarm:fishrate"))
+    assert.are.equal(3, r("hcfarm:fished"))
+    -- waits: 8.0, 4.0 (the loot came first), 12.0 → average 8, longest 12, total 24
+    assert.is_true(math.abs(r("hcfarm:fishwait") - 8) < 0.01)
+    assert.is_true(math.abs(r("hcfarm:fishtime") - 24) < 0.01)
+    local _, text = HC:Reading("hcfarm:fishwait", "session")
+    assert.are.equal("8.00 s", text)
+    -- no casts: no rate
+    assert.is_nil(env.farm.CatchRate(function() return 0 end, "session"))
+    _G.IsFishingLoot = nil
     assert.are.same({}, env.errors)
   end)
 

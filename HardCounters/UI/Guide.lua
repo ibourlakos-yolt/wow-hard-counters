@@ -42,7 +42,7 @@ end
 
 local PACK_WORDS = {
   hc = "Gold in and out (by source, if you like), net gold, gold owned, XP gained, XP this level, rested XP, time to level, your level. Always on. The Pocket, Leveling and Farming boards.",
-  hcfarm = "What you farm: the money Ledger by source, items looted (all, or one item) and their vendor value, your best drop, reputation gained (all, or one faction), In bags: an item, Standing progress: a faction, and what you fish (each catch, its share, the fish in your bags). The Fishing basket board.",
+  hcfarm = "What you farm: the money Ledger by source, items looted (all, or one item) and their vendor value, your best drop, reputation gained (all, or one faction), In bags: an item, Standing progress: a faction, and what you fish (each catch, its share, the fish in your bags, your casts, the ones that got away, the catch rate and the wait for a bite). The Fishing basket board.",
   hcstats = "Your character sheet as readings: attributes, melee, ranged, spell and defense stats, weapon damage, speed and skills, resistances, durability, item level. A board for each role and each class.",
   hctravel = "How you travel: distance on foot, mounted, swimming, by flight and by boat, time moving, average and top speed, speed now, jumps, falls, corpse runs, flights. The Trip and Flight log boards.",
 }

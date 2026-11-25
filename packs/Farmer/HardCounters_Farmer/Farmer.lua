@@ -11,7 +11,7 @@ local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfo
 local GetTime = GetTime
 local tonumber, type, pairs = tonumber, type, pairs
 
-ns.VERSION = "0.3.0-beta2"
+ns.VERSION = "0.3.0-beta3"
 local pack = HC:RegisterPack("Farmer", { namespace = "hcfarm", version = ns.VERSION, title = "Farmer" })
 ns.pack = pack
 
@@ -22,6 +22,7 @@ ns.ID = {
   moneyIn = "hc:money.in", moneyOut = "hc:money.out", owned = "hc:money.owned", xp = "hc:xp",
   items = "hcfarm:loot.items", vendor = "hcfarm:loot.vendorvalue", rep = "hcfarm:rep",
   fish = "hcfarm:fish.caught",
+  casts = "hcfarm:fish.casts", missed = "hcfarm:fish.missed", wait = "hcfarm:fish.wait",
 }
 local ID = ns.ID
 
@@ -53,6 +54,19 @@ HC:RegisterCounter({ id = ID.fish, version = 1, kind = "flow", unit = "items", m
   title = "Fished items", category = "Loot", formatter = "number", accuracy = "exact",
   capture = { mode = "push-delta", source = "CHAT_MSG_LOOT while a fishing bobber's loot is open" }, feasibility = CHAT,
   runBreakdowns = { "fish" } })
+-- (2026-11-25, 0.3.0-beta3) Every Fishing cast, the ones that got away (no bobber loot after the channel), and the
+-- seconds each catch took from the cast to the click: a separate counter for the misses, so the catch rate is two
+-- plain totals; the wait keeps its best (runLive max) for "Longest wait" on a board's timer.
+local FISHING_CAPTURE = { mode = "push-delta", source = "your Fishing channel (UNIT_SPELLCAST_CHANNEL_START/STOP) and the bobber's loot" }
+HC:RegisterCounter({ id = ID.casts, version = 1, kind = "flow", unit = "casts", measures = { "sum", "count" },
+  dimensions = { zone() }, aggregations = { {}, { "zone" } }, title = "Fishing casts", category = "Loot",
+  formatter = "number", accuracy = "exact", capture = FISHING_CAPTURE, feasibility = CHAT })
+HC:RegisterCounter({ id = ID.missed, version = 1, kind = "flow", unit = "casts", measures = { "sum", "count" },
+  dimensions = { zone() }, aggregations = { {}, { "zone" } }, title = "Fishing casts that got away", category = "Loot",
+  formatter = "number", accuracy = "exact", capture = FISHING_CAPTURE, feasibility = CHAT })
+HC:RegisterCounter({ id = ID.wait, version = 1, kind = "flow", unit = "seconds", measures = { "sum", "count", "max" },
+  dimensions = { zone() }, aggregations = { {}, { "zone" } }, title = "Wait for a bite", category = "Loot",
+  formatter = "seconds", accuracy = "exact", capture = FISHING_CAPTURE, feasibility = CHAT, runLive = { max = true } })
 
 HC:RegisterCounter({ id = ID.rep, version = 1, kind = "flow", unit = "reputation", measures = { "sum", "count" },
   dimensions = { { name = "faction", cap = 64 }, zone() }, aggregations = { {}, { "faction" } },
@@ -73,8 +87,9 @@ HC:RegisterTracker("hcfarm:loot", { title = "Loot", category = "Farming", icon =
   counters = { ID.items, ID.vendor }, default = "off",
   description = "Items looted, their vendor value and your best drop." })
 HC:RegisterTracker("hcfarm:fishing", { title = "Fishing", category = "Farming", icon = 136245,
-  counters = { ID.fish }, default = "off",
-  description = "What you fish up, item by item (fish, junk, clams, chests): your catch, its mix and the fish in your bags." })
+  counters = { ID.fish, ID.casts, ID.missed, ID.wait }, default = "off",
+  description = "What you fish up, item by item (fish, junk, clams, chests): your catch, its mix and the fish in your bags;"
+    .. " your casts, the ones that got away and how long each bite took." })
 HC:RegisterTracker("hcfarm:rep", { title = "Reputation", category = "Farming", icon = 236681,
   counters = { ID.rep }, default = "off", description = "Reputation gained, by faction." })
 
@@ -338,14 +353,49 @@ local function catching(t)
   return fishClosedAt ~= nil and t ~= nil and t - fishClosedAt <= FISH_GRACE
 end
 
-HC:RegisterSource("hcfarm:fishing", { mode = "event", feeds = { ID.fish },
+-- (0.3.0-beta3) Casts. One cast is one Fishing channel of yours. It is caught when a bobber's loot opens during the
+-- channel or within FISH_GRACE seconds of its end (the click ends the channel; the two events may come in either
+-- order), and got away when that time passes with no bobber loot: clicked too early or too late, nothing bit before
+-- the bobber vanished, or the channel was broken (moving, jumping, a hit). A cast the game refuses (no pole, no water)
+-- never starts a channel and is not counted. The wait of a catch: seconds from the cast to the click (the channel's
+-- end, or the loot's opening when that comes first).
+local cast = { start = nil, stop = nil, settled = true }
+
+local function settleCaught(t)
+  if cast.settled or not cast.start then return end
+  cast.settled = true
+  local z = HC:ZoneKey()
+  HC:Emit(ID.casts, 1, z)
+  local wait = (cast.stop or t) - cast.start
+  if wait >= 0 then HC:Emit(ID.wait, wait, z) end
+end
+
+local function settleMissed()
+  if cast.settled or not cast.start then return end
+  cast.settled = true
+  local z = HC:ZoneKey()
+  HC:Emit(ID.casts, 1, z)
+  HC:Emit(ID.missed, 1, z)
+end
+
+--- After a channel ends: no bobber loot within FISH_GRACE seconds means the fish got away.
+local function settleLater()
+  local t = GetTime()
+  if not cast.settled and cast.stop and t - cast.stop >= FISH_GRACE then settleMissed() end
+end
+ns.SettleCast = settleLater
+
+HC:RegisterSource("hcfarm:fishing", { mode = "event", feeds = { ID.fish, ID.casts, ID.missed, ID.wait },
   events = { "LOOT_READY", "LOOT_OPENED", "LOOT_CLOSED", "CHAT_MSG_LOOT",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" },
   handler = function(event, a1, _, a3)
     local t = GetTime()
     if event == "LOOT_READY" or event == "LOOT_OPENED" then
       if not fishOpen then fishOpen = bobberLoot(t) end
-      if fishOpen then fishClosedAt = nil end
+      if fishOpen then
+        fishClosedAt = nil
+        if not cast.settled and (cast.stop == nil or t - cast.stop <= FISH_GRACE) then settleCaught(t) end
+      end
     elseif event == "LOOT_CLOSED" then
       if fishOpen then fishClosedAt = t end
       fishOpen = false
@@ -356,7 +406,16 @@ HC:RegisterSource("hcfarm:fishing", { mode = "event", feeds = { ID.fish },
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
       if HC:IsSecret(a1) or a1 ~= "player" or not isFishingSpell(a3) then return end
       channelOn = event == "UNIT_SPELLCAST_CHANNEL_START"
-      if not channelOn then channelEndAt = t end
+      if channelOn then
+        settleMissed()                                  -- a new cast before the last one was settled: it got away
+        cast.start, cast.stop, cast.settled = t, nil, false
+      else
+        channelEndAt = t
+        if not cast.settled then
+          cast.stop = t
+          if C_Timer and C_Timer.After then C_Timer.After(FISH_GRACE + 0.1, settleLater) end
+        end
+      end
     end
   end })
 
@@ -528,13 +587,46 @@ HC:RegisterReading("hcfarm:fishbags", { title = "Fish in bags", tracker = "hcfar
     .. " As a mix: each one with its count and share.",
   compute = function(_, _, arg) return fishInBags(arg) end })
 
+-- (0.3.0-beta3) Casts and their timing. No "fastest bite": a board's timer keeps a flow's best (its max) only.
+local FISH_BEST = { "run", "today", "week", "month", "year", "lifetime" }   -- a best single value: the board's timer or history
+HC:RegisterReading("hcfarm:fishcasts", { title = "Fishing casts", rateTitle = "Casts/h", tracker = "hcfarm:fishing",
+  counter = ID.casts, scopes = ALL, formatter = "number", order = 34,
+  description = "Times you cast Fishing, caught or not. A cast the game refuses (no pole, no water) isn't one." })
+HC:RegisterReading("hcfarm:fishmissed", { title = "Got away", rateTitle = "Got away/h", tracker = "hcfarm:fishing",
+  counter = ID.missed, scopes = ALL, formatter = "number", order = 35,
+  description = "Casts with no catch: clicked too early or too late, nothing bit before the bobber vanished, or the cast was broken." })
+local function catchRate(get, scope)
+  local all, missed = get("hcfarm:fishcasts", scope), get("hcfarm:fishmissed", scope)
+  if type(all) ~= "number" or all <= 0 then return nil end
+  return (all - (type(missed) == "number" and missed or 0)) / all * 100
+end
+ns.CatchRate = catchRate
+HC:RegisterReading("hcfarm:fishrate", { title = "Catch rate", tracker = "hcfarm:fishing", inputs = { "hcfarm:fishcasts", "hcfarm:fishmissed" },
+  compute = catchRate, scopes = ALL, formatter = "percent", order = 36,
+  description = "The share of your casts that caught something." })
+HC:RegisterReading("hcfarm:fishwait", { title = "Average wait for a bite", tracker = "hcfarm:fishing", counter = ID.wait,
+  measure = "avg", scopes = { "run", "session" }, formatter = "seconds", order = 37,
+  description = "Seconds from your cast to the click, averaged over the casts that caught something." })
+HC:RegisterReading("hcfarm:fishwaitmax", { title = "Longest wait for a bite", tracker = "hcfarm:fishing", counter = ID.wait,
+  measure = "max", scopes = FISH_BEST, formatter = "seconds", order = 38,
+  description = "Your longest wait from a cast to a catch." })
+HC:RegisterReading("hcfarm:fishtime", { title = "Time waiting for bites", tracker = "hcfarm:fishing", counter = ID.wait,
+  scopes = ALL, formatter = "duration", order = 39,
+  description = "Every catch's wait added up: time with a line in the water that ended in a catch." })
+
 if HC.RegisterBoardPreset then
   HC:RegisterBoardPreset("hcfarm:fishing", { name = "Fishing basket", category = "activity",
-    tip = "What you fish in a run (Reset empties the basket), each catch's count and share, and the fish in your bags. Needs the Fishing tracker on.",
+    tip = "What you fish in a run (Reset empties the basket), each catch's count and share, your casts, catch rate"
+      .. " and waits, and the fish in your bags. Needs the Fishing tracker on.",
     tiles = {
       { reading = "hcfarm:fished", size = "large", extras = { "sparkline" } },
       { reading = "hcfarm:fished", calc = "perHour", size = "half" },
       { reading = "hcfarm:fishbags", scope = "now", size = "half" },
+      { reading = "hcfarm:fishcasts", size = "half" },
+      { reading = "hcfarm:fishmissed", size = "half" },
+      { reading = "hcfarm:fishrate", size = "half" },
+      { reading = "hcfarm:fishwait", size = "half" },
+      { reading = "hcfarm:fishwaitmax", size = "line" },
       { reading = "hcfarm:fished", display = "mix" },
       { reading = "hcfarm:fishbags", scope = "now", display = "mix" },
     } })

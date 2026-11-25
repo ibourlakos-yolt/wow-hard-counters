@@ -3,6 +3,20 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## 0.3.0-beta3 (2026-11-25)
+
+A beta, **still experimental**. The Fishing basket counts your casts too.
+
+**Saved data:** kept. **Updating:** `/reload` is enough (no new addon files). A Fishing basket board you already made
+keeps its tiles: make a new one from New board... ▸ Activity ▸ Fishing basket for the new tiles, or add them with
+**+ Tile** (Farming ▸ Fishing).
+
+### New
+- **Casts on the Fishing basket.** Every Fishing cast is counted, caught or not: **Fishing casts** (and per hour),
+  **Got away** (clicked too early or too late, nothing bit, or the cast was broken), and the **Catch rate**.
+- **How long a bite takes.** For every catch, the seconds from your cast to your click: **Average wait for a bite**,
+  **Longest wait for a bite**, and **Time waiting for bites** (all of them added up).
+
 ## 0.3.0-beta2 (2026-11-25)
 
 A beta, **still experimental**. A fishing board for Farmer, and the five-second rule fixed.
