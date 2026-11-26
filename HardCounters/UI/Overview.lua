@@ -1,470 +1,329 @@
--- Overview (DESIGN §17.4, HC-67, HC-73; v8, the user 2026-11-25): the player's boards and tiles, the first tab of
--- the Hard Counters window, and the place where they are made. One framed panel per board (in the Boards tab's
--- order, an empty board too), headed by the board's name and status, a switch that puts the board on the HUD or keeps
--- it "Only here", and "+ Tile" (the reading picker, by tracker). Its tiles are cards in the board's order: the
--- tile's label, its number now, its scope. A tile kept off the HUD (while its board may be on it) has a dashed card.
--- There are no tiles without a board any more: "Window only" is gone (BoardModel v8 moved those to a board called
--- "Unsorted", whose panel says so).
--- Click a card: Edit (the same choices as on a board), On HUD (that tile), Move to board, Delete tile. Click a
--- board's name: that board's actions, as on its Boards tab row. New board... (top right) opens the New board dialog.
--- Search: a tile's label or its board's name. Cards refresh once a second while the tab is on screen; the tab is as
--- tall as its cards (the window scrolls it, HC-69).
--- luacheck: no max line length (tips and empty-state prose: one sentence, one string)
+-- The Overview tab (0.4.0, the user: "a summary page for all of the entities of concern and their status given the
+-- current user and account's choices ... one of the secondary tabs at the bottom"). Not the Overview of 0.2 to 0.3
+-- (that one is the Boards tab now, UI/BoardsTab.lua). One page, read top to bottom, refreshed once a second while it
+-- is on screen:
+--   the head line   version and its channel (beta, release...), the character, the profile
+--   Needs a look    only what is true now, each with the one click that fixes it: no pack chosen, a pack waiting for a
+--                   reload, tiles whose tracker is off, a board on the HUD but off screen or tiny, storage read-only,
+--                   a pre-release build without Diagnostics
+--   Packs, Trackers, Boards, Stint, This session, History and storage, Diagnostics: a line each (a board each), its
+--                   state as a lamp (green: on, grey: off, amber: needs a look), and one action that goes there
+-- Read-only lamps are W.Status pills that don't click; the switches that do (a board's On HUD) are the same pills as
+-- in the Boards tab. Everything here is also somewhere else: this page only gathers it.
+-- luacheck: no max line length (prose: one sentence, one string)
 local ADDON, ns = ...
 
 local HC, L, Wd = ns.HC, ns.L, ns.Widgets
 local format, floor, max = string.format, math.floor, math.max
 
 local ID = "overview"
-local TOP_H, HEAD_H, CARD_H, CARD_MIN_W, GAP, PAD = 34, 26, 58, 176, 6, 8
-local INSET, GROUP_GAP, LINE_H = 8, 10, 20       -- a board panel's inner margin, the space between groups, a text line
-local MIN_W, MIN_H = 600, 360
-local BOARD_ICON, TAB_ICON = "Interface\\Icons\\INV_Misc_Map_01", "Interface\\Icons\\INV_Misc_Note_01"
-local DASH = "Interface\\AddOns\\HardCounters\\Media\\Dash"    -- 8x8, white where x < 5 and y < 5 (tools/draw-dash.py)
-local content
-local cards, panels = {}, {}
-local search = ""
+local ROW_H, HEAD_H, PAD, MIN_W, MIN_H = 22, 26, 10, 600, 360
+local LABEL_W, PILL_W = 170, 120
+local content, ticker
+local rows, heads = {}, {}
 local contentH = MIN_H
-local ticker
+local sizes, sizesAt = nil, 0
 
-local M = function() return ns.BoardModel end
-local Bo = function() return ns.Boards end
-
-local refresh
+local function BM() return ns.BoardModel end
+local function Bo() return ns.Boards end
 
 ---------------------------------------------------------------------------
--- Menus
+-- Rows: a label, a lamp with a word, a value, one action
 ---------------------------------------------------------------------------
 
-local function confirm(text, fn) if Bo() and Bo().Confirm then Bo().Confirm(text, fn) else fn() end end
-
-local function redrawBoard(b) if b and Bo() then Bo().Refresh(b.id, true) end end
-
-local function cardMenu(anchor, e)
-  local BM = M()
-  local label = BM.TileLabel(e.tile, e.board)
-  local items = { { text = label, title = true } }
-  local edit = Bo() and Bo().TileSettingsItems(e.tile, e.board, anchor) or {}
-  if #edit > 0 then items[#items + 1] = { text = L["Edit"], sub = edit } end
-  -- on the HUD or only here: this tile's own switch (its board has one too)
-  local onHud = BM.TileOnHud(e.tile)
-  items[#items + 1] = { text = L["On HUD"], checked = onHud,
-    tip = e.board.shown and L["Off: this tile stays on its board here, still counting, but is not drawn on screen."]
-      or L["Its board is not on your HUD yet: this decides whether the tile is drawn once it is."],
-    func = function()
-      BM.SetTileOnHud(e.tile, not onHud)
-      redrawBoard(e.board)
-      refresh()
-    end }
-  local move = {}
-  for _, b in ipairs(BM.MoveTargets(e.board)) do
-    move[#move + 1] = { text = b.shown and b.name or format(L["%s (Only here)"], b.name), func = function()
-      local from = e.board
-      local p = BM.Place(e.raw, b)
-      redrawBoard(from)
-      if p and Bo() then Bo().Reveal(b, p) end
-      refresh()
-    end }
-  end
-  move[#move + 1] = { text = L["New board"], tip = L["A board of its own, named after the tile; not on your HUD until you put it there."],
-    func = function()
-      local from, i = BM.BoardOf(e.tile)
-      if from then
-        local shown = from.shown
-        from.shown = false                          -- (MoveTo gives a new board its old board's place on the HUD)
-        BM.MoveTo(from, i, nil)
-        from.shown = shown
-        redrawBoard(from)
-      end
-      refresh()
-    end }
-  items[#items + 1] = { text = L["Move to board"], sub = move }
-  items[#items + 1] = { text = L["Delete tile"], func = function()
-    confirm(format(L["Delete the tile %s? Your counts don't change."], label), function()
-      local b = e.board
-      BM.DeleteTile(e.id)
-      redrawBoard(b)
-      refresh()
-    end)
-  end }
-  ns.Menu.Show(anchor, items)
+local function newRow(i)
+  local r = CreateFrame("Frame", nil, content)
+  r:SetHeight(ROW_H)
+  r.label = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  r.label:SetPoint("LEFT", 16, 0)
+  r.label:SetWidth(LABEL_W)
+  r.label:SetJustifyH("LEFT")
+  r.label:SetWordWrap(false)
+  r.pill = Wd.Status(r, PILL_W, nil)
+  r.pill:SetHeight(18)
+  r.pill:SetPoint("LEFT", 16 + LABEL_W + 6, 0)
+  r.value = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  r.value:SetJustifyH("LEFT")
+  r.value:SetWordWrap(false)
+  r.btn = Wd.Button(r, "", 90, nil)
+  r.btn:SetHeight(20)
+  r.btn:SetPoint("RIGHT", -6, 0)
+  rows[i] = r
+  return r
 end
 
---- A board's header, clicked: the board's own actions, as on its row in the Boards tab.
-local function boardMenu(anchor, board)
-  if ns.BoardMenu then ns.BoardMenu(board, anchor, function() refresh() end) end
+local function newHead(i)
+  local h = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  h:SetJustifyH("LEFT")
+  heads[i] = h
+  return h
+end
+
+--- The page as a list of entries: { head = text } or { label, state, on, value, action = { text, func, tip }, tip,
+--- switch = func (the pill clicks) }.
+local function entries()
+  local out = {}
+  local function head(text) out[#out + 1] = { head = text } end
+  local function row(e) out[#out + 1] = e end
+  local M = BM()
+
+  -- warnings first: what needs a look, with the click that fixes it
+  local warn = {}
+  local P = ns.Packs
+  local packs = P and P.List() or {}
+  if P and not P.Chosen() then
+    warn[#warn + 1] = { label = L["No packs chosen"], value = L["only gold and experience are counted"],
+      action = { text = L["Packs"], func = function() ns.ShowPacks(true) end, tip = L["The Packs tab: tick the packs you want."] } }
+  end
+  for _, p in ipairs(packs) do
+    if not p.builtin and not p.missing and p.enabled ~= p.loaded then
+      warn[#warn + 1] = { label = format(L["%s waits for a reload"], L[p.title]), value = p.loaded and L["off after a reload"] or L["on after a reload"],
+        action = { text = L["Reload now"], func = function() ns.wow.reload() end, tip = L["Reloads the interface (the same as /reload): a few seconds, nothing is lost."] } }
+    end
+  end
+  local offTiles, offTrackers = 0, {}
+  if M and ns.charSettings then
+    for _, b in ipairs(M.Store().list) do
+      for _, t in ipairs(b.tiles) do
+        local r = t.kind == "reading" and ns.readings[t.reading]
+        if r and r.tracker and not HC:IsTrackerOn(r.tracker) then
+          offTiles = offTiles + 1
+          offTrackers[r.tracker] = true
+        end
+      end
+      local _, why = Bo().Status(b)
+      if b.shown and (why == "offscreen" or why == "tiny") then
+        warn[#warn + 1] = { label = format(L["%s may be lost"], b.name), value = why == "tiny" and L["very small"] or L["off the screen"],
+          action = { text = L["Reset position"], func = function() Bo().ResetPosition(b) end, tip = L["Back to the centre of the screen at its normal size."] } }
+      end
+    end
+  end
+  if offTiles > 0 then
+    warn[#warn + 1] = { label = format(L["%d tiles show nothing"], offTiles), value = L["their tracker is switched off"],
+      action = { text = L["Turn them on"], func = function()
+        for tid in pairs(offTrackers) do ns.ActivateTracker(tid, true) end
+      end, tip = L["Switch those trackers back on, with daily history unless you chose otherwise."] } }
+  end
+  if ns.db and ns.db:IsReadOnly() then
+    warn[#warn + 1] = { label = L["Storage is read-only"], value = L["nothing new is saved this session"],
+      action = { text = L["Report..."], func = function() if ns.ShowReportBox then ns.ShowReportBox() end end, tip = L["Make a report to paste in a bug report."] } }
+  end
+  local F = ns.FieldNotes
+  if F and F.PreRelease() and not F.DiagnosticsLoaded() then
+    warn[#warn + 1] = { label = L["A test version without Diagnostics"], value = L["reports say less than they could"],
+      action = { text = L["Packs"], func = function() ns.ShowPacks(true) end, tip = L["Tick Diagnostics in the Packs tab: a bug report then carries the game's API checks."] } }
+  end
+  if #warn > 0 then
+    head(L["Needs a look"] .. format(" (%d)", #warn))
+    for _, w in ipairs(warn) do w.state, w.on = L["look"], "warn"; row(w) end
+  end
+
+  -- packs
+  head(L["Packs"])
+  for _, p in ipairs(packs) do
+    local on = p.loaded and true or false
+    row({ label = L[p.title], state = p.builtin and L["built in"] or (p.missing and L["can't load"] or (on and L["loaded"] or L["off"])),
+      on = p.missing and "warn" or on,
+      value = (#p.trackers > 0) and format(L["%d of %d trackers counting"], p.on, #p.trackers) or "" })
+  end
+  row({ label = L["Choose packs"], value = "", action = { text = L["Packs"], func = function() ns.ShowPacks(true) end, tip = L["The Packs tab: tick the packs you want."] } })
+
+  -- trackers
+  local ts = HC:Trackers()
+  local on, hist = 0, 0
+  for _, t in ipairs(ts) do
+    if t.on then on = on + 1 end
+    if t.on and t.history ~= "off" then hist = hist + 1 end
+  end
+  head(L["Trackers"])
+  local bytes = sizes and sizes.total or nil
+  row({ label = L["Counting"], state = format("%d / %d", on, #ts), on = on > 0,
+    value = format(L["history kept by %d%s"], hist, bytes and format(L[", %s on disk"], ns.FormatKB and ns.FormatKB(bytes) or tostring(bytes)) or ""),
+    action = { text = L["Explorer"], func = function() ns.ShowTrackers(true) end, tip = L["Every tracker in the Explorer: switch one, change its history, see its size."] } })
+
+  -- boards
+  head(L["Boards"])
+  local list = (M and ns.charSettings) and M.Store().list or {}
+  local shown, tiles = 0, 0
+  for _, b in ipairs(list) do
+    if b.shown then shown = shown + 1 end
+    tiles = tiles + #b.tiles
+  end
+  row({ label = format(L["%d boards, %d tiles"], #list, tiles), state = format(L["%d on HUD"], shown), on = shown > 0,
+    value = #list == 0 and L["none yet: New board... makes one"] or "",
+    action = { text = #list == 0 and L["New board..."] or L["Boards"], func = function()
+      if #list == 0 then Bo().OpenNewBoard() else ns.ShowBoards(true) end
+    end, tip = #list == 0 and L["The New board dialog: ready-made, empty, or a copy."] or L["The Boards tab: every board with its tiles."] } })
+  for _, b in ipairs(list) do
+    local status = ns.BoardStatusText and (ns.BoardStatusText(b)) or ""
+    row({ label = "  " .. b.name, state = b.shown and L["On HUD"] or L["Only here"], on = b.shown and true or false,
+      value = status .. "   " .. (Bo().ClockText(b) or ""),
+      switch = function() b.shown = not b.shown; Bo().Refresh(b.id, true); if b.shown then Bo().Flash(b.id) end end,
+      tip = { title = b.name, state = b.shown and L["Now: on your HUD (your screen while you play)"] or L["Now: only here, in this window"], on = b.shown,
+        click = b.shown and L["Click: keep it only here."] or L["Click: put it on your HUD."] } })
+  end
+
+  -- the stint (a run: HC:GetRun)
+  head(L["Stint"])
+  local run = HC:GetRun()
+  local sum = ns.RunSummary and ns.RunSummary() or {}
+  local limit = (ns.settings and ns.settings.maxRuns) or 500
+  if run then
+    local active, _, state = HC:GetRunClock()
+    row({ label = run.label or ("#" .. tostring(run.id)), state = state == "running" and L["running"] or L["paused"], on = state == "running",
+      value = ns.U.duration(active or 0),
+      action = { text = L["Stop and keep"], func = function() HC:StopRun() end, tip = L["End the stint and keep it in the Stints tab."] } })
+  else
+    row({ label = L["No stint open"], state = L["none"], on = false, value = L["dungeons start one by themselves"],
+      action = { text = L["Start stint"], func = function() HC:StartRun() end, tip = L["Start a stint now: everything counted until you stop it is kept with it."] } })
+  end
+  row({ label = L["Stints kept"], value = format(L["%d (the newest %d are kept: Options, History)"], sum.kept or 0, limit),
+    action = { text = L["Stints"], func = function() if ns.ShowStints then ns.ShowStints(true) elseif ns.ToggleRunList then ns.ToggleRunList() end end,
+      tip = L["The Stints tab: every stint kept, with its numbers."] } })
+
+  -- this session
+  head(L["This session"])
+  local s = ns.Session and ns.Session()
+  local active = s and ns.Win and ns.Win.Active and ns.Win.Active(s) or 0
+  row({ label = L["Active since you logged in"], state = HC:IsActive() and L["active"] or L["away"], on = HC:IsActive(),
+    value = ns.U.duration(active) })
+
+  -- history and storage
+  head(L["History and storage"])
+  local st = ns.settings or {}
+  local dsh = (ns.globalSettings and tonumber(ns.globalSettings.dayStartHour)) or 0
+  row({ label = L["Days kept, day by day"], value = format(L["%d days for a tracker you didn't set"], ns.DefaultHistoryDays()) })
+  row({ label = L["Hours and weeks (Detailed)"], value = format(L["%d hours, %s of weeks"], ns.HOUR_KEEP[st.hourKeep] and st.hourKeep or 48,
+    ({ ["1y"] = L["one year"], ["2y"] = L["two years"], ["5y"] = L["five years"] })[st.weekKeep or "2y"] or "2y") })
+  row({ label = L["The day ends at"], value = dsh == 0 and L["midnight (local time)"] or format("%02d:00", dsh) })
+  row({ label = L["\"This week\" means"], value = st.weekGrain == "resetweek" and L["weekly reset to reset"] or L["Monday to Sunday"],
+    action = { text = L["Options"], func = function() ns.OpenOptions() end, tip = L["The Options tab: what is kept and for how long."] } })
+
+  -- diagnostics
+  head(L["Diagnostics"])
+  local diag = F and F.DiagnosticsLoaded()
+  row({ label = L["Diagnostics pack"], state = diag and L["loaded"] or L["off"], on = diag and true or false,
+    value = F and format(L["version channel: %s"], F.Channel()) or "" })
+  local notes = F and F.List() or {}
+  row({ label = L["Automatic field notes"], state = (F and F.Enabled()) and L["on"] or L["off"], on = F and F.Enabled() or false,
+    value = format(L["%d noted"], #notes),
+    action = { text = L["Report..."], func = function() if ns.ShowReportBox then ns.ShowReportBox() end end,
+      tip = L["/hc report: a text to paste in a bug report. It lists what it holds; nothing leaves your computer by itself."] } })
+  return out
 end
 
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
 
---- Four 1-pixel edges around f: solid (r, g, b, a), or dashed with the Dash texture (texture coordinates set by
---- sizeDashes as the frame's size changes).
-local function edges(f, layer, dashed, r, g, b, a)
-  local out = {}
-  for i, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-    local t = f:CreateTexture(nil, layer)
-    if dashed then
-      t:SetTexture(DASH, "REPEAT", "REPEAT")
-      if i <= 2 then t:SetHorizTile(true) else t:SetVertTile(true) end
-      t:SetVertexColor(r, g, b, a)
+local function refresh()
+  if not (content and content:IsShown()) then return end
+  local now = ns.wow.time()
+  if not sizes or now - sizesAt > 10 then                    -- db:Stats() is not free: every ten seconds
+    local okS, _, total = pcall(ns.CounterSizes)
+    sizes, sizesAt = { total = okS and type(total) == "table" and total.bytes or nil }, now
+  end
+  content.head:SetText(format(L["Hard Counters %s (%s)  \194\183  %s  \194\183  profile %s"], tostring(HC.VERSION),
+    ns.FieldNotes and ns.FieldNotes.Channel() or "?", tostring(ns.charKey or "?"),
+    ns.settingsDB and ns.settingsDB.GetCurrentProfile and ns.settingsDB:GetCurrentProfile() or "Default"))
+  local list = entries()
+  local y, nr, nh = -34, 0, 0
+  for _, e in ipairs(list) do
+    if e.head then
+      nh = nh + 1
+      local h = heads[nh] or newHead(nh)
+      h:ClearAllPoints()
+      h:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y - 6)
+      h:SetText(e.head)
+      h:Show()
+      y = y - HEAD_H
     else
-      t:SetColorTexture(r, g, b, a)
-    end
-    if i <= 2 then
-      t:SetPoint(side .. "LEFT", f, side .. "LEFT", 0, 0)
-      t:SetPoint(side .. "RIGHT", f, side .. "RIGHT", 0, 0)
-      t:SetHeight(1)
-    else
-      t:SetPoint("TOP" .. side, f, "TOP" .. side, 0, 0)
-      t:SetPoint("BOTTOM" .. side, f, "BOTTOM" .. side, 0, 0)
-      t:SetWidth(1)
-    end
-    out[i] = t
-  end
-  return out
-end
-
-local function sizeDashes(d, w, h)
-  d[1]:SetTexCoord(0, w / 8, 0, 0.5)
-  d[2]:SetTexCoord(0, w / 8, 0, 0.5)
-  d[3]:SetTexCoord(0, 0.5, 0, h / 8)
-  d[4]:SetTexCoord(0, 0.5, 0, h / 8)
-end
-
-local function showAll(list, on) for _, t in ipairs(list) do t:SetShown(on) end end
-
-local function newCard(i)
-  local c = CreateFrame("Button", nil, content)
-  c:SetHeight(CARD_H)
-  c:SetFrameLevel(content:GetFrameLevel() + 3)     -- above the board panels
-  c:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  c.bg = c:CreateTexture(nil, "BACKGROUND")
-  c.bg:SetAllPoints()
-  local hl = c:CreateTexture(nil, "HIGHLIGHT")
-  hl:SetAllPoints()
-  hl:SetColorTexture(1, 1, 1, 0.07)
-  c.dash = edges(c, "BORDER", true, 0.6, 0.6, 0.6, 0.9)
-  c.label = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.label:SetPoint("TOPLEFT", 8, -6)
-  c.label:SetPoint("TOPRIGHT", -8, -6)
-  c.label:SetJustifyH("LEFT")
-  c.label:SetWordWrap(false)
-  c.value = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-  c.value:SetPoint("LEFT", 8, 0)
-  c.value:SetPoint("RIGHT", -8, 0)
-  c.value:SetJustifyH("LEFT")
-  c.value:SetWordWrap(false)
-  c.foot = c:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  c.foot:SetPoint("BOTTOMLEFT", 8, 6)
-  c.foot:SetPoint("BOTTOMRIGHT", -8, 6)
-  c.foot:SetJustifyH("LEFT")
-  c.foot:SetWordWrap(false)
-  c:SetScript("OnClick", function(self) if self.entry then cardMenu(self, self.entry) end end)
-  c:SetScript("OnEnter", function(self)
-    local e = self.entry
-    if not (e and GameTooltip) then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(M().TileLabel(e.tile, e.board), 1, 1, 1)
-    local r = ns.readings[e.raw.reading]
-    if r and r.description then GameTooltip:AddLine(r.description, 0.8, 0.8, 0.8, true) end
-    local onHud = e.board.shown and M().TileOnHud(e.tile)
-    GameTooltip:AddLine(onHud and format(L["On your HUD, on the board %s."], e.board.name)
-      or (e.board.shown and L["Only here: its board is on your HUD, this tile is kept off it."]
-        or format(L["Only here: the board %s is not on your HUD."], e.board.name)), 0.6, 0.8, 0.6, true)
-    GameTooltip:AddLine(L["Click: edit, on or off the HUD, move, delete."], 0.5, 0.5, 0.5, true)
-    GameTooltip:Show()
-  end)
-  c:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  cards[i] = c
-  return c
-end
-
---- A heading: an icon, a gold title, a note after it. A Button, so a board's can be clicked.
-local function newHeading(parent)
-  local h = CreateFrame("Button", nil, parent)
-  h:SetHeight(HEAD_H)
-  h.icon = h:CreateTexture(nil, "ARTWORK")
-  h.icon:SetSize(16, 16)
-  h.icon:SetPoint("LEFT", 2, 0)
-  h.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  h.text = h:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  h.text:SetPoint("LEFT", h.icon, "RIGHT", 6, 0)
-  h.text:SetJustifyH("LEFT")
-  h.note = h:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  h.note:SetPoint("LEFT", h.text, "RIGHT", 10, 0)
-  h.note:SetJustifyH("LEFT")
-  return h
-end
-
-local HUD_W, ADD_W = 84, 64
-
---- A board's panel: a darker frame with a solid border; on top its heading (click: the board's actions) and, at the
---- right, the tile count, "+ Tile" and the HUD switch (its text says where the board is: "On HUD" or "Only here").
-local function newPanel(i)
-  local p = CreateFrame("Frame", nil, content)
-  p:SetFrameLevel(content:GetFrameLevel() + 1)
-  local bg = p:CreateTexture(nil, "BACKGROUND")
-  bg:SetAllPoints()
-  bg:SetColorTexture(0, 0, 0, 0.35)
-  edges(p, "BORDER", false, 0.45, 0.45, 0.5, 0.9)
-  p.hud = Wd.Button(p, L["Only here"], HUD_W, function(self)
-    local b = self.board
-    if not b then return end
-    b.shown = not b.shown
-    if Bo() then
-      Bo().Refresh(b.id, true)
-      if b.shown then Bo().Flash(b.id) end
-    end
-    if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
-    refresh()
-  end)
-  p.hud:SetFrameLevel(p:GetFrameLevel() + 2)
-  p.hud:SetPoint("TOPRIGHT", -INSET, -4)
-  Wd.Tip(p.hud, function(self)
-    local b = self.board
-    if b and b.shown then return L["This board is on your HUD (your screen while you play). Click: keep it only here, in this window. It keeps counting."] end
-    return L["This board is only here, in this window. Click: put it on your HUD (your screen while you play)."]
-  end)
-  p.add = Wd.Button(p, L["+ Tile"], ADD_W, function(self)
-    if self.board and Bo() then Bo().AddReadingMenu(self, self.board) end
-  end)
-  p.add:SetFrameLevel(p:GetFrameLevel() + 2)
-  p.add:SetPoint("RIGHT", p.hud, "LEFT", -4, 0)
-  Wd.Tip(p.add, function() return L["Add a number to this board: pick it by tracker. It appears here at once, and on your HUD when the board is there."] end)
-  p.count = p:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  p.count:SetPoint("RIGHT", p.add, "LEFT", -8, 0)
-  p.count:SetJustifyH("RIGHT")
-  local h = newHeading(p)
-  h:SetFrameLevel(p:GetFrameLevel() + 1)
-  h:SetPoint("TOPLEFT", INSET, -2)
-  h:SetPoint("TOPRIGHT", -(INSET + HUD_W + 4 + ADD_W + 76), -2)     -- (room for the count, + Tile and the switch)
-  h.icon:SetTexture(BOARD_ICON)
-  h:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  h:SetScript("OnClick", function(self) if self.board then boardMenu(self, self.board) end end)
-  h:SetScript("OnEnter", function(self)
-    if not (self.board and GameTooltip) then return end
-    GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-    GameTooltip:SetText(self.board.name, 1, 1, 1)
-    GameTooltip:AddLine(L["Click: this board's actions (as in the Boards tab)."], 0.5, 0.5, 0.5, true)
-    GameTooltip:Show()
-  end)
-  h:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-  p.head = h
-  p.empty = p:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  p.empty:SetPoint("TOPLEFT", INSET + 2, -(2 + HEAD_H + 2))
-  p.empty:SetText(L["No tiles on this board yet: + Tile adds one."])
-  -- the "Unsorted" board's own line (BoardModel v8): where its tiles came from
-  p.info = p:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  p.info:SetPoint("TOPLEFT", INSET + 2, -(2 + HEAD_H + 2))
-  p.info:SetPoint("TOPRIGHT", -INSET, -(2 + HEAD_H + 2))
-  p.info:SetJustifyH("LEFT")
-  p.info:SetWordWrap(false)
-  p.info:SetText(L["These tiles were on no board (\"Window only\"). Every tile has a board now: move them, put this board on your HUD, or delete them."])
-  panels[i] = p
-  return p
-end
-
-local function scopeWord(tile)
-  local s = tile.scope
-  if s == "run" then return L["board timer"] end
-  return s and L[s] or ""
-end
-
---- The card's number: the tile's value as on its board (its board's timer), or toward its target for a bar or gauge.
-local function fill(c, e, dashed, w)
-  local BM = M()
-  c.label:SetText(BM.TileLabel(e.tile, e.board))
-  local ok, v, text, settled, state = pcall(BM.TileValue, e.tile, e.board)
-  if not ok then text, settled = "?", false end
-  if ok and BM.NEEDS_TARGET[BM.TileDisplay(e.tile)] and BM.TileTarget(e.tile) then
-    local okP, _, ptext = pcall(BM.Progress, e.tile, e.board)
-    if okP and ptext then text = ptext end
-  end
-  c.value:SetText(text or "-")
-  if settled == false or state == "missing" or type(v) ~= "number" then c.value:SetTextColor(0.6, 0.6, 0.6)
-  else c.value:SetTextColor(1, 1, 1) end
-  c.foot:SetText(dashed and (scopeWord(e.raw) .. "  \194\183 " .. L["Only here"]) or scopeWord(e.raw))
-  -- on the HUD with its board: a filled card; kept off the HUD (the tile's own switch): a faint card, dashed border
-  if dashed then
-    c.bg:SetColorTexture(0.08, 0.08, 0.1, 0.35)
-    sizeDashes(c.dash, w, CARD_H)
-  else
-    c.bg:SetColorTexture(0.1, 0.1, 0.12, 0.9)
-  end
-  showAll(c.dash, dashed)
-  c.dashed = dashed
-  c.entry = e
-end
-
-local function has(s) return type(s) == "string" and s:lower():find(search, 1, true) ~= nil end
-
-local function matches(e)
-  if search == "" then return true end
-  return has(M().TileLabel(e.tile, e.board)) or (e.board and has(e.board.name)) or false
-end
-
-function refresh()
-  if not (content and content:IsShown() and M()) then return end
-  local BM = M()
-  local w = content:GetWidth()
-  if type(w) ~= "number" or w < MIN_W then w = MIN_W end
-  local inner = w - 2 * PAD - 2 * INSET                            -- the cards' width, in a panel
-  local cols = max(1, floor((inner + GAP) / (CARD_MIN_W + GAP)))
-  local cardW = floor((inner - (cols - 1) * GAP) / cols)
-  local groups = BM.TilesByBoard()
-  local unsorted = BM.Store().unsorted
-  local y, nc, np, any = -TOP_H, 0, 0, false
-
-  --- lay out cards from (x0, y0) down; returns the height used
-  local function grid(list, x0, y0)
-    for k, e in ipairs(list) do
-      nc = nc + 1
-      local c = cards[nc] or newCard(nc)
-      local col, row = (k - 1) % cols, floor((k - 1) / cols)
-      c:ClearAllPoints()
-      c:SetPoint("TOPLEFT", content, "TOPLEFT", x0 + col * (cardW + GAP), y0 - row * (CARD_H + GAP))
-      c:SetWidth(cardW)
-      fill(c, e, not BM.TileOnHud(e.tile), cardW)
-      c:Show()
-    end
-    local rows = floor((#list + cols - 1) / cols)
-    return rows * CARD_H + max(0, rows - 1) * GAP
-  end
-
-  for _, g in ipairs(groups) do
-    local b, list = g.board, g.entries
-    if search ~= "" and not has(b.name) then
-      local keep = {}
-      for _, e in ipairs(list) do if matches(e) then keep[#keep + 1] = e end end
-      list = keep
-    end
-    if search == "" or #list > 0 or has(b.name) then
-      any = true
-      np = np + 1
-      local p = panels[np] or newPanel(np)
-      local h = p.head
-      h.board, p.hud.board, p.add.board = b, b, b
-      h.text:SetText(b.name)
-      h.note:SetText((ns.BoardStatusText and ns.BoardStatusText(b)) or "")
-      p.hud:SetText(b.shown and L["On HUD"] or L["Only here"])
-      p.count:SetText(format(#g.entries == 1 and L["%d tile"] or L["%d tiles"], #g.entries))
-      local top = 2 + HEAD_H + 2
-      local info = b.id == unsorted and #g.entries > 0
-      p.info:SetShown(info)
-      if info then top = top + LINE_H end
-      local body = #list > 0 and grid(list, PAD + INSET, y - top) or LINE_H
-      p.empty:SetShown(#list == 0)
-      if #list == 0 and search ~= "" then p.empty:SetText(L["No tile here matches the search."])
-      else p.empty:SetText(L["No tiles on this board yet: + Tile adds one."]) end
-      local ph = top + body + INSET
-      p:ClearAllPoints()
-      p:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y)
-      p:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
-      p:SetHeight(ph)
-      p:Show()
-      y = y - ph - GROUP_GAP
+      nr = nr + 1
+      local r = rows[nr] or newRow(nr)
+      r:ClearAllPoints()
+      r:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y)
+      r:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
+      r.label:SetText(e.label or "")
+      r.value:ClearAllPoints()
+      if e.state then
+        r.pill:SetState(e.state, e.on)
+        r.pill:SetEnabled(e.switch ~= nil)
+        r.pill:SetScript("OnClick", e.switch and function() e.switch(); refresh() end or nil)
+        if e.tip then Wd.RichTip(r.pill, function() return e.tip end)
+        else r.pill:SetScript("OnEnter", nil); r.pill:SetScript("OnLeave", nil) end
+        r.pill:Show()
+        r.value:SetPoint("LEFT", r.pill, "RIGHT", 8, 0)
+      else
+        r.pill:Hide()
+        r.value:SetPoint("LEFT", r.label, "RIGHT", 6, 0)
+      end
+      r.value:SetPoint("RIGHT", r.btn, "LEFT", -8, 0)
+      r.value:SetText(e.value or "")
+      local a = e.action
+      if a then
+        r.btn:SetText(a.text)
+        Wd.FitWidth(r.btn, 80, 24)
+        r.btn:SetScript("OnClick", function() a.func(); refresh() end)
+        Wd.RichTip(r.btn, function() return { title = a.text, text = a.tip } end)
+        r.btn:Show()
+      else
+        r.btn:Hide()
+      end
+      r:Show()
+      y = y - ROW_H
     end
   end
-  for i = np + 1, #panels do
-    local p = panels[i]
-    p:Hide()
-    p.head.board, p.hud.board, p.add.board = nil, nil, nil
-  end
-  for i = nc + 1, #cards do cards[i]:Hide(); cards[i].entry = nil end
-  -- a player who hasn't chosen packs yet is pointed at the Packs tab (once they have, the usual hint)
-  content.hint:SetText((ns.Packs and not ns.Packs.Chosen()) and L["Packs tab: choose the packs you want"]
-    or L["Click a tile or a board's name for its actions"])
-  if #groups == 0 then
-    content.empty:SetText(L["No boards yet. New board... (top right) makes your first one: a ready-made board, or an empty one to fill with + Tile. It stays here, in this window, until you put it on your HUD."])
-    y = y - 3 * LINE_H
-  else
-    content.empty:SetText((search ~= "" and not any) and L["No tile or board matches the search."] or "")
-  end
-  -- the tab is as tall as its cards: the window scrolls it (HC-69)
+  for i = nr + 1, #rows do rows[i]:Hide() end
+  for i = nh + 1, #heads do heads[i]:Hide() end
   local h = max(MIN_H, floor(-y + PAD))
   if h ~= contentH then
     contentH = h
     ns.Windows.Relayout(ID)
   end
 end
-ns.RefreshOverview = refresh
+ns.RefreshSummary = refresh
 
 local function build(f)
   content = f
-  local s = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-  s:SetSize(200, 20)
-  s:SetPoint("TOPLEFT", 14, -6)
-  s:SetAutoFocus(false)
-  s.hint = s:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  s.hint:SetPoint("LEFT", 2, 0)
-  s.hint:SetText(L["Search your tiles or boards"])
-  s:SetScript("OnTextChanged", function(self)
-    local text = self:GetText() or ""
-    self.hint:SetShown(text == "")
-    search = text:lower()
-    refresh()
-  end)
-  s:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  s:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-  f.search = s
-  f.new = Wd.Button(f, L["New board..."], 110, function()
-    if Bo() then Bo().OpenNewBoard() end
-  end)
-  f.new:SetPoint("TOPRIGHT", -8, -6)
-  Wd.Tip(f.new, function() return L["Make a board: ready-made, empty, or a copy. It appears here; you choose whether it also goes on your HUD."] end)
-  f.hint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  f.hint:SetPoint("RIGHT", f.new, "LEFT", -10, 0)
-  f.hint:SetText(L["Click a tile or a board's name for its actions"])
-  f.empty = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-  f.empty:SetPoint("TOPLEFT", 20, -TOP_H - 4)
-  f.empty:SetPoint("TOPRIGHT", -20, -TOP_H - 4)
-  f.empty:SetJustifyH("LEFT")
+  f.head = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  f.head:SetPoint("TOPLEFT", PAD + 2, -10)
+  f.head:SetPoint("TOPRIGHT", -PAD, -10)
+  f.head:SetJustifyH("LEFT")
   f:SetScript("OnSizeChanged", function() refresh() end)
 end
 
 ns.Windows.Register(ID, {
-  title = L["Overview"], icon = TAB_ICON, tabOrder = 1,
+  title = L["Overview"], icon = "Interface\\Icons\\INV_Misc_Note_01", place = "bottom", bottomOrder = -100,
+  about = "Where everything stands for this character: packs, trackers, boards, stints, history, warnings.",
   width = 720, height = 440, minWidth = MIN_W, minHeight = MIN_H,
   minSize = function() return MIN_W, contentH end,
   build = build,
   onShow = function()
+    sizes = nil
     refresh()
     if ticker then ticker:Cancel() end
     ticker = C_Timer.NewTicker(1, refresh)
   end,
   onHide = function()
     if ticker then ticker:Cancel(); ticker = nil end
-    if ns.Menu then ns.Menu.Hide() end
   end,
 })
 
 function ns.ShowOverview(show) ns.Windows.Show(ID, show) end
-ns.OverviewCardMenu, ns.OverviewBoardMenu = cardMenu, boardMenu     -- (tests)
-ns.OverviewPanels, ns.OverviewCards = panels, cards                  -- (tests)
-ns.AddSlash("overview", function() ns.ShowOverview() end, L["your boards and their tiles: make them, put them on or off your HUD"])
-
--- a tile added or changed elsewhere (a board's menu, a pack's preset) shows here at the next second anyway; a
--- tracker switched on or off changes values at once
-local owner = {}
-HC.RegisterCallback(owner, "HC_TRACKERS_CHANGED", function() refresh() end)
+ns.OverviewEntries = entries                                     -- (tests)
+ns.AddSlash("overview", function() ns.ShowOverview() end, L["the Overview tab: where everything stands, and what needs a look"])
 
 -- This tab's help and tour (UI/Help.lua): change them with the tab.
 local _ = ns.Help and ns.Help.Register(ID, {
-  what = "Overview shows everything you follow: each board as a panel, each of its tiles as a card with its number now. It is also where boards and tiles are made. A board lives here first; it is on your HUD (your screen while you play) only when you put it there.",
+  what = "The Overview is one page on where everything stands for this character: your packs, the trackers counting, your boards and whether they are on your HUD, the open stint, this session, how much history is kept, and Diagnostics.",
   can = {
-    "{New board...} (top right): a ready-made board, an empty one, or a copy. It starts here, off your HUD, unless you tick the HUD box.",
-    "{+ Tile} on a board's panel: pick a number by tracker; it is added to that board at once.",
-    "The switch beside it reads {On HUD} or {Only here}: click it to put the whole board on your screen or take it off.",
-    "Click a card: {Edit} the tile, switch that one tile {On HUD} or off, {Move to board}, {Delete tile}.",
-    "Click a board's name for its actions: rename, edit on screen, duplicate, delete.",
+    "Read {Needs a look} first: it appears only when something is off, each line with the button that fixes it.",
+    "A lamp tells each state: green on, grey off, amber needs a look. A board's lamp is also its switch: click it to put that board on your HUD or take it off.",
+    "Each line has a button to the tab where you change it: {Packs}, {Explorer}, {Boards}, {Stints}, {Options}.",
   },
-  effect = "What is {On HUD} is drawn on your screen while you play; what is {Only here} keeps counting but stays in this window. A tile can be kept off the HUD while its board is on it: its card has a dashed border.",
+  effect = "Nothing here works differently from the other tabs: this page only gathers what they say, so a quick look tells you whether Hard Counters is counting what you expect.",
   tour = {
-    { title = "Boards are panels, tiles are cards", text = "Each framed panel is one of your boards; the cards in it are its tiles, with their numbers now. After the board's name you read where it is: on your HUD, or only here." },
-    { title = "Make a board, add tiles", text = "{New board...} at the top right makes a board. On a board's panel, {+ Tile} lists every number you can add, by tracker. Nothing appears on your screen yet: it is all here." },
-    { title = "On your HUD, or only here", text = "The button at the right of a board's panel says {On HUD} or {Only here}. Click it and the board goes on your screen, or comes off it. It counts either way." },
-    { title = "One tile at a time", text = "Click a card for that tile's menu. {On HUD} there keeps a single tile off the screen while the rest of its board is shown: handy for a number you only check now and then." },
+    { title = "Needs a look", text = "When something is off (no packs chosen, a board lost off screen, tiles whose tracker is off) it is listed at the top, amber, with the one click that fixes it." },
+    { title = "Everything else, one line each", text = "Packs, trackers, boards, the stint, this session, history and Diagnostics. The button at the end of a line opens the tab where it is changed." },
   },
 })

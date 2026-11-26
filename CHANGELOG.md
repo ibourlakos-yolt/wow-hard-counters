@@ -3,6 +3,75 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## 0.4.0-beta1 (2026-11-26)
+
+A beta, **still experimental**. The Hard Counters window is reorganised: new tab names, two new tabs, everything you
+can count in one Explorer, and history that comes on with your tiles.
+
+**Saved data:** kept (boards, tiles, trackers, runs and settings all carry over; nothing is renamed on disk).
+**Updating:** **restart the game client** (new addon files; `/reload` is not enough). **History:** at the first login
+on this version, every tracker that one of your tiles reads is switched on, and gets daily history unless you chose
+its history yourself; the chat line names them.
+
+### New tab names
+- **Boards** is the old **Overview** tab: your boards as panels, their tiles as cards.
+- **Explorer** replaces the old **Boards** and **Trackers** tabs: your boards and tiles, the ready-made boards, every
+  reading, the five displays (number, bar, gauge, odometer, mix) and the trackers, in one browser. Pick a kind on the
+  left, a row in the middle; its details and actions are below. **Drag the bar between the list and the details** to
+  give either more room (double-click: back to the usual split). `/hc trackers` opens it on Trackers.
+- **Stints** is the old **Runs** tab ("run" was easy to confuse with a board's timer and the session). It is a browser
+  now: click a stint and its numbers, counts, loot, best and splits are below the list (no separate card window), with
+  **Rename...**, **Copy as text** and **Delete**. `/hc stint start | stop | pause | resume | split`; `/hc run` still
+  works.
+- The **Tutorial** button is now **Grand tour**; **Help** and **Tab tour** carry the open tab's name ("Boards help",
+  "Boards tour"). The Guide tab's own "Run the tutorial" button is gone.
+
+### New
+- **Overview** (a tab along the bottom): where everything stands for this character (packs, trackers, boards on your
+  HUD, the open stint, this session, how much history is kept, Diagnostics) and, first, anything that **needs a
+  look**, each with the click that fixes it.
+- **Options** (a tab along the bottom): the `/hc options` panel inside the window (General, History, Profiles). No
+  separate window any more.
+- **A line on top of every tab** says what the tab is for.
+- **History options** (Options ▸ History): how many **stints are kept** (100 to 2000; 500 by default, was 200), the
+  **days of daily totals** a tracker keeps when you didn't choose (14 to 365; 90 by default, was 14), how long
+  **hours** and **weeks** are kept for Detailed history, and **when your day ends** (midnight local time by default;
+  pick 04:00 if you play late; takes effect at the next reload). Older days and weeks still count in their month,
+  year and lifetime totals.
+- **Buttons and switches look different.** A red-and-gold button does something; a dark pill with a lamp is a switch
+  that shows a state (green on, grey off, amber needs a look), such as **On HUD / Only here** and **Counting / Not
+  counting**. Every button and switch has a tooltip.
+- **The minimap button's tooltip is live:** this session, the open stint, your boards on the HUD with their first
+  tiles, today's net gold, what needs a look; hold **Shift** for every board and tile. It updates while you hover.
+- **Boards tab:** a board on its own timer has **Pause / Start** and **Reset** on its panel, and its clock in the
+  heading; a bar, gauge or mix tile shows its strip on its card, with the display named; a panel at the end of the
+  list says how to add more boards; a player with no pack chosen is reminded.
+- **Automatic field notes** on test versions (alpha, beta) and with Diagnostics loaded: at a login, a reload,
+  entering or leaving an instance, a level gained, an error and a logout, the moment is noted with a few counts
+  (never a value or a name); `/hc report` carries the last 40. With Diagnostics loaded, its probes also run after a
+  level, on leaving an instance and after an error, and the first error of a session saves the log. Options ▸
+  General ▸ Diagnostics turns it off.
+
+### Changed
+- **A new character starts with no boards.** New board... (Boards tab) makes the first one.
+- **A pack's trackers go on with their tiles.** Adding a tile, or making a board from a ready-made one, switches its
+  tracker on (no question asked) with daily history, unless you chose that tracker's history yourself. The Packs
+  tab's **Use these packs** button is gone: a tick is the choice.
+- **Hovering a board that is not on your HUD** (Explorer) shows it only faintly where it would be, without the
+  flash.
+- **All on HUD, All off HUD and Edit all** are gone from the boards list (`/hc edit` and ctrl-click on the minimap
+  button still edit every board).
+- Profiles are a tab of the options instead of a page of their own in the game's AddOns options.
+
+### Fixed
+- The board panels' borders in the Boards tab could vanish while scrolling and the gaps between panels looked uneven
+  at small UI scales: the borders are now one screen pixel at any scale.
+
+### For pack authors
+- `HardCounters:RegisterWindow` takes `about` (one line on what happens in the tab, shown in the header).
+- New aliases: `StartStint`, `PauseStint`, `ResumeStint`, `SplitStint`, `StopStint`, `DiscardStint`, `GetStint`,
+  `Stints`, `GetStintRecord`, `DeleteStint`, `RenameStint` (the `*Run` names keep working; `Supports("stints")`).
+
 ## 0.3.0-beta3 (2026-11-25)
 
 A beta, **still experimental**. The Fishing basket counts your casts too.

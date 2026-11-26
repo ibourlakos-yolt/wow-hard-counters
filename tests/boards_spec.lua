@@ -39,18 +39,14 @@ local function ids(board)
 end
 
 describe("boards", function()
-  it("start a new character with the Leveling board only, off the HUD (v8), and the introduction pending (HC-74)", function()
+  it("start a new character with no board at all (0.4.0) and the introduction pending (HC-74)", function()
     local env = boot()
     local M = env.M
     assert.is_false(env.ns.knownCharacter)
     assert.is_true(M.Seed())
     assert.is_false(M.Seed())                         -- once
     local B = M.Store()
-    assert.are.equal(1, #B.list)
-    assert.are.equal("Leveling", B.list[1].name)
-    assert.is_false(B.list[1].shown)                  -- (v8) nothing on the HUD at a first setup: Only here
-    assert.are.same(M.STARTER_POS, B.list[1].pos)
-    assert.are_not.equal(M.STARTER_POS, B.list[1].pos)
+    assert.are.equal(0, #B.list)                      -- (0.4.0, the user: "they don't start with any boards")
     assert.is_true(B.welcome)
   end)
 
@@ -506,8 +502,8 @@ describe("the board's timer", function()
     assert.are.equal("Farm", copy.name)
     assert.are.equal("large", rawget(copy.tiles[1], "size"))
     assert.is_nil(copy.wid)
-    assert.is_true(FM.Seed())                         -- (a new character still gets its starter board)
-    assert.are.equal("Leveling", FM.Store().list[2].name)
+    assert.is_true(FM.Seed())                         -- (a new character: no starter board since 0.4.0)
+    assert.are.equal(1, #FM.Store().list)             -- (the copy only)
   end)
 
   it("drops the tile windows of builds before HC-41, on every character, once", function()

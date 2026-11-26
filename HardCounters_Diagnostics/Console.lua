@@ -305,6 +305,7 @@ if hasWindows then
   HardCounters:RegisterWindow(WINDOW, {
     title = "Diagnostics",                              -- a side tab of the Hard Counters window, always last
     icon = "Interface\\Icons\\Trade_Engineering",
+    about = "The dev console: log, live values, storage and probes. For bug reports and the curious.",
     width = 760, height = 450, minWidth = 640, minHeight = 240,   -- 640: the row of bottom buttons
     build = build, onShow = onShow, onHide = onHide,
   })

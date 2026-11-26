@@ -80,16 +80,20 @@ never persist creature GUIDs; counts, never chat content.
 | `HC:SetFeasibility(id, status, note)` | Fires `HC_FEASIBILITY_CHANGED`. |
 | `HC:StorageStats()` | A copy of LibGranaryDB's `db:Stats()`. |
 
-## 5. Runs (DESIGN §5.1, §16.3)
+## 5. Runs (stints) (DESIGN §5.1, §16.3)
 
-Every call is about the **logged-in character's** run: one open run per character (HC-30).
+Every call is about the **logged-in character's** run: one open run per character (HC-30). Since 0.4.0 players call a
+run a **stint** (the Stints tab, `/hc stint`): every `*Run` call has a `*Stint` alias (`StartStint`, `PauseStint`,
+`ResumeStint`, `SplitStint`, `StopStint`, `DiscardStint`, `GetStint`, `Stints`, `GetStintRecord`, `DeleteStint`,
+`RenameStint`; check `HC:Supports("stints")`). The `*Run` names, the `"run"` scope, the `HC_RUN_*` callbacks and the
+saved data keep their names.
 
 | Call | Notes |
 |---|---|
 | `HC:StartRun(label)` → id \| nil, err | One open run per character. Inside an instance it ends the automatic run first. |
 | `HC:PauseRun()`, `HC:ResumeRun()` → true \| nil, err | Nothing counts while paused. |
 | `HC:SplitRun(label)` → split number | A named sub-range (spot change, instance reset). |
-| `HC:StopRun()` → id | Saves the record (newest first; 200 kept by default). |
+| `HC:StopRun()` → id | Saves the record (newest first; 500 kept by default, the player's Options ▸ History: 100 to 2000). |
 | `HC:DiscardRun()` → id | Closes the open run without a record. |
 | `HC:GetRun(opts)` → live copy \| nil | `{ id, label, state, elapsed, activeSeconds, totals = { [counterId] = { sum, count, by?, start?, stop? } }, best, splitCount, auto }` (`auto`: started by entering an instance). `opts.breakdowns`, `opts.live` (full tallies; not every frame). No storage queries. |
 | `HC:GetRunTotal(id, measure)` → number | Allocation-free, for displays. |
@@ -369,8 +373,10 @@ close, inset; `ButtonFrameTemplate`, with a plain fallback), drag, raise on clic
 (Ctrl+mouse wheel scales it when BlizzMove is installed), and its position and scale saved per profile. Every
 window is a **tab of the shared Hard Counters window**; there is no pop-out (removed 2026-11-15, DESIGN §7.1). A
 pack's window is a **tab along the bottom** of the window, with Diagnostics last (since 2026-11-24; in 0.2.1 and
-0.2.2 it was an icon tab down the right edge, where Hard Counters' own Overview, Boards, Trackers, Runs and Guide are
-now). The tutorial names the packs' tabs by their `title`.
+0.2.2 it was an icon tab down the right edge, where Hard Counters' own Boards, Explorer, Packs, Stints and Guide are
+now; since 0.4.0 Hard Counters' Overview tab comes first along the bottom and its Options tab before Diagnostics). The
+tutorial names the packs' tabs by their `title`. Give it an `about` too (0.4.0): one line, 100 characters at most, on
+what happens in your tab; the header shows it under the title, left of the "<title> help" and "<title> tour" buttons.
 Give it an `icon` and a `title`: the player's Tab labels option shows the icon, the title or both, and an icon-only
 tab shows the title as its tooltip. The frame's title names the open tab ("Hard Counters: Ledger").
 
@@ -383,8 +389,8 @@ width makes the panel wider for every tab, a large height makes yours scroll. On
 
 | Call | Notes |
 |---|---|
-| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's label or tooltip, and the frame's title while it is open), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
-| `HC:RegisterWindowHelp(id, def)` → ok, err | The Help page and the tour of a window you registered: the shared window's **Help** and **Tab tour** buttons show them while your tab is open (greyed on a tab without help). `def = { what = "what this tab is", can = { "a thing you can do here", ... } (two or more), effect = "how it changes the player's game", tour = { { title, text, before = function() end }, ... } (two or more steps) }`. Plain English strings; a name in braces, `{Turn on}`, is the exact text of one of your buttons or menu items and is drawn in gold. Returns false and why for an incomplete definition or an unknown window. Guard the call (`if HC.RegisterWindowHelp then`): Hard Counters before 0.2.5 has none. |
+| `HC:RegisterWindow(id, def)` → ok, err | `id` is namespaced like a counter (`"hcfarm:ledger"`). `def.build(content)` builds into a plain frame that fills the window body; it runs once, at the first show. Optional: `title` (the tab's label or tooltip, and the frame's title while it is open; the header's help and tour buttons are named after it), `about` (0.4.0: one line on what happens in the tab, shown in the header; older Hard Counters ignore it), `icon` (the tab's icon: a texture path such as `"Interface\\Icons\\INV_Misc_Coin_01"` or a file id; without one the tab shows Hard Counters' icon; a Hard Counters before 0.2.1 ignores it), `onShow(content)` / `onHide(content)` (called exactly when the window comes on or goes off screen: start and stop tickers there), `onClose()`, `width`, `height`, `minWidth`, `minHeight` or `minSize()` → w, h, `maxWidth`, `maxHeight`, `fixedHeight()` → h or nil, `remember` (reopen at login if it was open), `escape` (`false`: Escape doesn't close it), `dockable` (`false`: a frame of its own, never a tab), `mainButton` (a label: the shared window gets a "Show/Hide <label>" button for this window), `chrome` (`"hud"`: a plain dark frame with no title bar instead of the panel frame; the content keeps its top-right corner clear for the close button; `titleBar = false` means the same), `strata`, `frameName` (for `dockable = false`: global name of its own frame; BlizzMove remembers frames by name). Sizes are the content's; the host adds its chrome. |
+| `HC:RegisterWindowHelp(id, def)` → ok, err | The Help page and the tour of a window you registered: the shared window's **<title> help** and **<title> tour** buttons (**Help** and **Tab tour** before 0.4.0) show them while your tab is open (greyed on a tab without help). `def = { what = "what this tab is", can = { "a thing you can do here", ... } (two or more), effect = "how it changes the player's game", tour = { { title, text, before = function() end }, ... } (two or more steps) }`. Plain English strings; a name in braces, `{Turn on}`, is the exact text of one of your buttons or menu items and is drawn in gold. Returns false and why for an incomplete definition or an unknown window. Guard the call (`if HC.RegisterWindowHelp then`): Hard Counters before 0.2.5 has none. |
 | `HC:ShowWindow(id[, show])` | `show` nil toggles. A tab is shown by opening the shared frame on it. |
 | `HC:ToggleWindow(id)`, `HC:IsWindowShown(id)` | Shown = on screen (a tab counts only while it is the selected one). |
 | `HC:RelayoutWindow(id)` | Re-reads `minSize()` / `fixedHeight()` after the content changed shape. |

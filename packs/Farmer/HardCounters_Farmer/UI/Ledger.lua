@@ -231,6 +231,7 @@ end
 
 HC:RegisterWindow(WINDOW, {
   title = "Ledger", icon = "Interface\\Icons\\INV_Misc_Coin_01",   -- (an icon tab on Hard Counters 0.2.1 and later)
+  about = "Your money by where it came from and where it went, for the period you pick.",   -- (the header's line, 0.4.0)
   width = MIN_W + 20, height = MIN_H, minWidth = MIN_W, minHeight = MIN_H,
   build = build, onShow = refresh,
 })

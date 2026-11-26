@@ -127,9 +127,9 @@ describe("reading states on screen (HC-28)", function()
 
       -- the Trackers tab: the same order in the selected tracker's detail pane, under a heading
       ns.ShowTrackers(true)
-      local tf = ns.Windows.Content("trackers")
+      local tf = ns.Windows.Content("explorer")              -- (0.4.0: the Trackers tab is in the Explorer)
       tf:SetSize(762, 568)
-      ns.TrackersBrowser:Select("ts:stats", "all")
+      ns.TrackersBrowser:Select("ts:stats", "trackers")
       local d = ns.TrackersBrowser.detail
       local function itemIndex(pattern)
         for i, r in ipairs(d.items) do

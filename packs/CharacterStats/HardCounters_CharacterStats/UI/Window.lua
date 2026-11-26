@@ -135,6 +135,7 @@ end
 
 HC:RegisterWindow(WINDOW, {
   title = "Character Stats", icon = "Interface\\Icons\\INV_Misc_Book_09",   -- (an icon tab on Hard Counters 0.2.1+)
+  about = "Your character sheet as live numbers; switch a section on to count it.",   -- (the header's line, 0.4.0)
   width = WIDTH, height = HEIGHT, minWidth = WIDTH, minHeight = floor(HEIGHT),
   minSize = function() return WIDTH, floor(neededHeight()) end,
   build = build,

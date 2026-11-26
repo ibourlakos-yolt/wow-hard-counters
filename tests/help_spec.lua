@@ -57,26 +57,29 @@ describe("help and tab tours", function()
     end, SEEN)
   end)
 
-  it("opens from the window's header on every tab: Help for the open tab, Tab tour through its steps", function()
+  it("opens from the window's header on every tab: <tab> help for the open tab, <tab> tour through its steps", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local Help, Win = ns.Help, ns.Windows
-      ns.ShowOverview(true)
+      ns.ShowBoards(true)
       local main = Win.Host("_main")
-      assert.are.equal("Help", main.help:GetText())
-      assert.are.equal("Tab tour", main.tour:GetText())
-      assert.are.equal("overview", Win.Selected())
+      -- (0.4.0) the buttons carry the open tab's name, and its one line sits beside them
+      assert.are.equal("Boards help", main.help:GetText())
+      assert.are.equal("Boards tour", main.tour:GetText())
+      assert.are.equal("Grand tour", main.tutorial:GetText())
+      assert.truthy(main.about:GetText():find("Your boards", 1, true))
+      assert.are.equal("boards", Win.Selected())
       click(main.help)
       local f = Help.Frame()
       assert.is_true(f:IsShown())
-      assert.are.same({ "help", "overview", 1 }, { Help.State() })
+      assert.are.same({ "help", "boards", 1 }, { Help.State() })
       assert.truthy(f.body:GetText():find("What you can do here", 1, true))
       assert.truthy(f.body:GetText():find("How it changes your play", 1, true))
       assert.truthy(f.body:GetText():find("|cffffd200New board...|r", 1, true))
       -- from the Help page into the tour, step by step; Finish closes it
       click(f.act)
-      assert.are.same({ "tour", "overview", 1 }, { Help.State() })
-      local steps = #Help.For("overview").tour
+      assert.are.same({ "tour", "boards", 1 }, { Help.State() })
+      local steps = #Help.For("boards").tour
       assert.are.equal("Step 1 of " .. steps, f.count:GetText())
       for _ = 2, steps do click(f.next) end
       assert.are.equal("Finish", f.next:GetText())
@@ -86,12 +89,14 @@ describe("help and tab tours", function()
       click(f.next)
       assert.is_false(f:IsShown())
       -- another tab: the buttons follow it; a tour opens its tab
-      ns.ShowBoardsTab(true)
+      ns.ShowExplorer(true)
+      assert.are.equal("Explorer help", main.help:GetText())
       click(main.tour)
-      assert.are.same({ "tour", "boards", 1 }, { Help.State() })
-      _G.SlashCmdList.HARDCOUNTERS("tour trackers")
-      assert.is_true(Win.IsShown("trackers"))
-      assert.are.same({ "tour", "trackers", 1 }, { Help.State() })
+      assert.are.same({ "tour", "explorer", 1 }, { Help.State() })
+      _G.SlashCmdList.HARDCOUNTERS("tour overview")
+      assert.is_true(Win.IsShown("overview"))
+      assert.are.same({ "tour", "overview", 1 }, { Help.State() })
+      assert.are.equal("Overview tour", main.tour:GetText())
       if ctx.farmer then
         _G.SlashCmdList.HARDCOUNTERS("tour ledger")
         assert.are.equal("hcfarm:ledger", (select(2, Help.State())))
@@ -122,7 +127,7 @@ describe("the Packs tab", function()
     }
   end
 
-  it("switches on a ticked pack's trackers with history off; a pack to load waits for a reload", function()
+  it("takes a tick as the choice: the game is told at once, a pack to load waits for a reload (0.4.0)", function()
     UI.with(function(ctx)
       if not ctx.farmer then return end
       local ns, HC = ctx.hc, ctx.HC
@@ -135,7 +140,7 @@ describe("the Packs tab", function()
       assert.are.equal("Farmer", list[2].title)
       assert.is_true(#list[2].trackers > 0)
       assert.are.equal(0, list[2].on)                        -- a pack's trackers are off until chosen
-      -- the tab: a row per pack; ticking Traveler too, then Use these packs
+      -- the tab: a row per pack; ticking Traveler too
       ns.ShowPacks(true)
       local f = ns.Windows.Content("packs")
       f:SetSize(762, 568)
@@ -149,29 +154,22 @@ describe("the Packs tab", function()
       assert.is_true(ctx.env.addonEnabled.HardCounters_Traveler)
       assert.is_true(ns.globalSettings.packsPending.HardCounters_Traveler)
       assert.is_true(f.reload:IsShown())
-      assert.is_false(P.Chosen())
-      click(f.apply)
-      assert.is_true(P.Chosen())
-      -- Farmer is loaded: its trackers are on now, none with history
-      local on = 0
+      assert.is_true(P.Chosen())                             -- (0.4.0) the tick is the choice; no Use these packs
+      assert.is_nil(f.apply)
+      -- Farmer is loaded, but its trackers wait for a tile of theirs (ns.ActivateTracker)
       for _, t in ipairs(HC:Trackers()) do
-        if t.pack == "Farmer" then
-          if t.on then on = on + 1 end
-          if not t.needsHistory then assert.are.equal("off", t.chosenHistory) end
-        end
+        if t.pack == "Farmer" and not t.needsHistory then assert.is_false(t.on) end
       end
-      assert.are.equal(#list[2].trackers, on)
       -- Traveler is not: the game is told, the tab asks for a reload and offers it
       assert.is_true(ctx.env.addonEnabled.HardCounters_Traveler)
       assert.is_true(ns.globalSettings.packsPending.HardCounters_Traveler)
       assert.is_true(f.reload:IsShown())
       assert.truthy(f.note:GetText():find("Reload", 1, true))
-      assert.truthy(f.history:GetText():find("History is off", 1, true))
+      assert.truthy(f.history:GetText():find("daily history", 1, true))
       click(f.reload)
       assert.are.equal(1, ctx.env.reloads)
-      -- a tracker the player switched off themselves stays off at the next Use these packs
+      -- P.Use (the slash path) applies the ticks and leaves trackers alone
       local first = list[2].trackers[1].id
-      HC:SetTrackerOn(first, false)
       P.Use()
       assert.is_false(HC:IsTrackerOn(first))
       -- unticking a loaded pack: off for the next load at the click itself, a reload asked; ticking it back undoes it
@@ -186,16 +184,23 @@ describe("the Packs tab", function()
     end, SEEN)
   end)
 
-  it("after the reload, a pack turned on in the tab gets its trackers switched on", function()
+  it("after the reload, a pack turned on in the tab is noted loaded; its trackers wait for its tiles (0.4.0)", function()
     UI.with(function(ctx)
       if not ctx.farmer then return end
       local ns, HC = ctx.hc, ctx.HC
       addons(ctx, true)
       ctx.env:advance(3)
-      ns.Packs.FinishPending()
+      local done = ns.Packs.FinishPending()
       local on = 0
-      for _, t in ipairs(HC:Trackers()) do if t.pack == "Farmer" and t.on then on = on + 1 end end
-      assert.is_true(on > 0)
+      for _, t in ipairs(HC:Trackers()) do if t.pack == "Farmer" and t.on and not t.needsHistory then on = on + 1 end end
+      assert.are.equal(0, on)
+      -- a tile of Farmer's on a board: its tracker goes on, with daily history
+      local b = ns.BoardModel.Create(nil, { name = "Loot" })
+      ns.Boards.AddReading(b, "hcfarm:items")
+      local r = ns.readings["hcfarm:items"]
+      assert.is_true(HC:IsTrackerOn(r.tracker))
+      assert.are.equal("daily", HC:GetTracker(r.tracker).history)
+      assert.is_true(type(done) == "table")
       assert.is_nil(ns.globalSettings.packsPending.HardCounters_Farmer)
       assert.are.same({}, ctx.env.errors)
     end, { settings = { global = { tutorialSeen = true, packsPending = { HardCounters_Farmer = true } } } })

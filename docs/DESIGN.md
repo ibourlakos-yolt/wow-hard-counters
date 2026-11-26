@@ -1975,3 +1975,84 @@ The user's nine points (A to I), built in one round. What was decided on the way
   the class, and for conflicts, which need the addon list. Still boxes the player sees and can untick; the window's
   first lines, README "Good to know" and the CurseForge description state it. Changing a default again means changing
   those three texts in the same commit.
+
+### 17.15 As built (0.4.0, 2026-11-26): Boards, Explorer, Stints, Overview, Options
+
+The user's list of 2026-11-26 (tab names, two new tabs, action and status buttons, history that follows the tiles,
+configurable history, a live launcher tooltip, field notes). Designed by a separate design pass, then built; the
+calls that pass made and this build kept or changed are below. Not seen in game when written.
+
+**Tabs.** Down the right edge, Hard Counters' own, by `def.tabOrder`: **Boards** (1, the Overview of 0.2 to 0.3,
+`UI/BoardsTab.lua`), **Explorer** (2, `UI/Explorer.lua`), **Packs** (3), **Stints** (4, `UI/Stints.lua`, the Runs
+tab), **Guide** (5). Along the bottom (`def.place = "bottom"`, `def.bottomOrder`): **Overview** (−100,
+`UI/Overview.lua`, the new summary), the packs' windows (0, load order), **Options** (900, `UI/OptionsTab.lua`),
+Diagnostics (1000). `Win.PackWindows()` still lists the packs' windows only; `Win.BottomTabs()` lists all of them. A
+saved open tab under an old id moves once (`windows._main.tabsV = 2`: overview → boards, boards and trackers →
+explorer, runs → stints). Window ids `trackers` and `runs` are gone; `/hc trackers` and `/hc runs` still answer.
+
+**Words.** A run is a **stint** for players (the word "session" is a tile scope and "period" a calendar bucket).
+Only player-facing words and the UI changed: the `run` scope, `HardCountersDB.runs`, `HC_RUN_*` and the `*Run` API
+stay, with `*Stint` aliases. The Tutorial button is **Grand tour**; Help and Tab tour read "<tab> help" and "<tab>
+tour".
+
+**Header.** Under the title, left of the three buttons, the open tab's `def.about` (one line; packs give theirs to
+`RegisterWindow`).
+
+**Buttons.** `Widgets.Button` is an action (Blizzard's red button). `Widgets.Status` is a state: a dark flat pill
+with a lamp (green on, grey off, amber needs a look) and a border in the lamp's colour; clicking it switches the
+state. `Widgets.RichTip` is the tooltip house style: title, state in colour, what it does, a grey "Click: ..." line.
+The browser's actions take `status = true` (a pill) and `more = true` (under More...). Not built from the design:
+a test that walks every created button for a tooltip (the fake client can't tell a button that has one).
+
+**Explorer.** One browser over providers: `UI/BoardCatalog.lua` (boards, ready-made boards, other characters),
+`UI/Trackers.lua` (trackers, Not loaded; it no longer registers a window) and the Explorer's own Tiles, Readings
+(by the tracker's category) and Displays (the visual toolkit: what each display draws, sizes, calcs, target, the
+tiles using it, "Add a tile as a bar..." with a reading picker that lists only what that display can draw). Tree
+captions (`node.head`) group them: My setup, Add, What is counted, Other characters. Columns change with the node
+(`spec.columns` as a function). The list and the detail pane share their height through a splitter (drag;
+double-click resets; saved as `windows.explorer.detailH`). Removed: All on HUD, All off HUD, Edit all.
+
+**Hover.** A board on the HUD hovered in the Explorer shows, raised and flashing, as before. One that is Only here is
+drawn at 30% alpha where it would be, with no flash and not raised (`Boards.Highlight(id, on, full)`; the tutorial
+passes `full`). The design proposed a dashed outline frame instead; a faint board was simpler and says the same.
+
+**Boards tab.** A board's panel: name, status and clock in the heading; at the right its tile count, + Tile, Pause or
+Start and Reset (only on its own timer, as on the HUD), and the On HUD switch as a status pill. Cards name a non-number
+display in a chip and draw a bar or gauge as a strip toward its target, a mix as one strip in parts. Under the last
+panel a dashed panel says more boards can be made (New board..., Ready-made boards); with none it is the whole page.
+A yellow strip at the top reminds a player with no pack chosen or none loaded. Panel borders use
+`Widgets.Hairline` (PixelUtil, one physical pixel at least): at a UI scale under 1 a 1-unit line rounded to 0 or 1
+pixel depending on the scroll offset.
+
+**Trackers follow tiles.** `ns.ActivateTracker(id, force)`: a tile added or a board made (the player's act, force)
+switches the tile's tracker on, overriding an earlier off; after each load (not forced) the trackers of every tile
+on every board go on unless the player switched them off. Either way a tracker whose history the player never chose
+gets Daily history (`settings.historyDays`, 90). The Packs tab's Use these packs is gone; a tick sets
+`globalSettings.packsChosen`.
+
+**History options** (Options ▸ History): `maxRuns` 100 to 2000 (500; a record is about 2.6 KB, measured on the test
+account's saved file: 45 records, 119 KB), `historyDays` (14, 30, 90, 365; 90), `hourKeep` (24, 48, 168, 336 hours;
+48), `weekKeep` (1y, 2y, 5y; 2y), and `globalSettings.dayStartHour` (0 to 23, LibGranaryDB's Attach option, read at
+load: days already kept keep their boundary). The retention shape string includes the week retention so a change
+re-registers. Not built from the design: a storage budget option and days 180/730.
+
+**Overview.** One page, a second's refresh: version and channel, character, profile; Needs a look (no pack chosen, a
+pack waiting for a reload, tiles whose tracker is off, a board lost off screen or tiny, storage read-only, a test
+version without Diagnostics); Packs, Trackers, Boards (each board's lamp is its On HUD switch), Stint, This session,
+History and storage, Diagnostics; each line one button to where it is changed. The launcher tooltip reuses its
+warnings.
+
+**Options tab.** The AceConfig table, now three tabs (General, History, Profiles), drawn by AceConfigDialog into an
+AceGUI SimpleGroup over the tab's frame, made on show and released on hide; redrawn on ConfigTableChange.
+`/hc options` opens the tab. The game's AddOns options show the same table.
+
+**Launcher tooltip.** Live while shown (rebuilt once a second and on MODIFIER_STATE_CHANGED): version, this session,
+the stint and its headline, up to three boards on the HUD with two tiles each, today's net, what needs a look; Shift
+for every board and tile, the warnings spelled out, the trackers.
+
+**Field notes** (`Core/FieldNotes.lua`, DESIGN §8): on a pre-release version (`-dev`, `-alpha`, `-beta`) or with
+Diagnostics loaded, a ring of 40 notes in `HardCountersDB.field` at login, reload, instance enter and leave, level,
+caught error (five a session) and logout: counts and types only. `/hc report` carries them (`body.field`, shed after
+the warnings). Diagnostics listens through the bridge (`D.OnFieldNote`) and runs its probes at a level, on leaving an
+instance and after an error (once every five minutes at most), and snapshots the log at the first error of a
+session. A player without Diagnostics loaded gets the notes only: an addon that is off can't run.

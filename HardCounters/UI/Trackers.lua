@@ -1,9 +1,10 @@
--- The Trackers tab (TRACKERS_AND_BOARDS §7, HC-19; rebuilt on the shared browser, HC-66, DESIGN §17.4): the
--- catalog, the on/off switchboard and the storage panel in one. A bottom tab of the Hard Counters window;
--- /hc trackers. Tree: the trackers' categories, then "Not loaded" (data on disk that nothing registered this
--- session, with Delete). List: Name, On, History, Size. Detail: the selected tracker's readings with their scopes
--- and Add tile (the only board, or the one picked: HC-36). Actions: Turn on or off, History... (Keep history,
--- Advanced = Lifetime / Daily with days / Detailed, Delete history: HC-48), Delete data. The one-time "New"
+-- The tracker catalog (TRACKERS_AND_BOARDS §7, HC-19, HC-66; DESIGN §17.4): the on/off switchboard and the storage
+-- panel. It was the Trackers tab; since 0.4.0 it is the "What is counted" part of the Explorer tab (UI/Explorer.lua),
+-- which composes this provider; /hc trackers opens it there. Tree: Trackers by category, then "Not loaded" (data on
+-- disk that nothing registered this session, with Delete). List: Name, On, History, Size. Detail: the selected
+-- tracker's readings with their scopes and Add tile (the only board, or the one picked: HC-36). Actions: the
+-- Counting / Not counting switch, History... (Keep history, Advanced = Lifetime / Daily with days / Detailed, Delete
+-- history: HC-48), Delete data (under More...). The one-time "New"
 -- behaviour: a pack's new trackers are marked New, and the window opens once by itself when a new pack's trackers
 -- appear.
 local ADDON, ns = ...
@@ -11,8 +12,6 @@ local ADDON, ns = ...
 local HC, L = ns.HC, ns.L
 local format, floor = string.format, math.floor
 
-local ID = "trackers"
-local content, browser
 local sizes, sizeTotal = {}, nil
 
 local TIP_LIVE = "No history: these numbers cover this session and your runs, and reset when you log out. Turn on "
@@ -194,7 +193,7 @@ local function addToBoard(readingId, anchor)
           if board.shown then
             ns.Print(L["%s added to the board %s, on your HUD (hover it, Edit, to arrange it)."], ns.ReadingTitle(r, arg), board.name)
           else
-            ns.Print(L["%s added to the board %s. It is in the Overview tab; the board is not on your HUD."], ns.ReadingTitle(r, arg), board.name)
+            ns.Print(L["%s added to the board %s. It is in the Boards tab; the board is not on your HUD."], ns.ReadingTitle(r, arg), board.name)
           end
         end
       end)
@@ -290,8 +289,8 @@ local function nodes()
       total = total + 1
     end
   end
-  local out = { { key = "all", text = L["All trackers"], count = total } }
-  for _, c in ipairs(cats) do out[#out + 1] = { key = "cat:" .. c, text = L[c], count = byCat[c], indent = 1 } end
+  local out = { { key = "trackers", text = L["Trackers"], count = total } }
+  for _, c in ipairs(cats) do out[#out + 1] = { key = "tc:" .. c, text = L[c], count = byCat[c], indent = 1 } end
   local unloaded = HC:UnloadedCounters()
   if #unloaded > 0 then out[#out + 1] = { key = "unloaded", text = L["Not loaded"], count = #unloaded, grey = true } end
   return out
@@ -319,7 +318,7 @@ local function rows(node, search)
   end
   for _, e in ipairs(catalog()) do
     local t = e.t
-    if (node == "all" or node == "cat:" .. categoryOf(t)) and passes(t, e.readings) and searchHit(search, t, e.readings) then
+    if (node == "trackers" or node == "tc:" .. categoryOf(t)) and passes(t, e.readings) and searchHit(search, t, e.readings) then
       local bytes, frozen = HC:TrackerSize(t.id, sizes)
       out[#out + 1] = { key = t.id, t = t, readings = e.readings, bytes = bytes or 0, grey = not usable(e.readings),
         cells = {
@@ -386,14 +385,21 @@ local function actions(row)
     end } }
   end
   local t = row.t
-  local acts = { { text = t.on and L["Turn off"] or L["Turn on"], func = function() switch(t, not t.on) end,
-    tip = (not t.on and t.needsHistory) and format(L["Click to turn %s on: it keeps %s history."], t.title, t.needsHistory) or nil } }
+  -- (0.4.0) on or off is a state: a status pill, not a button that says "Turn on"
+  local acts = { { text = t.on and L["Counting"] or L["Not counting"], status = true, on = t.on,
+    func = function() switch(t, not t.on) end,
+    tip = { title = t.title, state = t.on and L["Now: on, counting"] or L["Now: off, counting nothing"], on = t.on,
+      text = (not t.on and t.needsHistory) and format(L["Switched on, it keeps %s history."], t.needsHistory)
+        or L["Off, it counts nothing and costs nothing; a tile placed from it switches it back on."],
+      click = t.on and L["Click: switch it off (it asks first)."] or L["Click: switch it on."] } } }
   if not liveOnly(t) then
     acts[#acts + 1] = { text = L["History..."], func = function(btn) historyMenu(btn, t) end,
-      tip = (t.history == "off" and L[TIP_LIVE] or format(L["Keeping history: %s. %s"], presetText(t), L[HISTORY_TIP[t.history] or ""]))
-        .. "\n|cff808080" .. L["Keep history or not, how much and how long (Advanced), Delete history."] .. "|r" }
+      tip = { title = L["History..."], state = t.history == "off" and L["Now: no history"] or format(L["Now: %s"], presetText(t)),
+        on = t.history ~= "off",
+        text = t.history == "off" and L[TIP_LIVE] or L[HISTORY_TIP[t.history] or ""],
+        click = L["Click: Keep history or not, how much and how long (Advanced), Delete history."] } }
     acts[#acts + 1] = { text = L["Delete data"], disabled = (row.bytes or 0) <= 0, func = function() deleteHistory(t, nil) end,
-      tip = L["Delete everything this tracker has kept on disk."] }
+      more = true, tip = L["Delete everything this tracker has kept on disk."] }
   end
   return acts
 end
@@ -439,63 +445,64 @@ local function footer()
 end
 
 function refresh()
-  if not (content and content:IsShown() and browser) then return end
   sizes, sizeTotal = ns.CounterSizes()
-  browser:Refresh()
+  if ns.RefreshExplorer then ns.RefreshExplorer() end
 end
 ns.RefreshTrackers = refresh
 
-local function build(f)
-  content = f
-  browser = ns.Browser.New(f, {
-    columns = {
-      { key = "name", title = L["Name"], sort = function(r) return (r.t and r.t.title or r.name or ""):lower() end },
-      { key = "on", title = L["On"], width = 36, sort = function(r) return r.t and (r.t.on and 1 or 0) or -1 end },
-      { key = "history", title = L["History"], width = 110,
-        sort = function(r) return r.t and (ns.HISTORY_PRESETS[r.t.history] or 0) or -1 end },
-      { key = "size", title = L["Size"], width = 110, align = "RIGHT", sort = function(r) return r.bytes or 0 end },
-    },
-    nodes = nodes, rows = rows, filters = filterItems, filtersActive = filtersActive,
-    detail = detail, actions = actions, footer = footer,
-    -- (HC-68: "Edit boards" moved to the Boards tab, as Edit all; the playtest's note #4)
-    empty = function(_, search)
-      return search ~= "" and L["No tracker matches the search."] or L["No trackers here (see Filters)."]
-    end,
-    noSelection = L["Click a tracker to see the numbers it offers, and add one as a tile on a board."],
-  })
-  ns.TrackersBrowser = browser
-end
+---------------------------------------------------------------------------
+-- (0.4.0) The Trackers tab is gone: its catalog is the Explorer's "What is counted" part (UI/Explorer.lua). This
+-- file is the provider the Explorer composes, plus what stays: the first-use line and the one-time opening when a
+-- new pack's trackers appear.
+---------------------------------------------------------------------------
 
---- The window shown with New trackers marks them seen when it closes (the badge has done its job).
-local function onHide()
+local T = {}
+ns.TrackerCatalog = T
+T.Nodes, T.Rows, T.Detail, T.Actions, T.Filters, T.FiltersActive, T.Footer = nodes, rows, detail, actions, filterItems,
+  filtersActive, footer
+T.AddToBoard, T.AddTip, T.ScopeChips, T.ListTitle, T.CategoryOf = addToBoard, addTip, scopeChips, listTitle, categoryOf
+function T.Owns(node)
+  node = tostring(node)
+  return node == "trackers" or node == "unloaded" or node:sub(1, 3) == "tc:"
+end
+function T.Columns()
+  return {
+    { key = "name", title = L["Name"], sort = function(r) return (r.t and r.t.title or r.name or ""):lower() end },
+    { key = "on", title = L["On"], width = 36, sort = function(r) return r.t and (r.t.on and 1 or 0) or -1 end },
+    { key = "history", title = L["History"], width = 110,
+      sort = function(r) return r.t and (ns.HISTORY_PRESETS[r.t.history] or 0) or -1 end },
+    { key = "size", title = L["Size"], width = 100, align = "RIGHT", sort = function(r) return r.bytes or 0 end },
+  }
+end
+--- Sizes on disk are read when the Explorer shows (db:Stats() is not free).
+function T.ReadSizes() sizes, sizeTotal = ns.CounterSizes() end
+--- The Explorer closed: New trackers are marked seen (the badge has done its job).
+function T.OnHide()
   for _, t in ipairs(HC:Trackers()) do if t.new then HC:MarkTrackerSeen(t.id) end end
-  if ns.Menu then ns.Menu.Hide() end
 end
 
-ns.Windows.Register(ID, {
-  title = L["Trackers"], icon = "Interface\\Icons\\INV_Misc_Gear_01", tabOrder = 3,
-  width = 720, height = 440, minWidth = 600, minHeight = 360,
-  build = build, onShow = function() refresh() end, onHide = onHide,
-})
+--- The trackers, in the Explorer (nil toggles; on: always shows).
+function ns.ShowTrackers(show)
+  if ns.ShowExplorer then ns.ShowExplorer(show, "trackers") end
+end
+function HC:ToggleTrackers() ns.ShowTrackers(nil) end
 
-function ns.ShowTrackers(show) ns.Windows.Show(ID, show) end
-function HC:ToggleTrackers() ns.Windows.Show(ID, nil) end
-
-ns.AddSlash("trackers", function() ns.ShowTrackers() end, L["choose what Hard Counters counts, and how much history it keeps"])
+ns.AddSlash("trackers", function() ns.ShowTrackers(true) end, L["what Hard Counters counts and how much history it keeps (in the Explorer tab)"])
 
 local owner = {}
 HC.RegisterCallback(owner, "HC_TRACKERS_CHANGED", function() refresh() end)
 HC.RegisterCallback(owner, "HC_HISTORY_DELETED", function() refresh() end)
 
--- First use: the tip about history, once (§3.4); a new pack's trackers: the window opens once, marked New (§2.3)
+-- First use: a line about history, once (§3.4); a new pack's trackers: the Explorer opens once on them, marked New
+-- (§2.3)
 ns.On("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReload)
   if not ns.ready or not ns.settings then return end
   local s = ns.settings
   s.tips = type(s.tips) == "table" and s.tips or {}
   if not s.tips.history and ns.Print then
     s.tips.history = true
-    ns.Print(L["Hard Counters keeps nothing on disk until you ask: Gold and XP per hour count this session and your runs. "
-      .. "/hc trackers to switch trackers on and choose their history."])
+    ns.Print(L["A tile you place switches its tracker on, with daily history. The Explorer tab (/hc explorer) lists "
+      .. "every tracker, what it keeps and what it takes on disk."])
   end
   if not (isInitialLogin or isReload) then return end
   s.trackersAnnounced = type(s.trackersAnnounced) == "table" and s.trackersAnnounced or {}
@@ -508,22 +515,3 @@ ns.On("PLAYER_ENTERING_WORLD", function(_, isInitialLogin, isReload)
   end
   if fresh then ns.ShowTrackers(true) end
 end, "Trackers")
--- luacheck: push no max line length
-
--- This tab's help and tour (UI/Help.lua): change them with the tab.
-local _ = ns.Help and ns.Help.Register(ID, {
-  what = "A tracker is a group of readings that count together: Gold, Experience, Loot, Reputation, Distance, a section of your character sheet. This tab lists them all, by category, with what each one costs.",
-  can = {
-    "Click a tracker: its readings appear on the right, each with {Add tile} to put that number on a board.",
-    "{Turn on} or {Turn off} a tracker. Off, it counts nothing and costs nothing.",
-    "{History...}: {Keep history} for one tracker, so its totals by day, week and month survive between sessions.",
-    "{Delete data} removes a tracker's saved history; {Not loaded} lists history left by packs you no longer use.",
-  },
-  effect = "Only trackers that are on feed your boards. History off (the default) still gives you this session and each board's own clock; history on adds today, this week, this month and beyond, and takes room on disk (the {Size} column).",
-  tour = {
-    { title = "Categories on the left", text = "The tree groups trackers by what they are about. {All trackers} shows every one. The list in the middle says for each: on or off, its history, its size on disk." },
-    { title = "A tracker's readings", text = "Click a tracker. On the right are its readings: the single numbers you can put on a board. {Add tile} beside one adds it to a board (you pick which when you have several)." },
-    { title = "On, off, and history", text = "The buttons at the bottom act on the selected tracker: {Turn on} or {Turn off}, and {History...}. History is off until you turn it on; a board on today, this week or this month needs it." },
-  },
-})
--- luacheck: pop

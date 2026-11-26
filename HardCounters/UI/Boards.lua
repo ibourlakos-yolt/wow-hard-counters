@@ -87,7 +87,7 @@ end
 --- Start, pause, stop or reset a board's timer; says so when a reset saved a record.
 local function controlAll(board, action)
   local saved = M.ControlAll(board, action)
-  if saved and ns.Print then ns.Print(L["%s: saved as run #%d (the Runs tab)"], board.name, saved) end
+  if saved and ns.Print then ns.Print(L["%s: saved as stint #%d (the Stints tab)"], board.name, saved) end
   Boards.RefreshAll()
 end
 
@@ -101,10 +101,26 @@ end
 local function saveBoard(board)
   local id = M.SaveBoard(board)
   if ns.Print then
-    if id then ns.Print(L["%s: saved as run #%d (the Runs tab)"], board.name, id)
-    else ns.Print(L["Nothing to save yet: a run needs 5 active minutes."]) end
+    if id then ns.Print(L["%s: saved as stint #%d (the Stints tab)"], board.name, id)
+    else ns.Print(L["Nothing to save yet: a stint needs 5 active minutes."]) end
   end
   Boards.RefreshAll()
+end
+
+-- (0.4.0) the same controls from the Hard Counters window: the Boards tab's panels and the Explorer
+Boards.Control, Boards.ToggleTimer, Boards.SaveBoard = controlAll, toggleAll, saveBoard
+
+--- A board's clock in words for the window: "running 12:34", "paused 12:34", "stopped", the session's, or the scope
+--- word for a calendar scope. Second value: "running" | "paused" | "stopped" | nil.
+function Boards.ClockText(board)
+  local kind, st, active = M.BoardClock(board)
+  if kind == "timer" or kind == "session" then
+    local word = st == "running" and L["running"] or (st == "paused" and L["paused"] or L["stopped"])
+    if kind == "session" then word = L["session"] .. " " .. word end
+    return word .. " " .. U.duration(active or 0), st
+  end
+  local bs = M.BoardScope(board)
+  return bs and bs ~= "run" and L[bs] or "", nil
 end
 
 local function compareFor(board, i)
@@ -150,7 +166,7 @@ local function runControls(w, board)
   w.pause:SetPoint("RIGHT", w.reset, "LEFT", -2, 0)
   Wd.Tip(w.pause, function() return L["Pause or start this board's timer: every tile on it. Nothing counts while paused"] end)
   Wd.Tip(w.reset, function()
-    return L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a run"]
+    return L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a stint"]
   end)
 end
 
@@ -370,7 +386,7 @@ local function layoutFull(f)
   if #rows == 0 then
     f.empty = f.empty or text(f, "GameFontDisableSmall")
     f.empty:SetPoint("TOPLEFT", 10, -M.PAD - 2)
-    f.empty:SetText(#board.tiles > 0 and L["Every tile of this board is kept off the HUD (Overview tab)"]
+    f.empty:SetText(#board.tiles > 0 and L["Every tile of this board is kept off the HUD (Boards tab)"]
       or L["Empty board: Edit (/hc edit), then +"])
     f.empty:Show()
     h = h + 18
@@ -622,7 +638,7 @@ local function drawRow(w, board)
     local hero = M.HeroIndex(board)
     local ht = hero and board.tiles[hero]
     local s = M.SplitsText(ht and ht.reading or "hc:goldph", ht and ht.calc)
-    w.label:SetText(s or L["Splits: start a run"])
+    w.label:SetText(s or L["Splits: start a stint"])
     w.value:SetText("")
   elseif row.kind == "label" then
     w.label:SetText(tile.text or L["Heading"])
@@ -1027,20 +1043,28 @@ function Boards.ShowNow(id, seconds)
   C_Timer.After(seconds + 0.1, function() Boards.Refresh(id) end)
 end
 
---- A board's row is hovered in the Boards tab: the board shows (whatever its rules), raised above the Hard Counters
---- window (HIGH) and flashing, until the pointer leaves (on = false): then back to LOW and its rules.
-function Boards.Highlight(id, on)
-  hovered[id] = on and true or nil
+Boards.GHOST_ALPHA = 0.3
+
+--- A board's row or panel is hovered in the Hard Counters window: a board on the HUD shows (whatever its rules),
+--- raised above the window (HIGH) and flashing, until the pointer leaves (on = false): then back to LOW and its
+--- rules. A board that is not on the HUD only shows faintly where it would be, with no flash and not raised (0.4.0,
+--- the user: hovering it "shouldn't full reveal and highlight the HUD counterpart"). full: reveal it anyway (the
+--- tutorial points at a board that way).
+function Boards.Highlight(id, on, full)
+  local b = M.Get(id)
+  local ghost = on and not full and b and not b.shown
+  hovered[id] = on and (ghost and "ghost" or true) or nil
   Boards.Refresh(id)
   local f = frames[id]
   if not f then return end
-  f:SetFrameStrata(on and "HIGH" or Boards.STRATA)
+  local lit = on and not ghost
+  f:SetFrameStrata(lit and "HIGH" or Boards.STRATA)
   if not f.hoverFlash then
     f.hoverFlash = f:CreateTexture(nil, "OVERLAY")
     f.hoverFlash:SetAllPoints()
     f.hoverFlash:SetColorTexture(1, 0.82, 0, 0.25)
   end
-  f.hoverFlash:SetShown(on and true or false)
+  f.hoverFlash:SetShown(lit and true or false)
 end
 
 --- One flash over the whole board (a new board, Show now, Reset position).
@@ -1066,10 +1090,10 @@ function Boards.ResetPosition(board)
 end
 
 -- (2026-11-25, the user) "On HUD" / "Only here" say where a board is; "Shown" / "Off" said neither
-local REASON = { off = "Only here", runOnly = "On HUD, hidden: only during runs", instance = "On HUD, hidden: in instances",
+local REASON = { off = "Only here", runOnly = "On HUD, hidden: only during stints", instance = "On HUD, hidden: in instances",
   combat = "On HUD, hidden: in combat" }
 
---- The board's status in words for the Boards and Overview tabs: "On HUD"; "Only here" (in the Hard Counters window,
+--- The board's status in words for the Boards, Explorer and Overview tabs: "On HUD"; "Only here" (in the Hard Counters window,
 --- not on screen); "On HUD, hidden: in combat" (naming the rule); "Off screen?" (on the HUD but outside the screen);
 --- "On HUD (faded)" (mouse-over fade); "Tiny?" (a scale under 0.5).
 function Boards.Status(board)
@@ -1111,6 +1135,10 @@ function Boards.Refresh(id, rebuild)
   state.runOpen = HC:GetRun() ~= nil            -- "only while a run is open": a dungeon run, or /hc run start
   state.mouseOver = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
   local shown, alpha = M.Visibility(board, state)
+  -- (0.4.0) hovered in the window while not on the HUD: only a faint outline of where it would be
+  if hovered[id] == "ghost" and shown and not (editingThis or state.editOwn) and not (peekUntil[id] and peekUntil[id] > ns.wow.time()) then
+    alpha = math.min(alpha or 1, Boards.GHOST_ALPHA)
+  end
   if not shown then
     if f:IsShown() then f:Hide() end
     if f.fly then f.fly:Hide() end
@@ -1306,7 +1334,7 @@ local function askText(prompt, current, fn)
 end
 Boards.AskText = askText
 
---- A board just added to from elsewhere (the Trackers tab, the Overview tab): the new tile flashes once (on a mini
+--- A board just added to from elsewhere (the Explorer, the Boards tab): the new tile flashes once (on a mini
 --- board, its strip). Nothing flashes when the board is not on the HUD (v8: adding to a board no longer puts it
 --- there) or its own rules hide it (combat, ...).
 function Boards.Reveal(board, tile)
@@ -1333,26 +1361,39 @@ function Boards.Reveal(board, tile)
   C_Timer.After(0.6, function() fl:Hide() end)
 end
 
---- Adding a reading whose tracker is off asks first (§7: "never silently"). onAdded(tile), when given, runs once
---- the tile is there (not when the player says no).
+--- The trackers a board's tiles read, switched on with their history (ns.ActivateTracker; 0.4.0, the user: a pack's
+--- trackers go on as soon as one of their tiles is placed, with history). force: the player's own act (a tile added,
+--- a board made). Says once in chat what it switched on. Returns the titles.
+function Boards.ActivateTrackers(board, force, only)
+  local seen, titles = {}, {}
+  if not ns.ActivateTracker then return titles end
+  for _, t in ipairs(board and board.tiles or {}) do
+    local r = type(t) == "table" and t.kind == "reading" and ns.readings[t.reading]     -- (a placement reads through)
+    local tid = r and r.tracker
+    if tid and not seen[tid] and (not only or only == t.reading) then
+      seen[tid] = true
+      if ns.ActivateTracker(tid, force) then
+        local tr = HC:GetTracker(tid)
+        titles[#titles + 1] = tr and tr.title or tid
+      end
+    end
+  end
+  if #titles > 0 and ns.Print then
+    ns.Print(L["Counting now, with daily history: %s (Explorer tab: change or switch off)."], table.concat(titles, ", "))
+  end
+  return titles
+end
+
+--- Adding a reading: its tracker goes on, with history (0.4.0; it asked first before). onAdded(tile), when given,
+--- runs once the tile is there.
 local function addReading(board, rid, look, arg, onAdded)
   local r = ns.readings[rid]
   if not r then return end
-  local function add()
-    local tile = M.AddReading(board, rid, look, nil, arg)
-    Boards.Refresh(board.id, true)
-    if ns.RefreshOverview then ns.RefreshOverview() end   -- (HC-67) a new tile is in the collection too
-    if onAdded and tile then onAdded(tile) end
-  end
-  local t = r.tracker and HC:GetTracker(r.tracker)
-  if t and not t.on then
-    confirm(format(L["Turn on %s? %s"], t.title, t.description or ""), function()
-      HC:SetTrackerOn(r.tracker, true)
-      add()
-    end)
-  else
-    add()
-  end
+  local tile = M.AddReading(board, rid, look, nil, arg)
+  if tile then Boards.ActivateTrackers(board, true, rid) end
+  Boards.Refresh(board.id, true)
+  if ns.RefreshBoards then ns.RefreshBoards() end   -- (HC-67) a new tile is in the collection too
+  if onAdded and tile then onAdded(tile) end
 end
 Boards.AddReading = addReading
 
@@ -1470,23 +1511,30 @@ end
 
 local function readingItems(board, look, anchor)
   local byTracker, order, unused = {}, {}, {}
+  local disp = type(look) == "table" and look.display or nil
   for _, rid in ipairs(ns.allReadingOrder) do
     local r = ns.readings[rid]
     local tid = r.tracker or "other"
-    if not byTracker[tid] then byTracker[tid] = {}; order[#order + 1] = tid end
-    local list = byTracker[tid]
-    if not ns.ReadingApplies(r) then
-      -- (HC-28) not used by this character: last, in a submenu of their own, still addable (another character)
-      unused[tid] = unused[tid] or {}
-      list = unused[tid]
-    end
-    if ns.NeedsArg(r) then
-      -- a reading with a parameter: choose the member next (a set reading starts with its default: HC-60)
-      list[#list + 1] = { text = ns.ReadingTitle(r, nil), tip = r.description, func = function()
-        Boards.MemberMenu(anchor, rid, function(arg) addReading(board, rid, look, arg) end)
-      end }
-    else
-      list[#list + 1] = { text = r.title, tip = r.description, func = function() addReading(board, rid, look) end }
+    -- (0.4.0) a picker for one display lists only the readings it can draw: an odometer or a mix by its own test, a
+    -- bar or a gauge only with a target of the reading's own (a typed target is set on the tile afterwards)
+    local fits = not disp or (M.DisplayFits({ reading = rid }, disp)
+      and (not M.NEEDS_TARGET[disp] or ns.ReadingTarget(r, nil) ~= nil or r.param ~= nil))
+    if fits then
+      if not byTracker[tid] then byTracker[tid] = {}; order[#order + 1] = tid end
+      local list = byTracker[tid]
+      if not ns.ReadingApplies(r) then
+        -- (HC-28) not used by this character: last, in a submenu of their own, still addable (another character)
+        unused[tid] = unused[tid] or {}
+        list = unused[tid]
+      end
+      if ns.NeedsArg(r) then
+        -- a reading with a parameter: choose the member next (a set reading starts with its default: HC-60)
+        list[#list + 1] = { text = ns.ReadingTitle(r, nil), tip = r.description, func = function()
+          Boards.MemberMenu(anchor, rid, function(arg) addReading(board, rid, look, arg) end)
+        end }
+      else
+        list[#list + 1] = { text = r.title, tip = r.description, func = function() addReading(board, rid, look) end }
+      end
     end
   end
   local items = {}
@@ -1515,9 +1563,11 @@ function Boards.AddMenu(anchor, board)
   ns.Menu.Show(anchor, items)
 end
 
---- The reading picker alone, by tracker (the Overview tab's "+ Tile" on a board's panel).
-function Boards.AddReadingMenu(anchor, board)
-  local items = readingItems(board, nil, anchor)
+--- The reading picker alone, by tracker (the Boards tab's "+ Tile" on a board's panel).
+--- The reading picker for a board. look ({ display, size, calc }): the new tile's look (the Explorer's Displays:
+--- "a tile as a bar"); then only readings that display fits are listed.
+function Boards.AddReadingMenu(anchor, board, look)
+  local items = readingItems(board, look, anchor)
   table.insert(items, 1, { text = format(L["Add a tile to %s"], board.name), title = true })
   ns.Menu.Show(anchor, items)
 end
@@ -1558,13 +1608,13 @@ local SIZE_TIP = { large = "A big number with the last 10 minutes and how you us
   half = "Two side by side.", line = "One line, full width." }
 
 --- A reading tile's settings (what it counts, its scope, calc, display, size, target, name) as menu items: the
---- board's tile menu and the Overview tab's Edit (HC-67) share them. board: the tile's board, or nil for a tile that
---- is Window only (then no Size: a size is the board's). A choice redraws the board and the Overview tab.
+--- board's tile menu and the Boards tab's Edit (HC-67) share them. board: the tile's board, or nil for a tile that
+--- is Window only (then no Size: a size is the board's). A choice redraws the board and the Boards tab.
 function Boards.TileSettingsItems(tile, board, anchor)
   local items = {}
   local function done()
     if board then Boards.Refresh(board.id, true) end
-    if ns.RefreshOverview then ns.RefreshOverview() end
+    if ns.RefreshBoards then ns.RefreshBoards() end
   end
   if tile.kind == "reading" then
     items[#items + 1] = { text = L["Counts"], sub = {
@@ -1713,15 +1763,15 @@ function Boards.TileMenu(anchor, board, i)
   items[#items + 1] = { text = L["Move down"], disabled = i == #board.tiles,
     func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move to"], sub = moveItems(board, i) }
-  -- (v8) a reading tile is taken off the HUD (it stays on this board in the Overview tab, counting) or deleted
+  -- (v8) a reading tile is taken off the HUD (it stays on this board in the Boards tab, counting) or deleted
   local reading = tile.kind == "reading"
   if reading then
     items[#items + 1] = { text = L["Hide from HUD"],
-      tip = L["It stays on this board in the Overview tab (Only here), still counting; put it back from there."],
+      tip = L["It stays on this board in the Boards tab (Only here), still counting; put it back from there."],
       func = function()
         M.SetTileOnHud(tile, false)
         Boards.Refresh(board.id, true)
-        if ns.RefreshOverview then ns.RefreshOverview() end
+        if ns.RefreshBoards then ns.RefreshBoards() end
       end }
   end
   items[#items + 1] = { text = reading and L["Delete tile"] or L["Remove"],
@@ -1729,7 +1779,7 @@ function Boards.TileMenu(anchor, board, i)
       local function go()
         M.RemoveTile(board, i)
         Boards.Refresh(board.id, true)
-        if ns.RefreshOverview then ns.RefreshOverview() end
+        if ns.RefreshBoards then ns.RefreshBoards() end
       end
       if reading then
         confirm(format(L["Delete the tile %s? Your counts don't change."], M.TileLabel(tile, board)), go)
@@ -1753,7 +1803,7 @@ local function showItems(board)
       { text = L["show"], checked = s.instance ~= "hide", func = set("instance", "show") },
       { text = L["hide"], checked = s.instance == "hide", func = set("instance", "hide") },
     } },
-    { text = L["Only while a run is open"], checked = s.runOnly, func = set("runOnly", not s.runOnly) },
+    { text = L["Only while a stint is open"], checked = s.runOnly, func = set("runOnly", not s.runOnly) },
     { text = L["Faded until the mouse is over it"], checked = s.mouseoverFade, func = set("mouseoverFade", not s.mouseoverFade) },
   }
 end
@@ -1773,8 +1823,8 @@ function Boards.AllItems(board)
     func = function() controlAll(board, "stop") end }
   items[#items + 1] = { text = L["Reset (from zero)"], func = function() controlAll(board, "reset") end }
   local which = M.BoardSavable(board)
-  items[#items + 1] = { text = which == "prev" and L["Save the last period as a run"] or L["Save as run"],
-    disabled = not which, tip = L["One record in the Runs tab for this board: every counter. Needs 5 active minutes."],
+  items[#items + 1] = { text = which == "prev" and L["Save the last period as a stint"] or L["Save as stint"],
+    disabled = not which, tip = L["One record in the Stints tab for this board: every counter. Needs 5 active minutes."],
     func = function() saveBoard(board) end }
   return items
 end
@@ -1823,7 +1873,7 @@ function Boards.Rename(board, name)
     return false
   end
   Boards.Refresh(board.id, true)
-  if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
+  if ns.RefreshExplorer then ns.RefreshExplorer() end
   return true
 end
 
@@ -1840,12 +1890,12 @@ function Boards.BoardMenu(anchor, board)
     { text = L["Rename"], func = function()
       askText(L["Board name"], board.name, function(s) Boards.Rename(board, s) end)
     end },
-    { text = L["Take off the HUD"], tip = L["It stays in the Hard Counters window (Overview, Boards), still counting."],
+    { text = L["Take off the HUD"], tip = L["It stays in the Hard Counters window (the Boards tab), still counting."],
       func = function()
         board.shown = false
         if editIds[board.id] then editIds[board.id] = nil; Boards.SyncEscape() end
         Boards.Refresh(board.id)
-        if ns.RefreshOverview then ns.RefreshOverview() end
+        if ns.RefreshBoards then ns.RefreshBoards() end
       end },
     { text = L["Delete this board"], func = function()
       confirm(format(L["Delete the board %s and its tiles? Your counts don't change."], board.name), function()
@@ -1902,21 +1952,24 @@ end
 --- in edit mode. Else (v8, the default) it is in the Hard Counters window only, and the chat line says so.
 function Boards.Created(b, empty)
   if empty and b.shown then editIds[b.id] = true; Boards.SyncEscape() end
+  Boards.ActivateTrackers(b, true)                       -- (0.4.0) its tiles' trackers count, with history
   Boards.RefreshAll(true)
   if b.shown then Boards.Flash(b.id) end
   if ns.Print then
     if b.shown then ns.Print(L["Board %s made, on your HUD: /hc board %s takes it off or puts it back."], b.name, b.name:lower())
-    else ns.Print(L["Board %s made, in the Overview tab only. Its On HUD switch there, or /hc board %s, puts it on screen."], b.name, b.name:lower()) end
+    else ns.Print(L["Board %s made, in the Boards tab only. Its On HUD switch there, or /hc board %s, puts it on screen."], b.name, b.name:lower()) end
   end
-  if ns.RefreshOverview then ns.RefreshOverview() end
-  if ns.RefreshBoardsTab then ns.RefreshBoardsTab() end
+  if ns.RefreshBoards then ns.RefreshBoards() end
+  if ns.RefreshExplorer then ns.RefreshExplorer() end
 end
 
 --- The launcher's right-click (minimap button, AddOns menu, a bar's feed; HC-42 b, HC-68 lined up with the Boards
---- tab, DESIGN §17.6): New board..., Open Boards tab, edit, options.
+--- tab, DESIGN §17.6; 0.4.0: the Overview and Explorer tabs too): New board..., the tabs, edit, options.
 function Boards.LauncherItems()
   local items = { { text = L["New board..."], func = function() Boards.OpenNewBoard() end },
-    { text = L["Open Boards tab"], func = function() if ns.ShowBoardsTab then ns.ShowBoardsTab(true) end end } }
+    { text = L["Boards tab"], func = function() if ns.ShowBoards then ns.ShowBoards(true) end end },
+    { text = L["Explorer tab"], func = function() if ns.ShowExplorer then ns.ShowExplorer(true) end end },
+    { text = L["Overview tab"], func = function() if ns.ShowOverview then ns.ShowOverview(true) end end } }
   if anyEditing() then
     items[#items + 1] = { text = L["Stop editing boards"], func = function() Boards.SetEditing(false) end }
   else
@@ -2001,8 +2054,8 @@ ns.AddSlash("board", function(rest)
     if b then
       b.shown = not b.shown
       Boards.Refresh(b.id, true)
-      if ns.RefreshOverview then ns.RefreshOverview() end
-      ns.Print(b.shown and L["%s: on your HUD."] or L["%s: off the HUD (it stays in the Overview tab)."], b.name)
+      if ns.RefreshBoards then ns.RefreshBoards() end
+      ns.Print(b.shown and L["%s: on your HUD."] or L["%s: off the HUD (it stays in the Boards tab)."], b.name)
     else ns.Print(L["no such board: %s"], cmd) end
   end
 end, L["list boards, put one on or off the HUD, add one from a preset"])
@@ -2032,6 +2085,9 @@ ns.On("PLAYER_ENTERING_WORLD", function()
   if not ns.ready then return end
   M.Seed()
   updateState()
+  -- (0.4.0) a tile on a board means its tracker counts: one the player never switched gets switched on (packs are
+  -- loaded by now); a tracker the player switched off stays off
+  for _, b in ipairs(M.Store().list) do Boards.ActivateTrackers(b, false) end
   Boards.RefreshAll(true)
 end, "Boards")
 ns.On("PLAYER_REGEN_DISABLED", function() state.combat = true; Boards.RefreshAll() end, "Boards")
@@ -2097,8 +2153,8 @@ ns.AddOptions("boards", function()
       desc = L["Another board: from a preset, a copy of one, or empty to fill yourself"],
       func = function() Boards.OpenNewBoard() end },
     tab = { type = "execute", order = 3, name = L["Open Boards tab"],
-      desc = L["Every board: show or hide, show now, reset its position, duplicate, presets."],
-      func = function() if ns.ShowBoardsTab then ns.ShowBoardsTab(true) end end },
+      desc = L["Your boards and their tiles: put them on or off your HUD, add tiles, pause or reset their clocks."],
+      func = function() if ns.ShowBoards then ns.ShowBoards(true) end end },
   }
   return { type = "group", name = L["Boards"], inline = true, args = args }
 end)

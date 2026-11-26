@@ -15,10 +15,11 @@ local FEATURES = {
   readingsChanged = true,         -- HC:ReadingsChanged (a live reading that moves by itself: a timer's progress)
   counterMembers = true,          -- HC:CounterMembers (2026-11-25: the members a small dimension has counted)
   mixList = true,                 -- reading `mixList` (2026-11-25: a mix tile lists its parts with amounts)
+  stints = true,                  -- 0.4.0: HC:StartStint, HC:Stints, ... (the run API in the player's word; Core/Runs.lua)
   hist = false, autoRuns = false, journal = false,
 }
 
---- Capability probe: HardCounters:Supports("runs").
+--- Capability probe: HardCounters:Supports("runs"), Supports("stints").
 function HC:Supports(feature)
   -- dimensions with caps up to 4096 (LibGranaryDB API_VERSION 2; only the newest embedded copy runs)
   if feature == "bigDimensions" then return (ns.GDB and ns.GDB.API_VERSION or 0) >= 2 end

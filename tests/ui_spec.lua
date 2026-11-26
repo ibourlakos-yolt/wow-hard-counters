@@ -8,7 +8,7 @@ local function bootUI()
   ns.AddOptions = function() end
   ns.Windows = { Register = function() return true end, Show = function() end }   -- the host is windows_spec's
   _G.CreateFrame = function() error("no frames in this test") end
-  for _, f in ipairs({ "UI/Widgets.lua", "UI/RunList.lua" }) do
+  for _, f in ipairs({ "UI/Widgets.lua", "UI/Stints.lua" }) do
     assert(loadfile(Env.ROOT .. "/" .. f))("HardCounters", ns)
   end
   local HC = env.HC
@@ -80,7 +80,8 @@ describe("display helpers", function()
     env:advance(600)
     local rec = HC:GetRunRecord(HC:StopRun())
     local text = env.ns.RunSummaryText(rec)
-    assert.truthy(text:find("Card", 1, true))
+    assert.truthy(text:find("Stint: Card", 1, true))                 -- (0.4.0: the player's word)
+    assert.is_nil(text:find("Run", 1, true))
     assert.truthy(text:find("Gold/h", 1, true))
     assert.truthy(text:find("by source: loot 30s 0c", 1, true))
     assert.truthy(text:find("Linen Cloth x4", 1, true))

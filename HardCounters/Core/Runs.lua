@@ -186,7 +186,7 @@ end
 --- Put a record at the head of the run list (capped) and tell everyone.
 local function keep(R, rec)
   table.insert(R.list, 1, rec)
-  local max = (ns.settings and ns.settings.maxRuns) or 200
+  local max = (ns.settings and ns.settings.maxRuns) or 500
   while #R.list > max do table.remove(R.list) end
   ns.Fire("HC_RUN_STOPPED", rec.id)
 end
@@ -379,6 +379,16 @@ function HC:Runs(filter)
   return out
 end
 
+local NONE = {}
+
+--- (0.4.0, the Stints tab) The kept records themselves, newest first: no copies, so a refresh of the tab costs no
+--- deep copy of up to maxRuns records (HC:Runs hands out copies for everyone else). Internal and read-only: write
+--- through RenameRun and DeleteRun, never into these tables.
+function ns.StintRows()
+  if not ns.SV then return NONE end
+  return store().list
+end
+
 function HC:GetRunRecord(id)
   if not ns.SV then return nil end
   for _, rec in ipairs(store().list) do if rec.id == id then return U.deepcopy(rec) end end
@@ -415,6 +425,24 @@ function ns.RunSummary()
   local run = R.opens[ns.guid]
   return { open = run ~= nil, state = run and run.state or nil, kept = #R.list }
 end
+
+---------------------------------------------------------------------------
+-- The same API in the player's word (0.4.0): the UI says "stint", a stretch of play you kept. The saved data, the
+-- tile scope "run" and the HC_RUN_* callbacks keep their names. Wrappers rather than copies, so a pack hooking
+-- StartRun sees StartStint calls too.
+---------------------------------------------------------------------------
+
+function HC:StartStint(label) return self:StartRun(label) end
+function HC:PauseStint() return self:PauseRun() end
+function HC:ResumeStint() return self:ResumeRun() end
+function HC:SplitStint(label) return self:SplitRun(label) end
+function HC:StopStint() return self:StopRun() end
+function HC:DiscardStint() return self:DiscardRun() end
+function HC:GetStint(opts) return self:GetRun(opts) end
+function HC:Stints(filter) return self:Runs(filter) end
+function HC:GetStintRecord(id) return self:GetRunRecord(id) end
+function HC:DeleteStint(id) return self:DeleteRun(id) end
+function HC:RenameStint(id, label) return self:RenameRun(id, label) end
 
 
 ---------------------------------------------------------------------------

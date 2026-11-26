@@ -145,6 +145,15 @@ function W.reload()
   if type(fn) == "function" then fn() end
 end
 
+--- Is this addon (by folder name) loaded now? false when the client can't say.
+function W.addonLoaded(name)
+  local A = rawget(_G, "C_AddOns")
+  local fn = (type(A) == "table" and A.IsAddOnLoaded) or rawget(_G, "IsAddOnLoaded")
+  if type(fn) ~= "function" then return false end
+  local ok, loaded = pcall(fn, name)
+  return ok and loaded and true or false
+end
+
 --- The addons that belong to Hard Counters (TOC `## Group: HardCounters`, every pack's and Diagnostics'; not Hard
 --- Counters itself): { { name (folder), title, notes, enabled (for this character at the next load), loaded,
 --- missing (can't load: a dependency is absent) } }, by title. Reads the AddOn list; nothing is changed.

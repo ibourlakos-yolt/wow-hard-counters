@@ -235,17 +235,21 @@ local function build()
   label(L["Where"], -120)
   f.hud = check(f, L["Put it on my HUD (on screen while I play)"], -116, "hud")
   Wd.Tip(f.hud, function()
-    return L["Off: the board is made in this window only (Overview, Boards). Its On HUD switch in the Overview tab puts it on screen later."]
+    return L["Off: the board is made in this window only (the Boards tab). Its On HUD switch there puts it on screen later."]
   end)
   f.checks = {
     check(f, L["in combat"], -140, "combat", 122),
     check(f, L["in instances"], -162, "instance", 122),
-    check(f, L["only while a run is open"], -184, "runOnly", 122),
+    check(f, L["only while a stint is open"], -184, "runOnly", 122),
   }
   f.create = Wd.Button(f, L["Create"], 90, function() create() end)
   f.create:SetPoint("BOTTOMRIGHT", -16, 14)
   f.cancel = Wd.Button(f, L["Cancel"], 90, function() f:Hide() end)
   f.cancel:SetPoint("RIGHT", f.create, "LEFT", -6, 0)
+  Wd.RichTip(f.create, function()
+    return { title = L["Create"], text = L["Make the board as set above. It appears in the Boards tab, and on your HUD if the box is ticked."] }
+  end)
+  Wd.RichTip(f.cancel, function() return { title = L["Cancel"], text = L["Close the dialog; nothing is made."] } end)
   f:SetScript("OnHide", function() if ns.Menu then ns.Menu.Hide() end end)
 end
 

@@ -163,7 +163,7 @@ local function reconcileCounter(c)
   end
   local grains, retention = ns.HistoryShape(level, days, c.sdef.grains)
   local shape = table.concat(grains, ",") .. "|" .. tostring(retention and retention.hour) .. ","
-    .. tostring(retention and retention.day)
+    .. tostring(retention and retention.day) .. "," .. tostring(retention and retention.week)
   if c.h and c.shape == shape then return end
   local sdef = {}
   for k, v in pairs(c.sdef) do sdef[k] = v end

@@ -41,7 +41,7 @@ local INSET_L, INSET_R, INSET_B, PAD = 4, 6, 4, 4
 local FLAT_TITLE, HEADER_H = 26, 26
 
 local defs, order = {}, {}
-local sideIds = {}     -- id -> true: a pack's window (registered through the public API), a side icon tab
+local packIds = {}     -- id -> true: a pack's window (registered through the public API): a tab along the bottom
 local entries = {}     -- id -> { content, host, body (current parent), visible }
 local main
 local Win = {}
@@ -99,25 +99,45 @@ local function dockedIds()
 end
 
 -- (the user, 2026-11-24) the tabs swapped places: packs' windows along the bottom, Hard Counters' own down the
--- right edge. `sideIds` keeps its name for "a pack's window" (registered through the public API).
+-- right edge. (0.4.0) Two of Hard Counters' own go along the bottom too, as "secondary" tabs (the user: the summary
+-- "should be one of the secondary tabs at the bottom", and Options): def.place = "bottom", ordered by
+-- def.bottomOrder: Overview (-100) first, the packs' windows (0) in load order, Options (900), Diagnostics (1000) last.
 
---- Packs' windows along the bottom, in load order; Diagnostics (Hard Counters' own companion) always last.
+local function isBottom(id) return packIds[id] or (defs[id] and defs[id].place == "bottom") or false end
+
+local function bottomOrder(id)
+  local def = defs[id]
+  if def and def.place == "bottom" and type(def.bottomOrder) == "number" then return def.bottomOrder end
+  if id:match("^hcdiag:") then return 1000 end
+  return 0
+end
+
+--- The tabs along the bottom: Overview, the packs' windows in load order, Options, Diagnostics last.
 local function bottomIds()
-  local out, last = {}, {}
-  for _, id in ipairs(order) do
-    if isDocked(id) and sideIds[id] then
-      local list = id:match("^hcdiag:") and last or out
-      list[#list + 1] = id
-    end
+  local out = {}
+  for i, id in ipairs(order) do
+    if isDocked(id) and isBottom(id) then out[#out + 1] = { id = id, i = i } end
   end
-  for _, id in ipairs(last) do out[#out + 1] = id end
+  table.sort(out, function(a, b)
+    local oa, ob = bottomOrder(a.id), bottomOrder(b.id)
+    if oa ~= ob then return oa < ob end
+    return a.i < b.i
+  end)
+  for i, e in ipairs(out) do out[i] = e.id end
   return out
 end
 
---- Hard Counters' own tabs down the right edge, in their fixed order (def.tabOrder: Overview, Boards, Trackers, Runs, Guide).
+--- The packs' windows only (Diagnostics last): what the tutorial and the Guide call the packs' tabs.
+local function packWindowIds()
+  local out = {}
+  for _, id in ipairs(bottomIds()) do if packIds[id] then out[#out + 1] = id end end
+  return out
+end
+
+--- Hard Counters' own tabs down the right edge, in their fixed order (def.tabOrder: Boards, Explorer, Packs, Stints, Guide).
 local function sideList()
   local out = {}
-  for i, id in ipairs(order) do if isDocked(id) and not sideIds[id] then out[#out + 1] = { id = id, i = i } end end
+  for i, id in ipairs(order) do if isDocked(id) and not isBottom(id) then out[#out + 1] = { id = id, i = i } end end
   table.sort(out, function(a, b)
     local oa, ob = defs[a.id].tabOrder or 100, defs[b.id].tabOrder or 100
     if oa ~= ob then return oa < ob end
@@ -338,10 +358,11 @@ local function ensureHost(id)
 end
 
 ---------------------------------------------------------------------------
--- The shared frame (DESIGN §17.2, swapped 2026-11-24): every pack's window and Diagnostics as tabs along the bottom
--- (labelled as the player chose), Hard Counters' own (Overview, Boards, Trackers, Runs) as icon tabs down the right edge (they
--- hang off it and take no width; a column too long for the frame scrolls), a header row with a button per window
--- that asks for one (def.mainButton), and a body that scrolls a tab taller than the panel.
+-- The shared frame (DESIGN §17.2, swapped 2026-11-24): every pack's window, Diagnostics, and (0.4.0) Overview and
+-- Options as tabs along the bottom (labelled as the player chose), Hard Counters' own (Boards, Explorer, Packs,
+-- Stints, Guide) as icon tabs down the right edge (they hang off it and take no width; a column too long for the frame
+-- scrolls), a header row (the open tab's one line, its help and tour, the Grand tour; a button per window that asks
+-- for one, def.mainButton), and a body that scrolls a tab taller than the panel.
 ---------------------------------------------------------------------------
 
 local function labelMode()
@@ -588,7 +609,7 @@ local function refreshTabs()
   local bottom, side = bottomIds(), sideList()
   local found = false
   for _, id in ipairs(ids) do if id == c.selected then found = true end end
-  if not found then c.selected = side[1] or bottom[1] end    -- (Overview first: Hard Counters' own, on the side since 2026-11-24)
+  if not found then c.selected = side[1] or bottom[1] end    -- (Boards first: Hard Counters' own, on the side since 2026-11-24)
   local prev
   for i, id in ipairs(bottom) do
     local b = main.tabs[i]
@@ -629,12 +650,29 @@ local function refreshTabs()
   setTitle(main, sel and sel.title and format("%s: %s", L["Hard Counters"], sel.title) or L["Hard Counters"])
 end
 
---- Help and Tab tour follow the open tab: greyed on a tab with no help registered (a pack that brought none).
+--- The open tab's name for the header (its title; "This tab" before any is open).
+local function selTitle()
+  local def = defs[conf(MAIN).selected]
+  return def and def.title or L["This tab"]
+end
+
+--- The header follows the open tab (0.4.0, the user: the tour's and Help's labels "should include the name of the
+--- active tab"; a one-liner on top of each tab "that explains what happens there"): "<Tab> help" and "<Tab> tour",
+--- greyed on a tab with no help registered (a pack that brought none), and the tab's def.about on the left.
 function refreshHelpButtons()
   if not (main and main.help) then return end
   local has = ns.Help and ns.Help.For(conf(MAIN).selected) ~= nil
+  local title = selTitle()
+  main.help:SetText(format(L["%s help"], title))
+  main.tour:SetText(format(L["%s tour"], title))
+  Wd.FitWidth(main.help, 70, 24)
+  Wd.FitWidth(main.tour, 70, 24)
   main.help:SetEnabled(has)
   main.tour:SetEnabled(has)
+  if main.about then
+    local def = defs[conf(MAIN).selected]
+    main.about:SetText(def and type(def.about) == "string" and L[def.about] or "")
+  end
 end
 Win.RefreshHelpButtons = refreshHelpButtons
 
@@ -651,12 +689,15 @@ end
 
 local function buildHeader()
   main.header = {}
-  -- the tour again, from any tab (the user, 2026-11-24): the first button of the header row, when the tutorial is loaded
+  -- the tour of the whole addon, from any tab (the user, 2026-11-24; "Grand tour" since 0.4.0, it was "Tutorial"):
+  -- the first button of the header row, when the tutorial is loaded
   if not main.tutorial and ns.Tutorial then
-    main.tutorial = Wd.Button(main, L["Tutorial"], 80, function() ns.Tutorial.Show(1) end)
+    main.tutorial = Wd.Button(main, L["Grand tour"], 90, function() ns.Tutorial.Show(1) end)
     main.tutorial:SetHeight(22)
     main.tutorial:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY)
-    Wd.Tip(main.tutorial, function() return L["A short tour of Hard Counters: the boards on screen, this window and its tabs, your first board."] end)
+    Wd.RichTip(main.tutorial, function() return { title = L["Grand tour"],
+      text = L["The tour of all of Hard Counters, from its first step: the boards on your screen, a first board for your class, then this window tab by tab."],
+      click = L["Click: start it (Escape or its close button stops it any time)."] } end)
   end
   -- (2026-11-25) the open tab's own tour and help, left of it: every tab has both (UI/Help.lua)
   if not main.tour and ns.Help then
@@ -664,11 +705,23 @@ local function buildHeader()
     main.tour:SetHeight(22)
     if main.tutorial then main.tour:SetPoint("RIGHT", main.tutorial, "LEFT", -4, 0)
     else main.tour:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY) end
-    Wd.Tip(main.tour, function() return L["A few steps through this tab only: what is where, and what to click."] end)
+    Wd.RichTip(main.tour, function() return { title = format(L["%s tour"], selTitle()),
+      text = L["A few steps through this tab only: what is where, and what to click."],
+      click = L["Click: start it; the Hard Counters window stays open beside it."] } end)
     main.help = Wd.Button(main, L["Help"], 60, function() ns.Help.Show(nil) end)
     main.help:SetHeight(22)
     main.help:SetPoint("RIGHT", main.tour, "LEFT", -4, 0)
-    Wd.Tip(main.help, function() return L["What this tab is, what you can do in it, and how that changes what you see while you play."] end)
+    Wd.RichTip(main.help, function() return { title = format(L["%s help"], selTitle()),
+      text = L["One page on this tab: what it is, what you can do in it, and how that changes what you see while you play."],
+      click = L["Click: open the page (from there, the tab's tour is one click away)."] } end)
+    -- the open tab's one line, left of the buttons (0.4.0): two lines at most; the whole text as a tooltip
+    main.about = main:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    main.about:SetPoint("TOPLEFT", main, "TOPLEFT", main.panel and 66 or 10, main.headerY + 1)
+    main.about:SetPoint("RIGHT", main.help, "LEFT", -10, 0)
+    main.about:SetHeight(26)
+    main.about:SetJustifyH("LEFT")
+    main.about:SetJustifyV("MIDDLE")
+    main.about:SetTextColor(0.85, 0.85, 0.85)
   end
   local prev = main.help or main.tutorial
   for _, id in ipairs(order) do
@@ -768,18 +821,20 @@ end
 --- def = { title, build(content), onShow(content), onHide(content), onClose(), width, height, minWidth, minHeight,
 ---   minSize() -> w, h, fixedHeight() -> h|nil, maxWidth, maxHeight, dockable (false: a frame of its own, never a tab), mainButton, remember, escape,
 ---   chrome ("panel" | "hud"), strata, frameName, migrate(conf, settings), icon (texture path or file id: the tab's
----   icon), tabOrder (Hard Counters' own: the bottom tabs' order) }. Sizes are the content's (the host adds its
----   chrome). side: a pack's window (HC:RegisterWindow), an icon tab down the right edge instead of a bottom tab.
+---   icon), tabOrder (Hard Counters' own side tabs' order), about (one line on what happens in this tab, shown in the
+---   header; 0.4.0), place ("bottom": one of Hard Counters' own along the bottom) and bottomOrder }. Sizes are the
+---   content's (the host adds its chrome). side: a pack's window (HC:RegisterWindow): a tab along the bottom.
 function Win.Register(id, def, side)
   if defs[id] then return false, "window already registered: " .. tostring(id) end
   if type(def) ~= "table" or type(def.build) ~= "function" then return false, "def.build(content) is required" end
   if def.icon ~= nil and type(def.icon) ~= "string" and type(def.icon) ~= "number" then
     return false, "def.icon must be a texture path or a file id"
   end
+  if def.about ~= nil and type(def.about) ~= "string" then return false, "def.about must be a string (one line)" end
   defs[id] = def
   order[#order + 1] = id
   entries[id] = {}
-  sideIds[id] = side and true or nil
+  packIds[id] = side and true or nil
   if main then
     if def.mainButton then
       for _, b in pairs(main.header) do b:Hide() end
@@ -877,7 +932,9 @@ end
 
 function Win.HasDocked() return #dockedIds() > 0 end
 --- The packs' windows (and Diagnostics, last): the tabs along the bottom, in order. The tutorial and the Guide name them.
-function Win.PackWindows() return bottomIds() end
+function Win.PackWindows() return packWindowIds() end
+--- Every tab along the bottom, in order (Overview, the packs' windows, Options, Diagnostics).
+function Win.BottomTabs() return bottomIds() end
 --- The open tab of the shared window (its id), or nil before the window was ever built.
 function Win.Selected() return main and conf(MAIN).selected or nil end
 function Win.List() local out = {} for i, id in ipairs(order) do out[i] = id end return out end
@@ -895,6 +952,14 @@ ns.OnReady(function()
     for _, c in pairs(w) do if type(c) == "table" then c.docked = nil end end
     -- nor does a size dragged before the shared frame stopped resizing (2026-11-23)
     if type(w[MAIN]) == "table" then w[MAIN].width, w[MAIN].height = nil, nil end
+    -- (0.4.0) the tabs were renamed: the open tab saved under an old id opens its new home. "overview" and "boards"
+    -- are ids in both schemes, so this runs once (tabsV)
+    local m = w[MAIN]
+    if type(m) == "table" and m.tabsV ~= 2 then
+      local moved = { overview = "boards", boards = "explorer", trackers = "explorer", runs = "stints" }
+      if m.selected and moved[m.selected] then m.selected = moved[m.selected] end
+      m.tabsV = 2
+    end
   end
   for _, id in ipairs(order) do
     if defs[id].remember and conf(id).shown then Win.Show(id, true) end

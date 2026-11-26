@@ -115,6 +115,7 @@ function C.install(env, opts)
     G.ButtonFrameTemplate_HidePortrait = function(f) f._portraitHidden = true end
   end
   G.Minimap = C.frame(client, "Minimap")
+  G.GameTooltip = C.frame(client, "GameTooltip")  -- (AceGUI's tab group reads it while the Options tab draws, 0.4.0)
   G.UIParent = C.frame(client, "UIParent")
   G.UIParent._w, G.UIParent._h = 1920, 1080          -- the screen windows must fit on
   G.UISpecialFrames, G.StaticPopupDialogs, G.SlashCmdList = {}, {}, {}
@@ -122,7 +123,11 @@ function C.install(env, opts)
   G.DEFAULT_CHAT_FRAME = { AddMessage = function() end }
   G.UIErrorsFrame = { AddMessage = function() end }
   G.tinsert, G.tremove, G.wipe = table.insert, table.remove, function(t) for k in pairs(t) do t[k] = nil end return t end
+  table.wipe = table.wipe or G.wipe   -- luacheck: ignore 142 143
+  -- (WoW's table.wipe: AceConfigDialog draws the Options tab with it, 0.4.0)
   G.strsplit = function(sep, s) local out = {} for p in (s .. sep):gmatch("(.-)" .. sep:gsub("%p", "%%%0")) do out[#out + 1] = p end return unpack(out) end
+  string.split = string.split or G.strsplit   -- luacheck: ignore 142 143
+  -- (WoW's: sep:split(s) is strsplit(sep, s); AceConfigDialog's tabs)
   G.format, G.strfind, G.strsub, G.strlen = string.format, string.find, string.sub, string.len
   G.gsub, G.strlower, G.strupper = string.gsub, string.lower, string.upper
   G.IsShiftKeyDown = function() return false end

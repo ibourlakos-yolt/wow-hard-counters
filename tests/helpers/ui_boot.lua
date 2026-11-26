@@ -55,6 +55,14 @@ local function boot(opts)
       chunk(a[2], a[3])
     end
   end
+  -- (0.4.0) the Options tab draws AceConfig's panel into an AceGUI container: the fake client can't draw AceGUI's
+  -- widgets (their templates' named children are missing), so the call is recorded instead (ctx.aceOpens)
+  local LS = rawget(_G, "LibStub")
+  local ACD = LS and LS("AceConfigDialog-3.0", true)
+  ctx.aceOpens = {}
+  if ACD then
+    ACD.Open = function(_, app, container) ctx.aceOpens[#ctx.aceOpens + 1] = { app = app, container = container } end
+  end
   -- ADDON_LOADED for each, then the login
   for _, a in ipairs(addons) do env:fire("ADDON_LOADED", a[2]) end
   env:fire("PLAYER_LOGIN")

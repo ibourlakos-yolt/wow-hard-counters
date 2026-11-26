@@ -1,6 +1,6 @@
 -- The tutorial and the Guide tab (the user, 2026-11-24): the tour shows once per account at the first login that
 -- hasn't run it, walks the boards on screen, a first board for the character's class and the Hard Counters window
--- tab by tab; the window's Tutorial button, the Guide tab's button and /hc tutorial run it again. The Guide tab is
+-- tab by tab; the window's Grand tour button (0.4.0; "Tutorial" before) and /hc tutorial run it again. The Guide tab is
 -- the manual: its Commands page lists the live /hc registry.
 require("bootstrap")
 local UI = require("ui_boot")
@@ -25,15 +25,13 @@ describe("the tutorial", function()
       for _, s in ipairs({ "reading", "tile", "board", "Hard Counters window", "/hc tutorial" }) do
         assert.truthy(f.body:GetText():find(s, 1, true), s)
       end
-      -- 2: the boards on screen; the starter board flashes above everything of ours but the tour
+      -- 2: the boards on screen; a new character has none (0.4.0): the step says so and points at the next one
       click(f.next)
-      local starter = BM.Store().list[1]
-      assert.truthy(f.body:GetText():find(starter.name, 1, true))
+      assert.are.equal(0, #BM.Store().list)
+      assert.truthy(f.body:GetText():find("none yet", 1, true))
       assert.truthy(f.body:GetText():find("Edit", 1, true))
-      assert.are.equal("HIGH", ns.Boards.Frame(starter.id):GetFrameStrata())
       -- 3: the class board (the fake client's character is a mage; Character Stats registers one per class)
       click(f.next)
-      assert.are.equal(ns.Boards.STRATA, ns.Boards.Frame(starter.id):GetFrameStrata())
       if ctx.charstats then
         local key, p = T.ClassPreset()
         assert.are.equal("MAGE", p.class)
@@ -53,8 +51,9 @@ describe("the tutorial", function()
       else
         assert.are.equal("New board...", f.act:GetText())
       end
-      -- 4 to 9: the window, opened by the tour on each of Hard Counters' own tabs (Packs among them)
-      for _, tab in ipairs({ "overview", "overview", "boards", "packs", "trackers", "runs" }) do
+      -- 4 to 9: the window, opened by the tour on each of Hard Counters' own tabs (0.4.0: Boards, Explorer, Packs,
+      -- Stints, then Overview and Options along the bottom)
+      for _, tab in ipairs({ "boards", "boards", "explorer", "packs", "stints", "overview" }) do
         click(f.next)
         assert.is_true(Win.IsShown(tab), tab)
         assert.is_false(f.act:IsShown())
@@ -98,7 +97,7 @@ describe("the tutorial", function()
     end, SEEN)
   end)
 
-  it("runs again from the window's Tutorial button, the Guide tab's button and /hc tutorial", function()
+  it("runs again from the window's Grand tour button and /hc tutorial", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local T, Win = ns.Tutorial, ns.Windows
@@ -106,17 +105,15 @@ describe("the tutorial", function()
       assert.is_nil(ns.TutorialFrame())
       Win.ShowMain(true)
       local main = Win.Host("_main")
-      assert.are.equal("Tutorial", main.tutorial:GetText())
+      assert.are.equal("Grand tour", main.tutorial:GetText())
       click(main.tutorial)
       local f = ns.TutorialFrame()
       assert.is_true(f:IsShown())
+      assert.are.equal(1, (T.Step()))                          -- from its first step
       T.Go(5)
       T.Hide()
       ns.ShowGuide(true)
-      click(ns.Guide.Content().tutorial)
-      assert.is_true(f:IsShown())
-      assert.are.equal(1, (T.Step()))                          -- from its first step
-      T.Hide()
+      assert.is_nil(ns.Guide.Content().tutorial)               -- (0.4.0) the Guide's own button went
       _G.SlashCmdList.HARDCOUNTERS("tutorial")
       assert.is_true(f:IsShown())
       T.Hide()
@@ -168,7 +165,7 @@ describe("the Guide tab", function()
         local text = f.text:GetText()
         assert.is_true(type(text) == "string" and #text > 200, p.key)
       end
-      assert.are.same({ "start", "concepts", "boards", "tiles", "window", "history", "runs", "packs", "commands", "authors" }, keys)
+      assert.are.same({ "start", "concepts", "boards", "tiles", "window", "history", "stints", "packs", "commands", "authors" }, keys)
       assert.are.same({}, ctx.env.errors)
     end, SEEN)
   end)
@@ -184,7 +181,7 @@ describe("the Guide tab", function()
       for _, c in ipairs(ns.SlashList()) do
         assert.truthy(text:find("/hc " .. c.name, 1, true), c.name)
       end
-      for _, s in ipairs({ "/hc tutorial", "/hc guide", "/hc board", "/hc run", "/hc track", "/hc report", "/hc fish", "My pack",
+      for _, s in ipairs({ "/hc tutorial", "/hc guide", "/hc board", "/hc stint", "/hc track", "/hc report", "/hc fish", "My pack",
         "/hc help", "/hardcounters" }) do
         assert.truthy(text:find(s, 1, true), s)
       end

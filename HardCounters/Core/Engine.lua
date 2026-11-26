@@ -49,7 +49,11 @@ local function attach()
   local adapters = {}
   if W.granaryAdapters then for k, v in pairs(W.granaryAdapters) do adapters[k] = v end end
   adapters.logger = { log = function(level, msg) ns.Log(LOG_LEVEL[level] or "info", "LibGranaryDB", "%s", msg) end }
-  local db = GDB:Attach(SV, { host = ADDON, region = W.region(), adapters = adapters })
+  -- (0.4.0) when the day ends: the player's hour (Options, History; 0 = midnight local time). Read here only, so a
+  -- change takes effect at the next load; days already kept keep the boundary they were counted with.
+  local dsh = tonumber(ns.globalSettings and ns.globalSettings.dayStartHour) or 0      -- (the account's: storage is)
+  if dsh < 0 or dsh > 23 or dsh ~= math.floor(dsh) then dsh = 0 end
+  local db = GDB:Attach(SV, { host = ADDON, region = W.region(), adapters = adapters, dayStartHour = dsh })
   ns.db = db
   local ro, why = db:IsReadOnly()
   if ro then ns.Log("warn", "HC", "storage is read-only: %s", tostring(why)) end

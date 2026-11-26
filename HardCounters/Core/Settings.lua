@@ -5,7 +5,12 @@ local ADDON, ns = ...
 ns.SETTINGS_DEFAULTS = {
   profile = {
     weekGrain = "week",        -- "week" (ISO, Monday) or "resetweek"; the UI's default "this week" (decided 2026-11-14)
-    maxRuns = 200,             -- run records kept (proposal; review queued as HC-10)
+    maxRuns = 500,             -- sessions (run records) kept; Options, History: 100 to 2000 (200 before 0.4.0; ~2.6 KB each)
+    -- (0.4.0, the user: "the aggregating policy of older counts: make it configurable") how long the fine grains are
+    -- kept before only their roll-ups remain (months, years, lifetime are always kept); Options, History
+    historyDays = 90,          -- days of daily totals for a tracker whose history goes on without a choice (14 before)
+    hourKeep = 48,             -- hours of hourly totals (Detailed): 24, 48, 168 (a week) or 336
+    weekKeep = "2y",           -- weekly totals (Detailed): "1y", "2y", "5y"
     -- the run panel's and the live number's settings: boards (v2 M5) read them once, to seed the Run and Pocket boards
     -- (UI/BoardModel.lua Seed); nothing writes them any more. The panels themselves were deleted (HC-24).
     runPanel = { shown = true, locked = false, scale = 1, headline = nil, compact = false, width = nil, height = nil },

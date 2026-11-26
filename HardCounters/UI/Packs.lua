@@ -2,16 +2,12 @@
 -- window instead of the game's AddOns list. A pack is an addon of the Hard Counters group (Farmer, Character Stats,
 -- Traveler, Diagnostics; any other author's with `## Group: HardCounters`); Hard Counters Basic (gold and XP) is
 -- built in and always on. One row per pack: a tick, its name, what it adds, its state. A tick tells the game at once
--- (so a /reload by hand finishes it; Reload now shows as soon as a tick differs from what is loaded). "Use these
--- packs" then does the rest:
---   * a pack ticked and loaded: its trackers are switched on (the ones the player never switched themselves), with
---     history off, so its numbers count at once;
---   * a pack ticked but not loaded, or unticked while loaded: the game is told (C_AddOns.EnableAddOn / DisableAddOn
---     for this character) and that needs a reload: the tab says so and offers Reload now. After the reload a pack
---     just turned on gets its trackers switched on the same way (`globalSettings.packsPending`).
--- Then the tab says what history is: off everywhere until the player turns it on per tracker (Trackers tab).
--- `globalSettings.packsChosen` is set once the player has applied a choice: the tutorial's packs step and the
--- Overview's first-time line send a new player here before that.
+-- (C_AddOns.EnableAddOn / DisableAddOn for this character): a pack is loaded or unloaded only at a reload, so Reload
+-- now shows as soon as a tick differs from what is loaded (a /reload by hand does the same).
+-- (0.4.0) "Use these packs" is gone: its only job was to switch a pack's trackers on, and a tracker now goes on, with
+-- daily history, when a tile of it is placed (Core/Trackers.lua ActivateTracker). A tick is the choice:
+-- `globalSettings.packsChosen` is set by it; until then the Boards tab and the tutorial's packs step remind a new
+-- player of this tab.
 -- Unverified in game (2026-11-25): EnableAddOn / DisableAddOn by folder name for one character, and ReloadUI from
 -- our own button's click. Both are wrapped (Core/WoW.lua): a refused call leaves the row saying "use the game's
 -- AddOns list".
@@ -80,7 +76,7 @@ function Packs.TrackersOn(folder)
 end
 
 --- Apply a choice: want = { [folder] = true|false } (a pack left out keeps its state). Returns
---- { on = trackers switched on now, reload = true when the game must reload for it, failed = { folder, ... } }.
+--- { on = 0 (0.4.0: trackers go on with their tiles, ns.ActivateTracker), reload = true when the game must reload for it, failed = { folder, ... } }.
 function Packs.Apply(want)
   local g = G()
   local res = { on = 0, reload = false, failed = {} }
@@ -89,7 +85,6 @@ function Packs.Apply(want)
     local w = p.name and want[p.name]
     if w ~= nil then
       if w and p.loaded then
-        res.on = res.on + Packs.TrackersOn(p.name)
         if not p.enabled then ns.wow.setAddonEnabled(p.name, true) end     -- (it was switched off for the next load)
       elseif w and not p.loaded then
         if ns.wow.setAddonEnabled(p.name, true) then
@@ -120,6 +115,7 @@ function Packs.SetWanted(p, want)
   g.packsPending = type(g.packsPending) == "table" and g.packsPending or {}
   local ok = ns.wow.setAddonEnabled(p.name, want)
   ticks[p.name] = want and true or false
+  g.packsChosen = true                          -- (0.4.0) a tick is the choice
   if ok then
     g.packsPending[p.name] = (want and not p.loaded) and true or nil
   end
@@ -131,15 +127,14 @@ function Packs.SetWanted(p, want)
   return ok
 end
 
---- After a load: the packs the player turned on in this tab and that are loaded now get their trackers switched on.
---- Returns the titles of the packs it did that for.
+--- After a load: the packs the player turned on in this tab and that are loaded now (0.4.0: their trackers go on
+--- when a tile of theirs is placed). Returns their titles, for one chat line.
 function Packs.FinishPending()
   local g = G()
   local done = {}
   if type(g.packsPending) ~= "table" then return done end
   for _, p in ipairs(Packs.List()) do
     if p.name and g.packsPending[p.name] and p.loaded then
-      Packs.TrackersOn(p.name)
       g.packsPending[p.name] = nil
       done[#done + 1] = p.title
     end
@@ -149,7 +144,16 @@ end
 
 function Packs.Chosen() return G().packsChosen == true end
 
-local HISTORY = "History is off for every tracker you haven't changed: your boards count this session and since their own clocks started, and that is all most boards need. To keep totals by day, week and month between sessions, turn history on tracker by tracker: the {Trackers} tab, a tracker, {History...}."
+--- How many packs beside the built-in one are loaded now (Diagnostics not counted: it adds no numbers).
+function Packs.LoadedCount()
+  local n = 0
+  for _, p in ipairs(Packs.List()) do
+    if not p.builtin and p.loaded and p.name ~= "HardCounters_Diagnostics" then n = n + 1 end
+  end
+  return n
+end
+
+local HISTORY = "A pack's numbers count as soon as you place one of its tiles (+ Tile on a board, or a ready-made board): its tracker is switched on for you, with daily history, so today, this week and this month work at once. How much history is kept, and for how long: {Options}, History. A tracker by tracker: the {Explorer} tab, Trackers."
 
 ---------------------------------------------------------------------------
 -- The tab
@@ -177,7 +181,7 @@ local function stateText(p)
   return "|cff808080" .. L["Off"] .. "|r"
 end
 
---- Does any tick differ from what is loaded? (Then "Use these packs" will ask for a reload.)
+--- Does any tick differ from what is loaded? (Then Reload now shows.)
 local function needsReload(list)
   for _, p in ipairs(list) do
     if not p.builtin and not p.missing and wanted(p) ~= p.loaded then return true end
@@ -203,7 +207,7 @@ local function newRow(i)
     local p = self.pack
     if not p or p.builtin or p.missing then self:SetChecked(p and p.builtin or false); return end
     -- (the user, 2026-11-25: unticked a pack, /reload, and it was still there: the tick alone must count)
-    -- The game is told at once, so a /reload by hand is enough; "Use these packs" is for the trackers.
+    -- The game is told at once, so a /reload by hand is enough (0.4.0: the tick is the whole choice).
     Packs.SetWanted(p, not wanted(p))
     refresh()
   end)
@@ -249,12 +253,15 @@ function refresh()
     content.none:SetText("")
   end
   local pending = needsReload(list)
-  content.apply:ClearAllPoints()
-  content.apply:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y - 8)
+  content.reload:ClearAllPoints()
+  content.reload:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y - 8)
   content.reload:SetShown(pending)
+  content.note:ClearAllPoints()
+  if pending then content.note:SetPoint("LEFT", content.reload, "RIGHT", 10, 0)
+  else content.note:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + 2, y - 13) end
+  content.note:SetPoint("RIGHT", content, "RIGHT", -PAD, 0)
   content.note:SetText(content.message or (pending and L["Your ticks differ from what is loaded: reload to finish."]
-    or (Packs.Chosen() and "" or L["Tick the packs you want, then {Use these packs}."])))
-  content.note:SetText(ns.Help and ns.Help.Render(content.note:GetText() or "") or content.note:GetText())
+    or (Packs.Chosen() and "" or L["Tick the packs you want: the game is told at once."])))
   y = y - 8 - 24 - 12
   content.history:ClearAllPoints()
   content.history:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + 2, y)
@@ -273,7 +280,7 @@ function refresh()
 end
 Packs.Refresh = refresh
 
---- "Use these packs": apply the ticks, say what happened and what is left to do.
+--- Apply every tick as it stands (the slash command and tests; the tab applies each tick as it is clicked).
 function Packs.Use()
   local want = {}
   for _, p in ipairs(Packs.List()) do
@@ -282,7 +289,6 @@ function Packs.Use()
   local res = Packs.Apply(want)
   for k in pairs(ticks) do ticks[k] = nil end
   local parts = {}
-  if res.on > 0 then parts[#parts + 1] = format(res.on == 1 and L["%d tracker switched on."] or L["%d trackers switched on."], res.on) end
   if res.reload then parts[#parts + 1] = L["Reload to finish: the game loads or unloads packs only then."] end
   if #res.failed > 0 then
     parts[#parts + 1] = format(L["The game refused for %s: use its AddOns list (Escape, AddOns) instead."], table.concat(res.failed, ", "))
@@ -292,12 +298,9 @@ function Packs.Use()
     content.applied = true
     content.message = table.concat(parts, " ")
   end
-  if ns.Print then
-    ns.Print(table.concat(parts, " "))
-    ns.Print(L["History is off unless you turn it on: the Trackers tab, a tracker, History..."])
-  end
+  if ns.Print then ns.Print(table.concat(parts, " ")) end
   refresh()
-  if ns.RefreshOverview then ns.RefreshOverview() end
+  if ns.RefreshBoards then ns.RefreshBoards() end
   return res
 end
 
@@ -307,31 +310,30 @@ local function build(f)
   f.intro:SetPoint("TOPLEFT", PAD + 2, -8)
   f.intro:SetPoint("TOPRIGHT", -PAD - 2, -8)
   f.intro:SetJustifyH("LEFT")
-  f.intro:SetText(L["Packs add numbers to Hard Counters. Tick the ones you want: their trackers start counting, with history off. Untick the ones you don't: they cost nothing once unloaded."])
+  f.intro:SetText(L["Packs add numbers to Hard Counters. Tick the ones you want; untick the ones you don't: they cost nothing once unloaded."])
   f.none = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
   f.none:SetPoint("TOPLEFT", PAD + 2, -(TOP_H + ROW_H + 8))
   f.none:SetJustifyH("LEFT")
-  f.apply = Wd.Button(f, L["Use these packs"], 140, function() Packs.Use() end)
-  f.apply:SetHeight(24)
-  Wd.Tip(f.apply, function() return L["Switch on the ticked packs' trackers (history off) and tell the game which packs to load from now on."] end)
   f.reload = Wd.Button(f, L["Reload now"], 110, function() ns.wow.reload() end)
   f.reload:SetHeight(24)
-  f.reload:SetPoint("LEFT", f.apply, "RIGHT", 6, 0)
-  Wd.Tip(f.reload, function() return L["Reloads the interface (the same as /reload): a few seconds, nothing is lost."] end)
+  Wd.RichTip(f.reload, function() return { title = L["Reload now"],
+    text = L["Reloads the interface (the same as /reload): a few seconds, nothing is lost. The game loads or unloads packs only then."],
+    click = L["Click: reload."] } end)
   f.reload:Hide()
   f.note = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  f.note:SetPoint("LEFT", f.apply, "RIGHT", 124, 0)
-  f.note:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
   f.note:SetJustifyH("LEFT")
   f.history = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   f.history:SetJustifyH("LEFT")
   f.history:SetSpacing(2)
-  f.toTrackers = Wd.Button(f, L["Open the Trackers tab"], 170, function() if ns.ShowTrackers then ns.ShowTrackers(true) end end)
+  f.toTrackers = Wd.Button(f, L["Open the Explorer on Trackers"], 200, function() if ns.ShowTrackers then ns.ShowTrackers(true) end end)
+  Wd.RichTip(f.toTrackers, function() return { title = L["Open the Explorer on Trackers"],
+    text = L["Every tracker of every pack: on or off, its history, its size on disk."], click = L["Click: open it."] } end)
   f:SetScript("OnSizeChanged", function() refresh() end)
 end
 
 ns.Windows.Register(ID, {
-  title = L["Packs"], icon = "Interface\\Icons\\INV_Misc_Bag_08", tabOrder = 2.5,
+  title = L["Packs"], icon = "Interface\\Icons\\INV_Misc_Bag_08", tabOrder = 3,
+  about = "Choose which packs feed Hard Counters; a pack you untick is not loaded at all.",
   width = 720, height = 440, minWidth = MIN_W, minHeight = MIN_H,
   minSize = function() return MIN_W, contentH end,
   build = build,
@@ -346,18 +348,17 @@ Packs.Rows = rows                                             -- (tests)
 ns.AddSlash("packs", function() ns.ShowPacks() end, L["the Packs tab: choose the packs you want"])
 
 local _ = ns.Help and ns.Help.Register(ID, {
-  what = "Packs are the add-ons that give Hard Counters its numbers: Farmer for loot and money, Character Stats for your character sheet, Traveler for distance and speed. This tab is where you choose which ones you want.",
+  what = "Packs are the add-ons that give Hard Counters its numbers: Farmer for loot, money and fishing, Character Stats for your character sheet, Traveler for distance and speed. This tab is where you choose which ones you want.",
   can = {
     "Tick or untick a pack: the game is told at once, and {Reload now} appears, since it loads or unloads a pack only at a reload (typing /reload does the same).",
-    "{Use these packs}: the ticked packs' trackers are switched on, with history off.",
     "Read each pack's state on the right: on, off, or waiting for a reload, and how many of its trackers are on.",
-    "{Open the Trackers tab} to switch single trackers, or to turn history on for one.",
+    "{Open the Explorer on Trackers} to see every tracker, switch one off, or change how much history it keeps.",
   },
-  effect = "A pack you use adds its readings to + Tile and its ready-made boards to {New board...}. A pack you untick is not loaded at all: no memory, no work in the background. Nothing here deletes saved history.",
+  effect = "A pack you keep adds its readings to + Tile and its ready-made boards to {New board...}; its trackers start counting, with daily history, the moment you place one of its tiles. A pack you untick is not loaded at all: no memory, no work in the background. Nothing here deletes saved history.",
   tour = {
     { title = "One row per pack", text = "Each row is a pack: its name, what it adds, and on the right whether it is on. Hard Counters Basic (gold and experience) is built in and always on." },
-    { title = "Choose, then apply", text = "Tick the packs you want and untick the others: each tick counts at once. If a pack has to be loaded or unloaded, {Reload now} appears: click it, or type /reload later. Then {Use these packs} switches on the trackers of the packs you kept, with history off." },
-    { title = "History is a separate choice", text = "With history off you still get everything live: this session, and each board since its clock started. Turn history on per tracker in the {Trackers} tab ({History...}) when you want totals by day, week or month." },
+    { title = "Tick, then reload", text = "Tick the packs you want and untick the others: each tick counts at once. If a pack has to be loaded or unloaded, {Reload now} appears: click it, or type /reload later." },
+    { title = "Then place its tiles", text = "A pack's numbers count once you place one of its tiles: + Tile on a board, or a ready-made board. Its tracker goes on by itself, with daily history; {Options} says how long history is kept." },
   },
 })
 
@@ -367,7 +368,7 @@ ns.On("PLAYER_ENTERING_WORLD", function()
   C_Timer.After(1, function()
     local done = Packs.FinishPending()
     if #done > 0 and ns.Print then
-      ns.Print(L["%s: loaded, its trackers are on (history off: the Trackers tab, History..., to keep totals by day)."], table.concat(done, ", "))
+      ns.Print(L["%s: loaded. Its numbers are in + Tile and New board...: a tile placed starts its tracker, with history."], table.concat(done, ", "))
     end
     refresh()
   end)

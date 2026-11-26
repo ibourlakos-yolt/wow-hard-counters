@@ -156,12 +156,104 @@ function W.Place(f, posKey)
   else f:SetPoint("CENTER") end
 end
 
+--- An action button: Blizzard's red-and-gold panel button. It does something when clicked (New board..., Delete,
+--- Reset). A state the player can switch is a W.Status instead (0.4.0, the user: "Only here / On HUD is not an action
+--- button; it's a status button. We have to differentiate them visually").
 function W.Button(parent, text, width, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(width, 20)
   b:SetText(text)
   b:SetScript("OnClick", onClick)
   return b
+end
+
+--- A tooltip in the house style (0.4.0: every action and status button has one): a white title, a body, then the
+--- state in colour (status buttons) and a grey "Click: ..." line. spec(frame) -> { title, text, state, on, click }.
+function W.RichTip(frame, spec)
+  frame:SetScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    local ok, s = pcall(spec, self)
+    if not ok or type(s) ~= "table" then return end
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText(s.title or "", 1, 1, 1, 1, true)
+    if s.state then
+      local r, g, b = 0.6, 0.6, 0.6
+      if s.on == true then r, g, b = 0.4, 1, 0.4 elseif s.on == "warn" then r, g, b = 1, 0.82, 0 end
+      GameTooltip:AddLine(s.state, r, g, b, true)
+    end
+    if s.text then GameTooltip:AddLine(s.text, 0.85, 0.85, 0.85, true) end
+    if s.click then GameTooltip:AddLine(s.click, 0.5, 0.5, 0.5, true) end
+    GameTooltip:Show()
+  end)
+  frame:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+end
+
+local STATUS_ON, STATUS_OFF, STATUS_WARN = { 0.25, 0.85, 0.35 }, { 0.5, 0.5, 0.5 }, { 1, 0.75, 0.1 }
+
+--- A status button: it shows a state and switches it when clicked (On HUD / Only here, a tracker on or off). Not a
+--- Blizzard button: a dark flat pill with a coloured lamp on the left (green: on, grey: off, amber: needs
+--- attention), the state's word beside it and a thin border in the lamp's colour, so it reads as a switch, never as
+--- an action. b:SetState(text, on) sets both (on: true, false or "warn"); onClick(self) does the switching.
+function W.Status(parent, width, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(width, 20)
+  b.bg = b:CreateTexture(nil, "BACKGROUND")
+  b.bg:SetAllPoints()
+  b.bg:SetColorTexture(0.06, 0.06, 0.08, 0.9)
+  b.edges = {}
+  for i, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+    local t = b:CreateTexture(nil, "BORDER")
+    if i <= 2 then
+      t:SetPoint(side .. "LEFT", b, side .. "LEFT", 0, 0)
+      t:SetPoint(side .. "RIGHT", b, side .. "RIGHT", 0, 0)
+    else
+      t:SetPoint("TOP" .. side, b, "TOP" .. side, 0, 0)
+      t:SetPoint("BOTTOM" .. side, b, "BOTTOM" .. side, 0, 0)
+    end
+    W.Hairline(t, i <= 2)
+    b.edges[i] = t
+  end
+  b.lamp = b:CreateTexture(nil, "ARTWORK")
+  b.lamp:SetSize(8, 8)
+  b.lamp:SetPoint("LEFT", 7, 0)
+  b.lamp:SetTexture("Interface\\Buttons\\WHITE8X8")
+  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.text:SetPoint("LEFT", b.lamp, "RIGHT", 6, 0)
+  b.text:SetPoint("RIGHT", -6, 0)
+  b.text:SetJustifyH("LEFT")
+  b.text:SetWordWrap(false)
+  local hl = b:CreateTexture(nil, "HIGHLIGHT")
+  hl:SetAllPoints()
+  hl:SetColorTexture(1, 1, 1, 0.08)
+  b.isStatus = true
+  function b.SetState(self, text, on)
+    self.stateText, self.stateOn = text, on
+    self.text:SetText(text or "")
+    local c = on == "warn" and STATUS_WARN or (on and STATUS_ON or STATUS_OFF)
+    self.lamp:SetVertexColor(c[1], c[2], c[3], 1)
+    for _, t in ipairs(self.edges) do t:SetColorTexture(c[1], c[2], c[3], on and 0.7 or 0.45) end
+    self.text:SetTextColor(on and 1 or 0.75, on and 1 or 0.75, on and 1 or 0.75)
+  end
+  -- (Wd.FitWidth and the tests read it like a button's)
+  function b.SetText(self, text) self:SetState(text, self.stateOn) end
+  function b.GetText(self) return self.stateText end
+  function b.GetFontString(self) return self.text end
+  b:SetScript("OnClick", onClick)
+  b:SetState("", false)
+  return b
+end
+
+--- A 1-pixel line that stays 1 pixel (0.4.0: the Boards tab's panel borders vanished while scrolling and the gaps
+--- between panels looked uneven). A 1-unit texture is less than a screen pixel when the UI scale is small, so the
+--- pixel grid rounds it to 0 or 1 pixel depending on where a scroll leaves it. PixelUtil (where the client has it)
+--- sizes it in physical pixels, at least one. horizontal: a height, else a width.
+function W.Hairline(t, horizontal)
+  local PU = rawget(_G, "PixelUtil")
+  local set = PU and (horizontal and PU.SetHeight or PU.SetWidth)
+  if type(set) ~= "function" or not pcall(set, t, 1, 1) then
+    if horizontal then t:SetHeight(1) else t:SetWidth(1) end
+  end
+  return t
 end
 
 --- A button that looks like a dropdown: a dark field with the chosen value on the left and a down arrow on the

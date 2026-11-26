@@ -1073,14 +1073,14 @@ function M.WidElsewhere(wid)
 end
 
 ---------------------------------------------------------------------------
--- First use and migration (§6.4): a new character gets the Leveling board, in front of them, and the account's
--- one-time introduction to the Hard Counters window (HC-74, the user 2026-11-24; before, every fresh install got the
--- Pocket board); a player of the old run panel or live number gets the Run / Pocket boards seeded from those
--- settings, once.
+-- First use and migration (§6.4): a new character starts with no board at all (the user, 0.4.0: "the default should
+-- be that they don't start with any boards"; from 0.2.2 to 0.3 it got the Leveling board, Only here), and the
+-- account's one-time introduction to the Hard Counters window; a player of the old run panel or live number gets the
+-- Run / Pocket boards seeded from those settings, once.
 ---------------------------------------------------------------------------
 
-M.STARTER = "leveling"
-M.STARTER_POS = { "CENTER", 280, 40, "CENTER" }   -- right of the character, in sight
+M.STARTER = "leveling"                            -- (the tour's fallback suggestion when there is no class board)
+M.STARTER_POS = { "CENTER", 280, 40, "CENTER" }   -- right of the character, in sight: where a first board goes
 
 function M.Seed()
   local B = M.Store()
@@ -1092,11 +1092,7 @@ function M.Seed()
   -- a run panel that was used: its window state exists (UI/Windows.lua wrote it), or the old position keys do
   local usedPanel = type(rpw) == "table" or s.runPanelPos ~= nil
   if not usedPanel and not ns.knownCharacter then
-    -- (v8, the user 2026-11-25) a first setup puts nothing on the HUD: the starter board is in the Hard Counters
-    -- window (Overview), "Only here", until the player puts it on screen; its place is ready for when they do
-    local b = M.Create(M.STARTER)
-    b.pos = U.copy(M.STARTER_POS)
-    B.welcome = true                    -- UI/Welcome.lua shows the introduction once per account
+    B.welcome = true                    -- UI/Welcome.lua: the introduction once per account, else a chat line
     return true
   end
   if usedPanel then

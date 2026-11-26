@@ -66,7 +66,7 @@ local function trackerHistory(t)
   local h = type(c) == "table" and PRESETS[c.history] or 0
   local need = t.needsHistory and PRESETS[t.needsHistory] or 0
   if need > h then h = need end
-  local days = type(c) == "table" and DAY_CHOICES[c.days] and c.days or DEFAULT_DAYS
+  local days = type(c) == "table" and DAY_CHOICES[c.days] and c.days or ns.DefaultHistoryDays()
   return h, days
 end
 
@@ -127,7 +127,7 @@ function ns.CounterPlan(counterId)
       end
     end
   end
-  if days == 0 then days = DEFAULT_DAYS end
+  if days == 0 then days = ns.DefaultHistoryDays() end
   return active, level, days
 end
 
@@ -150,10 +150,16 @@ function ns.HistoryShape(level, days, declared)
   if level == PRESETS.daily then
     retention = { day = days .. "d" }
   elseif level == PRESETS.detailed then
-    retention = { hour = "48h", day = (days > 90 and days or 90) .. "d", week = "2y", resetweek = "2y" }
+    -- (0.4.0) how long hours and weeks are kept is the player's (Options, History); days as Daily, at least 90
+    local s = ns.settings or {}
+    local hours = ns.HOUR_KEEP[s.hourKeep] and s.hourKeep or 48
+    local weeks = ns.WEEK_KEEP[s.weekKeep] and s.weekKeep or "2y"
+    retention = { hour = hours .. "h", day = (days > 90 and days or 90) .. "d", week = weeks, resetweek = weeks }
   end
   return grains, retention
 end
+ns.HOUR_KEEP = { [24] = true, [48] = true, [168] = true, [336] = true }
+ns.WEEK_KEEP = { ["1y"] = true, ["2y"] = true, ["5y"] = true }
 
 ---------------------------------------------------------------------------
 -- Public: state and choices
@@ -232,6 +238,38 @@ function HC:SetTrackerKeepHistory(id, on)
   local c = conf(id)
   local last = c and PRESETS[c.last] and c.last ~= "off" and c.last or "daily"
   return HC:SetTrackerHistory(id, last)
+end
+
+--- A tile of this tracker's was placed (0.4.0, the user: "once a pack is enabled its trackers should be on as soon
+--- as any corresponding tile is activated. Also enable history"). The tracker goes on, and its history goes on
+--- (Daily, the player's default days) unless the player chose its history themselves (on or off: `c.last` or
+--- `c.history` is set). force: the player's own act (a tile added, a board made): also overrides an "off" they set
+--- earlier; without it (the check after a load) a tracker the player switched off stays off. Returns true when
+--- something changed; nothing is said here (the caller prints).
+function ns.ActivateTracker(id, force)
+  local t = ns.trackers[id]
+  if not t then return false end
+  local c = conf(id)
+  if not c then return false end
+  local did = false
+  if not isOn(t) and (force or c.on == nil) then
+    c.on = true
+    did = true
+  end
+  if isOn(t) and #t.counters > 0 and c.history == nil and c.last == nil then
+    c.history, c.last = "daily", "daily"
+    if not DAY_CHOICES[c.days] then c.days = ns.DefaultHistoryDays() end
+    did = true
+  end
+  c.seen = true
+  if did then changed() end
+  return did
+end
+
+--- The days a tracker keeps when its history goes on without a choice of days (Options, History; 14 before 0.4.0).
+function ns.DefaultHistoryDays()
+  local d = ns.settings and ns.settings.historyDays
+  return DAY_CHOICES[d] and d or DEFAULT_DAYS
 end
 
 --- Mark a tracker seen (the Trackers window's New badge goes).

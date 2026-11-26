@@ -51,6 +51,11 @@ function ns.ReportBody(opts)
       class = opts.class and info.class or nil,
     }
   end
+  -- (0.4.0) the automatic field notes (Core/FieldNotes.lua): moments of play, counts and types only
+  if ns.FieldNotes then
+    local notes = ns.FieldNotes.List()
+    if #notes > 0 then body.field = notes end
+  end
   if ns.reportSection then
     local ok, d = pcall(ns.reportSection)
     body.diag = ok and d or ("Diagnostics section failed: " .. tostring(d))
@@ -67,6 +72,7 @@ end
 -- Diagnostics section's parts (samplers, events, strings) and last the section itself
 local function shed(body)
   if #body.warn > 0 then table.remove(body.warn, 1); return true end
+  if type(body.field) == "table" and #body.field > 0 then table.remove(body.field, 1); return true end
   if body.addons then body.addons = nil; return true end
   if body.granary then body.granary = nil; return true end
   if type(body.diag) == "table" then
@@ -106,6 +112,9 @@ function ns.ReportSummary(body)
   out[#out + 1] = string.format(L["%d packs, %d counters, %d saved runs (no amounts)"], count(body.packs),
     body.counters or 0, body.runs and body.runs.kept or 0)
   if body.granary then out[#out + 1] = L["Storage health (sizes and counts, no values)"] end
+  if type(body.field) == "table" and #body.field > 0 then
+    out[#out + 1] = string.format(L["%d field notes: moments of play (login, instances, levels, errors) with counts, no values"], #body.field)
+  end
   if type(body.diag) == "table" then
     local d = body.diag
     local parts = { string.format(L["%d API checks"], count(d.funcs)) }

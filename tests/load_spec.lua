@@ -53,18 +53,16 @@ describe("load smoke test", function()
       B.RefreshAll(true)
       nsHC.ToggleRunList()
       nsHC.RefreshRunList()
-      -- HC-65: the run card opened under the Hard Counters window; it now raises on click and on every opening
+      -- (0.4.0) the run card of 0.3 is the Stints tab's detail: ShowRunCard opens the tab with that stint selected
       local rec = HC:Runs()[1]
       nsHC.ShowRunCard(rec)
-      local card = _G.HardCountersRunCard
-      assert.is_true(card:IsToplevel())
-      local raised = card._raised
-      nsHC.ShowRunCard(rec)
-      assert.are.equal(raised + 1, card._raised)
+      assert.is_true(nsHC.Windows.IsShown("stints"))
+      assert.are.equal(rec.id, nsHC.StintsBrowser.selected)
       nsHC.ShowCopyBox("t", nsHC.BuildReport({}))
       nsHC.UpdateBroker()
       nsHC.LauncherTooltip({ AddLine = function() end, AddDoubleLine = function() end })
       for _, cmd in ipairs({ "", "help", "run", "run start x", "run split", "run pause", "run resume", "run stop", "runs",
+        "stint", "stint start y", "stint split", "stint pause", "stint resume", "stint stop", "stint stop", "stints",
         "panel compact", "panel full", "panel", "live", "board", "board new leveling", "board mini 1", "board 1", "edit",
         "edit", "track", "track 1 off", "track 1 on", "track 1 history daily 30", "track 1 history off", "windows", "diag",
         "diag mark", "diag probes", "diag snap", "diag", "ledger", "ledger", "nonsense" }) do
@@ -806,6 +804,8 @@ describe("load smoke test", function()
     UI.with(function(ctx)
       local HC, B, M = ctx.HC, ctx.hc.Boards, ctx.hc.BoardModel
       local b = B.NewBoard("leveling")
+      -- (0.4.0) a new board turns its trackers' history on: off again, to see the scope that needs it
+      for _, t in ipairs(HC:Trackers()) do HC:SetTrackerHistory(t.id, "off") end
       local f = B.Frame(b.id)
       B.BoardMenu(f, b)
       local items = B.ScopeItems(b)

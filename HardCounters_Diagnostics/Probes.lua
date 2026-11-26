@@ -1633,6 +1633,26 @@ function ns.StartProbes()
     if not ok then p.missingEvents[ev] = true end
   end
   local autoRan, combatRan = false, false
+  -- (0.4.0) Hard Counters' field notes (Core/FieldNotes.lua): at a level gained, on leaving an instance and after a
+  -- caught error, the probes run again (at most once every five minutes), and the first error of a session also
+  -- saves the log as a snapshot, so a report made later still says what led to it
+  local lastAuto, errorSnap = 0, false
+  if B.OnFieldNote then
+    B.OnFieldNote(function(moment)
+      if moment ~= "level" and moment ~= "leave" and moment ~= "error" then return end
+      if moment == "error" and not errorSnap and ns.Snapshot and ns.LogText then
+        errorSnap = true
+        pcall(ns.Snapshot, "Log (automatic: first error)", ns.LogText())
+      end
+      local now = B.Wow.now()
+      if now - lastAuto < 300 then return end
+      lastAuto = now
+      B.Wow.after(3, function()
+        local okRun, errRun = pcall(ns.RunProbes)
+        if not okRun then B.Log("warn", "Diag", "field-note probe run failed: %s", tostring(errRun)) end
+      end)
+    end)
+  end
   f:SetScript("OnEvent", function(_, event, ...)
     local ok, err = pcall(recordEvent, event, ...)
     if not ok then B.Log("warn", "Diag", "probe %s failed: %s", event, tostring(err)) end

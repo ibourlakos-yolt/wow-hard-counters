@@ -20,6 +20,9 @@ D.Context = function()
   return { zone = W.zone(), instance = W.instanceType(), combat = W.inCombat(), loading = ns.loadingScreen }
 end
 D.Wow = W
+-- (0.4.0) the automatic field notes: Diagnostics runs its probes at some of these moments (fn(moment, note))
+D.OnFieldNote = function(fn) if ns.FieldNotes then ns.FieldNotes.Listen(fn) end end
+D.PreRelease = function() return ns.FieldNotes and ns.FieldNotes.PreRelease() or false end
 
 --- Storage diagnostics (LibGranaryDB db:Stats()), or nil before ADDON_LOADED.
 D.StorageStats = function()

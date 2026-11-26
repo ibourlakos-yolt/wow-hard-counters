@@ -201,6 +201,9 @@ local function build()
   f.next:SetPoint("BOTTOMRIGHT", -16, 10)
   f.back = Wd.Button(f, L["Back"], 80, function() Help.Tour(cur, step - 1) end)
   f.back:SetPoint("RIGHT", f.next, "LEFT", -6, 0)
+  Wd.RichTip(f.next, function() return { title = f.next:GetText(), text = mode == "tour" and L["The next step of this tab's tour (Finish on the last one)."] or L["Close this page."] } end)
+  Wd.RichTip(f.back, function() return { title = L["Back"], text = L["The step before."] } end)
+  Wd.RichTip(f.act, function() return { title = f.act:GetText(), text = mode == "tour" and L["This tab's help page: what it is, what you can do, how it changes your play."] or L["A few steps through this tab, opening it as it goes."] } end)
 end
 
 --- The Help page of a window (nil: the open tab's). Returns the frame, or nil when that window has no help.
