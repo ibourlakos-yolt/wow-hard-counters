@@ -400,9 +400,10 @@ function refresh()
   local groups = BM.TilesByBoard()
   local unsorted = BM.Store().unsorted
   local y, nc, np, any = -TOP_H, 0, 0, false
-  -- (0.4.0) no pack chosen, or none loaded beside the built-in one: a reminder above the boards
+  -- (0.4.0) no pack loaded beside the built-in one: a reminder above the boards. (0.4.0-beta2) Only what is loaded
+  -- counts: packs installed through the game's AddOns list never ticked a box here, and the reminder was wrong.
   local P = ns.Packs
-  local noPacks = P and (not P.Chosen() or P.LoadedCount() == 0)
+  local noPacks = P and P.LoadedCount() == 0
   content.notice:SetShown(noPacks and true or false)
   if noPacks then
     content.notice.text:SetText(L["Only gold and experience are counted: no pack is on. Packs add loot, reputation, fishing, your stats, travel."])

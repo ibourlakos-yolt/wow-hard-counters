@@ -132,8 +132,17 @@ describe("the Packs tab", function()
       if not ctx.farmer then return end
       local ns, HC = ctx.hc, ctx.HC
       local P = ns.Packs
+      addons(ctx, false)
+      assert.is_false(P.Chosen())                            -- nothing ticked, nothing loaded
+      ns.ShowBoards(true)
+      local boards = ns.Windows.Content("boards")
+      boards:SetSize(720, 440)
+      ns.RefreshBoards()
+      assert.is_true(boards.notice:IsShown())                -- the Boards tab reminds of the Packs tab
       addons(ctx, true)
-      assert.is_false(P.Chosen())
+      assert.is_true(P.Chosen())                             -- (0.4.0-beta2) a loaded pack is a choice (the AddOns list)
+      ns.RefreshBoards()
+      assert.is_false(boards.notice:IsShown())               -- and no reminder, though no box was ever ticked
       local list = P.List()
       assert.are.equal("Hard Counters Basic", list[1].title)
       assert.is_true(list[1].builtin)

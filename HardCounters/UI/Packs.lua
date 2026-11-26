@@ -142,7 +142,9 @@ function Packs.FinishPending()
   return done
 end
 
-function Packs.Chosen() return G().packsChosen == true end
+--- Has the player chosen packs: a tick in this tab, or (0.4.0-beta2) a pack already loaded, as it is for anyone who
+--- installed packs through the game's AddOns list before this tab existed.
+function Packs.Chosen() return G().packsChosen == true or Packs.LoadedCount() > 0 end
 
 --- How many packs beside the built-in one are loaded now (Diagnostics not counted: it adds no numbers).
 function Packs.LoadedCount()
