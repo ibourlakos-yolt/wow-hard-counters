@@ -27,8 +27,9 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
 1. Install through the CurseForge app (set this addon's release type to **Beta**, or the app won't offer it), or
    unzip the download into `World of Warcraft\_forever_\Interface\AddOns`. After installing or updating, restart
    the game: a new addon folder doesn't load with a `/reload`.
-2. Log in. A short **tour** opens: the boards on your screen, a first board for your class, then the Hard Counters
-   window tab by tab. Close it whenever you like; `/hc tutorial` or the window's **Grand tour** button runs it again.
+2. Log in. A short **tutorial** opens: the boards on your screen, a first board for your class, then the Hard
+   Counters window tab by tab. Close it whenever you like; `/hc tutorial` or the window's **Help** button (Full
+   tutorial) runs it again.
    A new character starts with no boards: the **Boards** tab's *New board...* makes the first one.
 3. Open Hard Counters with **`/hc`**, the **minimap button**, or the game's **AddOns menu**. Its **Guide** tab is the
    manual: the concepts, boards and tiles, history, stints, the packs and every command. The **Overview** tab (along
@@ -53,7 +54,7 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
 | Command | |
 |---|---|
 | `/hc` | Open the Hard Counters window |
-| `/hc tutorial` | The tour, from its first step |
+| `/hc tutorial` | The full tutorial, from its first step; `/hc tutorial <tab>` that tab's own |
 | `/hc guide` | The Guide tab (`/hc guide commands`: straight to a page) |
 | `/hc boards`, `/hc explorer`, `/hc stints`, `/hc overview`, `/hc options` | Those tabs (`/hc trackers`: the Explorer on Trackers) |
 | `/hc board` | List your boards; `/hc board <name>` puts one on your HUD or takes it off; `/hc board new` makes one |

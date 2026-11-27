@@ -1,7 +1,7 @@
 -- The Guide tab (the user, 2026-11-24): the last of Hard Counters' own tabs, the manual inside the game. Pages down
 -- the left (Start here, Concepts, Boards, Tiles, The window, Trackers and history, Stints, Packs, Commands, For
 -- addon authors), the chosen page's text on the right in a scroll frame of its own. (0.4.0: its Run the tutorial
--- button went; the window's Grand tour button is on every tab.) The Commands page is built from the live /hc
+-- button went; the window's Help button, its Full tutorial, is on every tab.) The Commands page is built from the live /hc
 -- registry (ns.SlashList), so a pack's commands are listed with the pack's name; the Packs page names the packs loaded now. /hc guide [page] opens it.
 -- Plain frames only: buttons, one font string, a scroll frame and Widgets.VScroll.
 -- luacheck: no max line length (pages of prose: one sentence, one string)
@@ -66,7 +66,7 @@ local PAGES = {
       gold(L["Hard Counters"]),
       L["Put any number you care about on your screen: gold per hour, XP to level, how many of an item you have looted, your reputation toward the next standing, your crit chance. Pick it, put it on a board, done. History, records and rates are there when you want them and out of the way when you don't."],
       head(L["New here?"]),
-      format(L["%s (top right of this window, on every tab) is a short tour: the boards on your screen, a first board for your class, then this window tab by tab. It showed by itself the first time you logged in with it."], gold(L["Grand tour"])),
+      format(L["%s (top right of this window, on every tab) has the %s: the boards on your screen, a first board for your class, then this window tab by tab. It showed by itself the first time you logged in with it."], gold(L["Help"]), gold(L["Full tutorial"])),
       head(L["In a hurry"]),
       item(format(L["%s opens this window. So do the minimap button and the game's AddOns menu."], gold("/hc"))),
       item(L["Boards tab: New board... makes a board, + Tile on it adds a number (and starts its tracker, with history), its On HUD switch puts it on your screen."]),
@@ -187,8 +187,7 @@ local PAGES = {
       item(L["Options has Tab labels for them: icon and title, title only, or icon only."]),
       head(L["The top of the window"]),
       item(L["Under the title, one line says what the open tab is for."]),
-      item(L["Grand tour: the tour of all of Hard Counters, from its first step."]),
-      item(L["Beside it, named after the open tab (Boards help, Boards tour): one page on that tab (what it is, what you can do there, how it changes your play), and a few steps through it alone. /hc tour <tab> does the same."]),
+      item(L["Help, at the top right: Help for the open tab (one page: what it is, what you can do there, how it changes your play), Tutorial for the open tab (a few steps through it alone), the Full tutorial of all of Hard Counters, and this Guide. /hc tutorial <tab> starts a tab's tutorial from chat."]),
       head(L["Buttons and switches"]),
       item(L["A red-and-gold button does something (New board..., Reset, Delete). A dark pill with a lamp is a switch that shows a state: green on, grey off, amber needs a look; click it to change it (On HUD / Only here, Counting / Not counting)."]),
       head(L["The minimap button"]),
@@ -433,12 +432,12 @@ local _ = ns.Help and ns.Help.Register(ID, {
   what = "The Guide is the manual: the words Hard Counters uses, boards and tiles in depth, trackers and history, runs, the packs, every /hc command, and where addon authors start.",
   can = {
     "Pick a page on the left; scroll the text with the mouse wheel.",
-    "{Grand tour} (top right of the window, on every tab) starts the general tour again, from its first step.",
+    "{Help} (top right of the window, on every tab) has the {Full tutorial}, from its first step, and each tab's own.",
     "Open a page straight from chat: /hc guide commands.",
   },
   effect = "Nothing here changes your game: it is for reading. The {Commands} page is built from what is loaded, so it also lists the commands of your packs.",
   tour = {
     { title = "Pages on the left", text = "Each entry on the left is a page. {Concepts} is the place to start; {Boards} and {Tiles} go into every choice a board and a tile have." },
-    { title = "Three kinds of help", text = "The {Grand tour} button (top right, on every tab) is the general tour. The two beside it are named after the open tab: its tour walks through that tab only, its help sums it up on one page. The Guide is the long form of all three." },
+    { title = "Three kinds of help", text = "The {Help} button (top right, on every tab) opens the {Full tutorial}, and two named after the open tab: its tutorial walks through that tab only, its help sums it up on one page. The Guide is the long form of all three." },
   },
 })

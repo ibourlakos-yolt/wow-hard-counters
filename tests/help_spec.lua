@@ -57,19 +57,27 @@ describe("help and tab tours", function()
     end, SEEN)
   end)
 
-  it("opens from the window's header on every tab: <tab> help for the open tab, <tab> tour through its steps", function()
+  it("opens from the window's Help button on every tab: help and tutorial for the open tab, the full tutorial, the Guide", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local Help, Win = ns.Help, ns.Windows
       ns.ShowBoards(true)
       local main = Win.Host("_main")
-      -- (0.4.0) the buttons carry the open tab's name, and its one line sits beside them
-      assert.are.equal("Boards help", main.help:GetText())
-      assert.are.equal("Boards tour", main.tour:GetText())
-      assert.are.equal("Grand tour", main.tutorial:GetText())
+      -- (0.5.0) one Help button; its menu carries the open tab's name, and the tab's one line sits beside it
+      assert.are.equal("Help", main.help:GetText())
+      assert.is_nil(main.tour)
+      assert.is_nil(main.tutorial)
       assert.truthy(main.about:GetText():find("Your boards", 1, true))
       assert.are.equal("boards", Win.Selected())
+      local realShow, items = ns.Menu.Show, nil
+      ns.Menu.Show = function(_, it) items = it end
       click(main.help)
+      ns.Menu.Show = realShow
+      local labels = {}
+      for i, it in ipairs(items) do labels[i] = it.text end
+      assert.are.same({ 'Help for "Boards"', 'Tutorial for "Boards"', "Full tutorial", "Open the Guide" }, labels)
+      for _, l in ipairs(labels) do assert.is_nil(l:lower():find("tour", 1, true)) end
+      items[1].func()
       local f = Help.Frame()
       assert.is_true(f:IsShown())
       assert.are.same({ "help", "boards", 1 }, { Help.State() })
@@ -88,17 +96,27 @@ describe("help and tab tours", function()
       click(f.next)
       click(f.next)
       assert.is_false(f:IsShown())
-      -- another tab: the buttons follow it; a tour opens its tab
+      -- another tab: the menu follows it; a tab's tutorial opens its tab
       ns.ShowExplorer(true)
-      assert.are.equal("Explorer help", main.help:GetText())
-      click(main.tour)
+      items = Win.HelpItems()
+      assert.are.equal('Help for "Explorer"', items[1].text)
+      items[2].func()
       assert.are.same({ "tour", "explorer", 1 }, { Help.State() })
-      _G.SlashCmdList.HARDCOUNTERS("tour overview")
+      _G.SlashCmdList.HARDCOUNTERS("tutorial overview")
       assert.is_true(Win.IsShown("overview"))
       assert.are.same({ "tour", "overview", 1 }, { Help.State() })
-      assert.are.equal("Overview tour", main.tour:GetText())
+      assert.are.equal('Tutorial for "Overview"', Win.HelpItems()[2].text)
+      _G.SlashCmdList.HARDCOUNTERS("tour explorer")              -- the old command still answers
+      assert.are.same({ "tour", "explorer", 1 }, { Help.State() })
+      -- on the Guide, "Open the Guide" is greyed; right-click opens the same menu
+      ns.ShowGuide(true)
+      assert.is_true(Win.HelpItems()[4].disabled)
+      ns.Menu.Show = function(_, it) items = it end
+      main.help:GetScript("OnClick")(main.help, "RightButton")
+      ns.Menu.Show = realShow
+      assert.are.equal('Help for "Guide"', items[1].text)
       if ctx.farmer then
-        _G.SlashCmdList.HARDCOUNTERS("tour ledger")
+        _G.SlashCmdList.HARDCOUNTERS("tutorial ledger")
         assert.are.equal("hcfarm:ledger", (select(2, Help.State())))
       end
       Help.Hide()

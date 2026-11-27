@@ -1,6 +1,6 @@
 -- The tutorial and the Guide tab (the user, 2026-11-24): the tour shows once per account at the first login that
 -- hasn't run it, walks the boards on screen, a first board for the character's class and the Hard Counters window
--- tab by tab; the window's Grand tour button (0.4.0; "Tutorial" before) and /hc tutorial run it again. The Guide tab is
+-- tab by tab; the window's Help button, Full tutorial (0.5.0; "Grand tour" in 0.4) and /hc tutorial run it again. The Guide tab is
 -- the manual: its Commands page lists the live /hc registry.
 require("bootstrap")
 local UI = require("ui_boot")
@@ -97,7 +97,7 @@ describe("the tutorial", function()
     end, SEEN)
   end)
 
-  it("runs again from the window's Grand tour button and /hc tutorial", function()
+  it("runs again from the window's Help button (Full tutorial) and /hc tutorial", function()
     UI.with(function(ctx)
       local ns = ctx.hc
       local T, Win = ns.Tutorial, ns.Windows
@@ -105,8 +105,9 @@ describe("the tutorial", function()
       assert.is_nil(ns.TutorialFrame())
       Win.ShowMain(true)
       local main = Win.Host("_main")
-      assert.are.equal("Grand tour", main.tutorial:GetText())
-      click(main.tutorial)
+      local item
+      for _, it in ipairs(Win.HelpItems()) do if it.text == "Full tutorial" then item = it end end
+      item.func()
       local f = ns.TutorialFrame()
       assert.is_true(f:IsShown())
       assert.are.equal(1, (T.Step()))                          -- from its first step

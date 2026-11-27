@@ -21,7 +21,10 @@ local MAIN, MAIN_NAME = "_main", "HardCountersMain"
 local MAX_W, MAX_H = 1600, 1200
 -- The shared frame's design size (DESIGN §17.2, settled with the browser layout, HC-69): 780 wide for the browser,
 -- 640 high so Character Stats (a 566-high body: every stat row) fits without scrolling. A tab taller than that scrolls; a wider one widens the panel.
-local MAIN_W, MAIN_H = 780, 640
+-- (0.5.0, the user: the window and its text "should grow about 5-15%") 820 x 660, drawn at MAIN_SCALE by default:
+-- about 13% wider and 11% taller on screen, every font 8% bigger, and 40 x 20 more room inside for details.
+local MAIN_W, MAIN_H = 820, 660
+local MAIN_SCALE = 1.08
 -- Side tabs (LargeSideTabButtonTemplate on Forever, measured by the HC-65 probe): 55 square, the first 60 down,
 -- 2 apart, hanging off the right edge. The plain fallback is smaller. Bottom tabs hang 30 under the frame.
 local SIDE_W, SIDE_TOP, SIDE_GAP, SIDE_PLAIN = 55, 60, 2, 40
@@ -287,7 +290,7 @@ local function newHost(name, key, opts)
     f.grip:SetFrameLevel(lvl)
   end
   Wd.PlaceAt(f, conf(key).pos)
-  f:SetScale(conf(key).scale or 1)
+  f:SetScale(conf(key).scale or (key == MAIN and MAIN_SCALE) or 1)
   f:SetScript("OnShow", function(self)
     self:Raise()
     syncAll()
@@ -656,25 +659,40 @@ local function selTitle()
   return def and def.title or L["This tab"]
 end
 
---- The header follows the open tab (0.4.0, the user: the tour's and Help's labels "should include the name of the
---- active tab"; a one-liner on top of each tab "that explains what happens there"): "<Tab> help" and "<Tab> tour",
---- greyed on a tab with no help registered (a pack that brought none), and the tab's def.about on the left.
+--- The header follows the open tab (0.4.0): the tab's def.about on the left. (0.5.0, the user: "Collapse the
+--- tutorial trio of action buttons into a Help that expands to current view help, current view tutorial, the grand
+--- tutorial and the Guide") one Help button; its menu names the open tab.
 function refreshHelpButtons()
   if not (main and main.help) then return end
-  local has = ns.Help and ns.Help.For(conf(MAIN).selected) ~= nil
-  local title = selTitle()
-  main.help:SetText(format(L["%s help"], title))
-  main.tour:SetText(format(L["%s tour"], title))
-  Wd.FitWidth(main.help, 70, 24)
-  Wd.FitWidth(main.tour, 70, 24)
-  main.help:SetEnabled(has)
-  main.tour:SetEnabled(has)
   if main.about then
     local def = defs[conf(MAIN).selected]
     main.about:SetText(def and type(def.about) == "string" and L[def.about] or "")
   end
 end
 Win.RefreshHelpButtons = refreshHelpButtons
+
+--- The Help button's menu: this tab's page and tutorial (greyed on a tab with no help: a pack that brought none),
+--- the full tutorial, the Guide.
+function Win.HelpItems()
+  local sel = conf(MAIN).selected
+  local has = ns.Help and ns.Help.For(sel) ~= nil
+  local title = selTitle()
+  local items = {
+    { text = format(L['Help for "%s"'], title), disabled = not has, func = function() ns.Help.Show(nil) end,
+      tip = L["One page on this tab: what it is, what you can do in it, and how that changes what you see while you play."] },
+    { text = format(L['Tutorial for "%s"'], title), disabled = not has, func = function() ns.Help.Tour(nil, 1) end,
+      tip = L["A few steps through this tab only: what is where, and what to click. The window stays open beside it."] },
+  }
+  if ns.Tutorial then
+    items[#items + 1] = { text = L["Full tutorial"], func = function() ns.Tutorial.Show(1) end,
+      tip = L["All of Hard Counters from its first step: the boards on your screen, a first board for your class, then this window tab by tab."] }
+  end
+  if defs.guide then
+    items[#items + 1] = { text = L["Open the Guide"], disabled = sel == "guide", func = function() Win.Show("guide", true) end,
+      tip = L["Everything the tutorials say, to read at your own pace."] }
+  end
+  return items
+end
 
 --- Header buttons: one per window with def.mainButton, right to left; their text says shown or not.
 function refreshHeader()
@@ -689,32 +707,15 @@ end
 
 local function buildHeader()
   main.header = {}
-  -- the tour of the whole addon, from any tab (the user, 2026-11-24; "Grand tour" since 0.4.0, it was "Tutorial"):
-  -- the first button of the header row, when the tutorial is loaded
-  if not main.tutorial and ns.Tutorial then
-    main.tutorial = Wd.Button(main, L["Grand tour"], 90, function() ns.Tutorial.Show(1) end)
-    main.tutorial:SetHeight(22)
-    main.tutorial:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY)
-    Wd.RichTip(main.tutorial, function() return { title = L["Grand tour"],
-      text = L["The tour of all of Hard Counters, from its first step: the boards on your screen, a first board for your class, then this window tab by tab."],
-      click = L["Click: start it (Escape or its close button stops it any time)."] } end)
-  end
-  -- (2026-11-25) the open tab's own tour and help, left of it: every tab has both (UI/Help.lua)
-  if not main.tour and ns.Help then
-    main.tour = Wd.Button(main, L["Tab tour"], 80, function() ns.Help.Tour(nil, 1) end)
-    main.tour:SetHeight(22)
-    if main.tutorial then main.tour:SetPoint("RIGHT", main.tutorial, "LEFT", -4, 0)
-    else main.tour:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY) end
-    Wd.RichTip(main.tour, function() return { title = format(L["%s tour"], selTitle()),
-      text = L["A few steps through this tab only: what is where, and what to click."],
-      click = L["Click: start it; the Hard Counters window stays open beside it."] } end)
-    main.help = Wd.Button(main, L["Help"], 60, function() ns.Help.Show(nil) end)
+  if not main.help and (ns.Help or ns.Tutorial) then
+    main.help = Wd.Button(main, L["Help"], 70, function(self) ns.Menu.Show(self, Win.HelpItems()) end)
     main.help:SetHeight(22)
-    main.help:SetPoint("RIGHT", main.tour, "LEFT", -4, 0)
-    Wd.RichTip(main.help, function() return { title = format(L["%s help"], selTitle()),
-      text = L["One page on this tab: what it is, what you can do in it, and how that changes what you see while you play."],
-      click = L["Click: open the page (from there, the tab's tour is one click away)."] } end)
-    -- the open tab's one line, left of the buttons (0.4.0): two lines at most; the whole text as a tooltip
+    main.help:SetPoint("TOPRIGHT", main.panel and -10 or -8, main.headerY)
+    Wd.RichTip(main.help, function() return { title = L["Help"],
+      text = format(L["The open tab's help page and tutorial (%s), the full tutorial, and the Guide."], selTitle()),
+      click = L["Click: choose one."] } end)
+    Wd.RightMenu(main.help, function() return Win.HelpItems() end)
+    -- the open tab's one line, left of the button (0.4.0): two lines at most
     main.about = main:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     main.about:SetPoint("TOPLEFT", main, "TOPLEFT", main.panel and 66 or 10, main.headerY + 1)
     main.about:SetPoint("RIGHT", main.help, "LEFT", -10, 0)
@@ -723,7 +724,7 @@ local function buildHeader()
     main.about:SetJustifyV("MIDDLE")
     main.about:SetTextColor(0.85, 0.85, 0.85)
   end
-  local prev = main.help or main.tutorial
+  local prev = main.help
   for _, id in ipairs(order) do
     local def = defs[id]
     if def.mainButton then
@@ -959,6 +960,12 @@ ns.OnReady(function()
       local moved = { overview = "boards", boards = "explorer", trackers = "explorer", runs = "stints" }
       if m.selected and moved[m.selected] then m.selected = moved[m.selected] end
       m.tabsV = 2
+    end
+    -- (0.5.0) the window grew: a scale saved at 0.4's default (1, written at every logout) takes the new default;
+    -- a scale the player chose stays. Once (sizeV).
+    if type(m) == "table" and m.sizeV ~= 1 then
+      if m.scale == nil or m.scale == 1 then m.scale = MAIN_SCALE; if main then main:SetScale(MAIN_SCALE); layoutMain() end end
+      m.sizeV = 1
     end
   end
   for _, id in ipairs(order) do

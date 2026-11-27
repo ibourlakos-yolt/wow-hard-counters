@@ -3,6 +3,16 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+### The window
+- The Hard Counters window is bigger: a little more room inside, and everything in it (text included) drawn about 8%
+  larger. If you had changed its scale in Options, your scale stays.
+- One **Help** button at the top right replaces the three (help, tour, Grand tour). Its menu: Help for the open
+  tab, Tutorial for the open tab, the Full tutorial, and the Guide. Tours are called tutorials now;
+  `/hc tutorial <tab>` starts one tab's (`/hc tour` still works).
+- Right-click opens a menu in more places (the Help button, and more below).
+
 ## 0.4.0-beta2 (2026-11-27)
 
 A beta, **still experimental**. One fix to 0.4.0-beta1.

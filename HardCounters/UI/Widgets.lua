@@ -167,6 +167,36 @@ function W.Button(parent, text, width, onClick)
   return b
 end
 
+--- Right-click opens a menu (0.5.0, the user: "right-click is the player's best friend"): itemsFn(frame) returns
+--- ns.Menu items (or nil for no menu). On a Button the left click keeps its OnClick: call this after setting it.
+--- On any other frame it takes OnMouseUp, keeping one set before. W.rightMenus counts the frames given a menu.
+W.rightMenus = 0
+function W.RightMenu(frame, itemsFn)
+  if not (frame and itemsFn) then return frame end
+  W.rightMenus = W.rightMenus + 1
+  local function open(self)
+    local ok, items = pcall(itemsFn, self)
+    if not ok then if ns.Error then ns.Error(items) end return end
+    if type(items) == "table" and #items > 0 and ns.Menu then ns.Menu.Show(self, items) end
+  end
+  frame.hcRightMenu = open
+  local okT, objType = pcall(frame.GetObjectType, frame)
+  if okT and (objType == "Button" or objType == "CheckButton") then
+    frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    local orig = frame:GetScript("OnClick")
+    frame:SetScript("OnClick", function(self, button, ...)
+      if button == "RightButton" then open(self) elseif orig then orig(self, button, ...) end
+    end)
+  else
+    frame:EnableMouse(true)
+    local orig = frame:GetScript("OnMouseUp")
+    frame:SetScript("OnMouseUp", function(self, button, ...)
+      if button == "RightButton" then open(self) elseif orig then orig(self, button, ...) end
+    end)
+  end
+  return frame
+end
+
 --- A tooltip in the house style (0.4.0: every action and status button has one): a white title, a body, then the
 --- state in colour (status buttons) and a grey "Click: ..." line. spec(frame) -> { title, text, state, on, click }.
 function W.RichTip(frame, spec)

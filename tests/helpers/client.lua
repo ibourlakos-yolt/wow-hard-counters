@@ -62,6 +62,8 @@ local frameMethods = {
   IsMouseEnabled = function(self) return self._mouse or false end,
   GetStringWidth = function() return 50 end,
   GetEffectiveScale = function() return 1 end,
+  -- (0.5.0) the frame's type as created ("Button", "Frame"...): Widgets.RightMenu keeps a button's left click
+  GetObjectType = function(self) return self._objType or "Frame" end,
 }
 
 function C.frame(client, name)
@@ -83,8 +85,9 @@ function C.install(env, opts)
   -- Blizzard templates the window host uses: their child frames exist, as in game (opts.templates = false: a
   -- client without them, for the fallback)
   local templates = not (opts and opts.templates == false)
-  G.CreateFrame = function(_, name, parent, template)
+  G.CreateFrame = function(kind, name, parent, template)
     local f = C.frame(client, name)
+    f._objType = kind
     f._parent = parent
     f._template = template
     if templates and template == "ButtonFrameTemplate" then

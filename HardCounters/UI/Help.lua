@@ -1,7 +1,8 @@
 -- Help and tab tours (the user, 2026-11-25): every tab of the Hard Counters window has a Help page (what the tab
 -- is, what you can do in it, how that changes what you see while you play) and a short tour of its own, apart from
--- the general tutorial (UI/Welcome.lua). Both open from the window's header row, on every tab: Help and Tab tour,
--- left of Tutorial; also /hc tour [tab].
+-- the general tutorial (UI/Welcome.lua). Both open from the window's Help button, on every tab (0.5.0: one button,
+-- its menu "Help for "<tab>"", "Tutorial for "<tab>"", "Full tutorial", "Open the Guide"); also /hc tutorial <tab>.
+-- Players read "tutorial" (0.5.0, the user: "avoid the word tour"); the code keeps tour (def.tour, Help.Tour).
 --
 -- A tab's help lives beside the tab's code, so the two change together: the file that registers the window calls
 --   ns.Help.Register(id, def)          (Hard Counters' own tabs)
@@ -121,7 +122,7 @@ local function render()
       local ok, err = pcall(s.before)
       if not ok and ns.Error then ns.Error(err) end
     end
-    setTitle(format(L["Hard Counters: %s tour"], title))
+    setTitle(format(L["Hard Counters: tutorial for %s"], title))
     f.head:SetText(L[s.title])
     f.body:SetText(Help.Render(s.text))
     f.count:SetText(format(L["Step %d of %d"], step, #def.tour))
@@ -141,7 +142,7 @@ local function render()
     f.count:SetText("")
     f.back:Hide()
     f.next:SetText(L["Close"])
-    f.act:SetText(L["Take this tab's tour"])
+    f.act:SetText(L["Take this tab's tutorial"])
   end
   Wd.FitWidth(f.act, 140, 32)
   -- as tall as its text needs (a Help page with many bullets), never shorter than H
@@ -201,7 +202,7 @@ local function build()
   f.next:SetPoint("BOTTOMRIGHT", -16, 10)
   f.back = Wd.Button(f, L["Back"], 80, function() Help.Tour(cur, step - 1) end)
   f.back:SetPoint("RIGHT", f.next, "LEFT", -6, 0)
-  Wd.RichTip(f.next, function() return { title = f.next:GetText(), text = mode == "tour" and L["The next step of this tab's tour (Finish on the last one)."] or L["Close this page."] } end)
+  Wd.RichTip(f.next, function() return { title = f.next:GetText(), text = mode == "tour" and L["The next step of this tab's tutorial (Finish on the last one)."] or L["Close this page."] } end)
   Wd.RichTip(f.back, function() return { title = L["Back"], text = L["The step before."] } end)
   Wd.RichTip(f.act, function() return { title = f.act:GetText(), text = mode == "tour" and L["This tab's help page: what it is, what you can do, how it changes your play."] or L["A few steps through this tab, opening it as it goes."] } end)
 end
@@ -254,11 +255,15 @@ local function find(word)
   return nil
 end
 
-ns.AddSlash("tour", function(rest)
+--- /hc tutorial <tab> (and the old /hc tour, unlisted): that tab's tutorial. True when it found the tab; with no
+--- name, the open tab's. An unknown name prints the tab names.
+function Help.TutorialByName(rest)
   local id = find(rest)
-  if id and defs[id] then Help.Tour(id, 1); return end
+  if id and defs[id] then Help.Tour(id, 1); return true end
   local names = {}
   for k in pairs(defs) do names[#names + 1] = tabTitle(k):lower() end
   table.sort(names)
-  ns.Print(L["/hc tour <tab>: %s"], table.concat(names, ", "))
-end, L["a short tour of one tab of the window (no name: the open tab)"])
+  ns.Print(L["/hc tutorial <tab>: %s"], table.concat(names, ", "))
+  return false
+end
+ns.AddSlash("tour", function(rest) Help.TutorialByName(rest) end)

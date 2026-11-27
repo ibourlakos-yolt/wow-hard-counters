@@ -270,9 +270,25 @@ describe("windows", function()
     end, { settings = sv })
   end)
 
+  -- 0.5.0, the user: the window and its text "should grow about 5-15%": a scale left at 0.4's 1 becomes 1.08, once
+  it("grows the window in 0.5.0: a 0.4 scale of 1 becomes 1.08 once, a new player starts at 1.08", function()
+    local sv = { profiles = { Default = { windows = { _main = { scale = 1, tabsV = 2 } } } } }
+    UI.with(function(ctx)
+      local Win = ctx.hc.Windows
+      Win.ShowMain(true)
+      assert.are.equal(1.08, Win.Host("_main"):GetScale())
+      assert.are.equal(1, ctx.hc.settings.windows._main.sizeV)
+      assert.are.same({}, ctx.env.errors)
+    end, { settings = sv })
+    UI.with(function(ctx)
+      ctx.hc.Windows.ShowMain(true)
+      assert.are.equal(1.08, ctx.hc.Windows.Host("_main"):GetScale())
+    end)
+  end)
+
   -- user, 2026-11-23: the Hard Counters window is not resizable
   -- and keeps one size for every tab: one panel, visually consistent
-  -- HC-69 (DESIGN §17.2): the size is a design size, 780 x 640; a wider tab widens it, a taller one scrolls inside
+  -- HC-69 (DESIGN §17.2): the size is a design size, 820 x 660 since 0.5.0 (780 x 640 before); a wider tab widens it, a taller one scrolls inside
   it("keeps the shared frame one size for every tab: the design size, wider for a wide tab, a tall tab scrolls", function()
     local sv = { profiles = { Default = { windows = { _main = { width = 1333, height = 1151, scale = 0.9 } } } } }
     UI.with(function(ctx)
@@ -282,9 +298,10 @@ describe("windows", function()
       HC:ShowWindow("stints", true)
       local main = Win.Host("_main")
       assert.is_nil(main.grip)
-      assert.are.same({ 780, 640 }, { main:GetWidth(), main:GetHeight() })
+      assert.are.same({ 820, 660 }, { main:GetWidth(), main:GetHeight() })
+      assert.are.equal(0.9, main:GetScale())                     -- a scale the player chose stays (0.5.0)
       assert.is_false(main.scrollBar:IsShown())                   -- nothing to scroll
-      if ctx.charstats then                                         -- the 640 was chosen so every stat row fits
+      if ctx.charstats then                                         -- the 640 was chosen so every stat row fits (660 since 0.5.0)
         HC:ShowWindow("hcstats:window", true)
         assert.is_false(main.scrollBar:IsShown(), "Character Stats fits without scrolling")
         HC:ShowWindow("stints", true)
@@ -294,7 +311,7 @@ describe("windows", function()
       HC:ShowWindow("t:wide", true)
       local w, h = main:GetWidth(), main:GetHeight()
       assert.are.equal(900 + main.padW, w)                          -- the widest minimum: width never scrolls
-      assert.are.equal(640, h)                                      -- the height stays the design height
+      assert.are.equal(660, h)                                      -- the height stays the design height
       assert.are.same({ w, h, w, h }, main._bounds)                 -- min == max: the client can't size it either
       for _, id in ipairs({ "t:tall", "trackers", "stints", "hcdiag:console", "t:wide" }) do
         HC:ShowWindow(id, true)
@@ -318,7 +335,7 @@ describe("windows", function()
       assert.are.equal(bodyH, main.canvas:GetHeight())
       -- even a very tall tab keeps the panel's height
       HC:RegisterWindow("t:huge", counting({ minWidth = 300, minHeight = 3000 }))
-      assert.are.equal(640, main:GetHeight())
+      assert.are.equal(660, main:GetHeight())
       assert.are.same({}, ctx.env.errors)
     end, { settings = sv })
   end)

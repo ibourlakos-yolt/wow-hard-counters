@@ -123,7 +123,7 @@ STEPS = {
         bullet(format(L["A %s is a small panel of tiles that stays on screen while you play."], gold(L["board"]))),
         bullet(format(L["The %s is where you find, make and change all of it."], gold(L["Hard Counters window"]))),
         "",
-        format(L["This tour has %d short steps. Close it whenever you like: the Guide tab of the window keeps everything it says, and /hc tutorial starts it again."], #STEPS))
+        format(L["This tutorial has %d short steps. Close it whenever you like: the Guide tab of the window keeps everything it says, and /hc tutorial starts it again."], #STEPS))
     end },
 
   { title = L["Boards: the numbers on your screen"], hud = true, board = firstBoard,
@@ -135,7 +135,7 @@ STEPS = {
       elseif b.shown then
         first = format(L["The flashing panel is a board, called %s. It is this character's own: every character has its own boards."], gold(b.name))
       else
-        first = format(L["The flashing panel is a board, called %s. It is flashing for this tour only: a new board is not on your screen until you put it there (the Boards tab, its %s switch)."], gold(b.name), gold(L["On HUD"]))
+        first = format(L["The flashing panel is a board, called %s. It is flashing for this tutorial only: a new board is not on your screen until you put it there (the Boards tab, its %s switch)."], gold(b.name), gold(L["On HUD"]))
       end
       local key = ns.Boards and ns.Boards.MoveKeyWord()
       return lines(
@@ -200,8 +200,8 @@ STEPS = {
         bullet(L["The icon tabs down its right edge are Hard Counters' own: Boards, Explorer, Packs, Stints and Guide. Hover one for its name."]),
         bullet(L["The tabs along the bottom: Overview (where everything stands), the packs' own tabs, Options, and Diagnostics when it is on."]),
         bullet(L["Under the title, one line says what the open tab is for."]),
-        bullet(format(L["At the top right, on every tab: %s (one page about the open tab), %s (a few steps through it) and %s (this tour)."],
-          gold(L["Boards help"]), gold(L["Boards tour"]), gold(L["Grand tour"]))),
+        bullet(format(L["At the top right, on every tab: %s. It has a page and a short tutorial for the open tab, this tutorial again, and the Guide."],
+          gold(L["Help"]))),
         "",
         L["The next steps open each tab in turn. It opened on the first one: Boards."])
     end },
@@ -241,7 +241,7 @@ STEPS = {
         bullet(L["A pack's numbers count as soon as you place one of its tiles: its tracker is switched on for you, with daily history."]),
         "",
         chosen and L["You have chosen your packs already; change your mind here any time."]
-          or L["Do it now if you like: this window stays open, and the tour waits."])
+          or L["Do it now if you like: this window stays open, and the tutorial waits."])
     end },
 
   { title = L["Stints: stretches you kept"], tab = "stints",
@@ -280,10 +280,9 @@ STEPS = {
   { title = L["Guide: all of this, any time"], tab = "guide",
     text = function()
       return lines(
-        L["That's the tour. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, stints, the packs, every /hc command, and where pack authors start."],
+        L["That's the tutorial. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, stints, the packs, every /hc command, and where pack authors start."],
         "",
-        bullet(format(L["%s, at the top of this window on every tab, starts this tour again. So does %s."], gold(L["Grand tour"]), gold("/hc tutorial"))),
-        bullet(format(L["The two buttons beside it are about the open tab only: its help page and its own short tour (%s, %s...)."], gold(L["Guide help"]), gold(L["Guide tour"]))),
+        bullet(format(L["%s, at the top of this window on every tab: %s starts this tutorial again (so does %s); the two above it are about the open tab only, its help page and its own short tutorial."], gold(L["Help"]), gold(L["Full tutorial"]), gold("/hc tutorial"))),
         bullet(format(L["%s lists every command; %s makes a report to paste when something breaks."], gold("/hc help"), gold("/hc report"))),
         "",
         L["Now play: your boards count while you do."])
@@ -356,7 +355,7 @@ local function build()
   f:SetClampedToScreen(true)
   local hide = rawget(_G, "ButtonFrameTemplate_HidePortrait")
   if type(hide) == "function" then pcall(hide, f) end
-  setTitle(L["Hard Counters: grand tour"])
+  setTitle(L["Hard Counters: tutorial"])
   if type(f.CloseButton) == "table" then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
   tinsert(UISpecialFrames, "HardCountersTutorial")             -- Escape closes it
   f.head = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -380,9 +379,9 @@ local function build()
   f.next:SetPoint("BOTTOMRIGHT", -16, 10)
   f.back = Wd.Button(f, L["Back"], 80, function() Tutorial.Go(step - 1) end)
   f.back:SetPoint("RIGHT", f.next, "LEFT", -6, 0)
-  Wd.RichTip(f.next, function() return { title = f.next:GetText(), text = L["The next step of the grand tour (Finish closes it; /hc tutorial starts it again)."] } end)
+  Wd.RichTip(f.next, function() return { title = f.next:GetText(), text = L["The next step of the tutorial (Finish closes it; /hc tutorial starts it again)."] } end)
   Wd.RichTip(f.back, function() return { title = L["Back"], text = L["The step before."] } end)
-  Wd.RichTip(f.act, function() return { title = f.act:GetText(), text = L["Does what this step describes; the tour stays open."] } end)
+  Wd.RichTip(f.act, function() return { title = f.act:GetText(), text = L["Does what this step describes; the tutorial stays open."] } end)
   -- (hidden above before this is set: closing stops the flashing, and never runs at build)
   f:SetScript("OnHide", function() light(nil) end)
 end
@@ -429,7 +428,7 @@ function Tutorial.Check()
   if not B.welcome then return nil end
   B.welcome = nil
   if ns.Print then
-    ns.Print(L["This character has no boards yet: /hc, the Boards tab, New board... makes one (ready-made, empty, or a copy of another character's). (/hc tutorial: the tour again)"])
+    ns.Print(L["This character has no boards yet: /hc, the Boards tab, New board... makes one (ready-made, empty, or a copy of another character's). (/hc tutorial: the tutorial again)"])
   end
   return "line"
 end
@@ -440,6 +439,10 @@ ns.On("PLAYER_ENTERING_WORLD", function()
   C_Timer.After(2, function() Tutorial.Check() end)
 end, "Welcome")
 
-ns.AddSlash("tutorial", function() Tutorial.Show(1) end, L["the tour of Hard Counters: boards, the window and its tabs, your first board"])
+-- (0.5.0) /hc tutorial <tab>: that tab's own tutorial; no name: the full one
+ns.AddSlash("tutorial", function(rest)
+  if rest and rest:match("%S") and ns.Help and ns.Help.TutorialByName then ns.Help.TutorialByName(rest); return end
+  Tutorial.Show(1)
+end, L["the full tutorial of Hard Counters: boards, the window and its tabs, your first board (/hc tutorial <tab>: one tab's)"])
 ns.AddSlash("welcome", function() Tutorial.Show(1) end)        -- (its name in 0.2.2; not listed)
 ns.TutorialFrame = function() return f end                     -- (tests)
