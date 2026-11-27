@@ -2056,3 +2056,61 @@ caught error (five a session) and logout: counts and types only. `/hc report` ca
 the warnings). Diagnostics listens through the bridge (`D.OnFieldNote`) and runs its probes at a level, on leaving an
 instance and after an error (once every five minutes at most), and snapshots the log at the first error of a
 session. A player without Diagnostics loaded gets the notes only: an addon that is off can't run.
+
+### 17.16 Agreed for 0.5.0 (2026-11-28): the window grown, boards' look, the Explorer by kind, class boards, runs
+
+The user's list of 2026-11-28 (items A1 to H2 below keep its numbers), the open calls made by a design pass, one
+call by the user (G3's key). Written before building; "As built" notes follow where the build differs.
+
+- **A1.** The main window and its fonts grow by about 10%; saved sizes from 0.4 are clamped to the new minimum.
+- **A2. One Help button** (not "Learn": in WoW that is the trainer's button) replaces `<tab> help`, `<tab> tour`
+  and `Grand tour`. Its menu: `Help for "<tab>"`, `Tutorial for "<tab>"`, `Full tutorial`, `Open the Guide`. No
+  "tour" in player text; the code keeps `Help.Tour`, `def.tour` and `/hc tour` as an alias.
+- **A3.** Ctrl+K in the open window focuses the tab's search box; an option, and a hint by the box. Dropped (with a
+  QUEUE row) if it can't be done without eating other keys.
+- **B1.** The board's header row: 30 px from the top edge to the first tile becomes 22 (`M.PAD_HEAD = 2`, the run
+  row 20, buttons 16), with a faint dark title strip behind it.
+- **B2. Five tile sizes:** `large` (Big), `largeHalf` (Big, half width, new), `half` (Medium, half width),
+  `line` (Line), `lineHalf` (Line, half width, new). The two new ones draw numbers only. Consecutive half-width
+  tiles pair, whatever their size; the row is as tall as its taller cell. Big's height follows its extras (46, +15
+  sparkline, +14 comparison). A Big value too wide steps down a font size. The trend badge fits every number size:
+  arrow and words on Big, arrow only on the others, never under the number. The hero (mini strip) is the first
+  `large` or `largeHalf`. One colour family: gold for structure, grey labels, white values.
+- **B3, B4.** `board.alpha` (0.2 to 1), `board.bg` ({r, g, b}) and `board.bgAlpha` (0 to 1); nil means 0.4's
+  look. A fading board (combat, faded until hovered) shows at half its own opacity, once. One `Look` submenu on the
+  board: Opacity, Background, Background opacity, Number colour, Scale, Reset look.
+- **B5.** A value colour per tile (`tile.color`), with a board default (`board.valueColor`), from nine presets;
+  states (dim, trend, a reached target) still win. Labels are not coloured per tile. No font-size property: a
+  tile's size and the board's Scale are the font size.
+- **B6.** The tile menu gains Move to top and Move to bottom.
+- **C1.** Pause, Resume and Reset on a HUD board are 16 px icons (the Stopwatch's), words if
+  `settings.boardButtonIcons` is off. Tooltips name the action.
+- **C2. A Hide tab on hover**, beside Edit: Hide is Take off the HUD (the same switch as the window's, kept), and
+  a chat line says how to bring it back. No temporary hidden state.
+- **C3.** No "here" in menus opened on the HUD: "(not on your HUD)", "Take this tile off the HUD".
+- **D1, D2.** The Explorer's tree folds like the Auction House's category list (+/-, saved per profile). Heads by
+  kind: Boards (Ready-made under it), Tiles (per board; Displays), Readings (per category), Trackers (per
+  category; Not loaded), then a head per other character.
+- **D3.** The Explorer loses its New board button (a right-click on Boards still offers it).
+- **E1, E2.** Character Stats' role, class and schools ready-made boards go (boards made from them stay); 18
+  class boards by role take their place ("Warrior (Tank)", "Druid (Caster)", ...), grouped Your class / Other
+  classes. The tutorial's class step offers the character's roles.
+- **E3.** The Packs tab: whole notes in a tip, why a pack can't load, a warning before unticking a pack whose
+  readings are on boards, "trackers counting", "for this character", versions, a row menu, Diagnostics under Tools.
+- **F1. Report a problem** is a bottom tab, always there: a note box, the three ticks, what is in it, the text to
+  copy; the checks and the log marker when Diagnostics is loaded. The report window goes.
+- **F2.** The copy-text window folds into the browser's detail pane. Help, the tutorial, the New board dialog and
+  confirmations stay windows of their own.
+- **G1.** Every details pane leads with the question it answers (board: why is it (not) on screen; tile: why does
+  it say that; reading: what is it before I add it; run: how did it go against my others; probe: in words).
+- **G2.** "How this number is made" (`BoardModel.Explain`): what is counted, from which counters, whose, the
+  period, the sum, filters, target, against usual, the tracker, and every estimate said plainly. In the window a
+  small panel (`UI/Synopsis.lua`), closed by its button or a click outside.
+- **G3.** On the HUD the same as a tooltip, on **Alt+click** on a tile (the user, 2026-11-28; Ctrl is the move
+  key), closed by any other click. Configurable in Options (`settings.boardInfoKey`).
+- **H1. Stints are runs again**, not snapshots: a snapshot is a moment, a run is a span with a start, pauses and
+  splits, and Diagnostics already uses "snapshot" for a moment. "Save as run"; the tab is Runs. Window id, saved
+  keys and the `*Stint` API aliases stay.
+- **H2.** The Runs tab finds runs with dropdowns over the list (Who, Where, When, Length, From, Counted), not a
+  tree. New runs record where they came from (`src`, `board`, `boardId`, `atReset`); older ones read Unknown.
+- **D0. Right-click** opens the same actions wherever there are actions (`Widgets.RightMenu`).
