@@ -3,6 +3,18 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## 0.4.0-beta2 (2026-11-27)
+
+A beta, **still experimental**. One fix to 0.4.0-beta1.
+
+**Saved data:** kept. **Updating:** `/reload` is enough after 0.4.0-beta1 (no new addon files); from an older
+version, restart the game client.
+
+### Fixed
+- The Boards tab said "Only gold and experience are counted: no pack is on", and Overview listed "No packs chosen",
+  while packs were loaded: only a tick in the Packs tab counted. Packs installed through the game's AddOns list now
+  count too; the reminder shows only when no pack is loaded.
+
 ## 0.4.0-beta1 (2026-11-26)
 
 A beta, **still experimental**. The Hard Counters window is reorganised: new tab names, two new tabs, everything you

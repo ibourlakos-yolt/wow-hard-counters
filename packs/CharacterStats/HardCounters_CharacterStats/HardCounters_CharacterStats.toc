@@ -2,7 +2,7 @@
 ## Title: Hard Counters: Character Stats
 ## Notes: Your character sheet as readings: attributes, melee, ranged, spell, defence, on any board.
 ## Author: Ioannis (John) Bourlakos
-## Version: 0.4.0-beta1
+## Version: 0.4.0-beta2
 ## X-License: MIT
 ## X-AI-Assisted: Claude (Anthropic), via Claude Code
 ## X-Website: https://github.com/ibourlakos-yolt/wow-hard-counters
