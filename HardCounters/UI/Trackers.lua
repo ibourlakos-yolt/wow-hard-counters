@@ -353,6 +353,19 @@ local function detail(row)
   end
   lines[#lines + 1] = table.concat(state, "  \194\183  ")
   if not usable(row.readings) then lines[#lines + 1] = "|cff808080" .. L["Not used by this character."] .. "|r" end
+  -- (0.5.0, G1) "what does it cost me and what do I get": who uses it
+  local BM = ns.BoardModel
+  if BM and BM.TilesByBoard then
+    local mine, tiles, boards = {}, 0, 0
+    for _, r in ipairs(row.readings) do mine[r.id] = true end
+    for _, g in ipairs(BM.TilesByBoard()) do
+      local n = 0
+      for _, e in ipairs(g.entries) do if e.raw and mine[e.raw.reading] then n = n + 1 end end
+      if n > 0 then tiles, boards = tiles + n, boards + 1 end
+    end
+    lines[#lines + 1] = tiles > 0 and format(L["Used by %d tile(s) on %d board(s)."], tiles, boards)
+      or ("|cff808080" .. L["No tile uses it: it could be off."] .. "|r")
+  end
   -- its readings, the ones this character doesn't use last under a heading of their own (HC-28)
   local items, unusedHead = {}, false
   for pass = 1, 2 do
