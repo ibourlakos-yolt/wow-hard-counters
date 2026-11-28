@@ -288,6 +288,10 @@ local function newPanel(i)
   end)
   p.pause:SetFrameLevel(p:GetFrameLevel() + 2)
   p.pause:SetPoint("RIGHT", p.reset, "LEFT", -4, 0)
+  -- (D0) right-click the clock's buttons: every timer action (Stop, Save as stint...)
+  local function timerItems(self) return self.board and Bo() and Bo().AllItems(self.board) or nil end
+  Wd.RightMenu(p.pause, timerItems)
+  Wd.RightMenu(p.reset, timerItems)
   Wd.RichTip(p.pause, function(self)
     local running = self.board and M().BoardState(self.board) == "running"
     return { title = L["The board's clock"], on = running and true or false,
@@ -563,6 +567,10 @@ local function newFooter(f)
   Wd.RichTip(p.new, function() return { title = L["New board..."],
     text = L["Make a board: ready-made, empty, or a copy. It appears here; you choose whether it also goes on your HUD."],
     click = L["Click: the New board dialog."] } end)
+  Wd.RightMenu(p, function() return {
+    { text = L["New board..."], func = function() if Bo() then Bo().OpenNewBoard() end end },
+    { text = L["Ready-made boards"], func = function() if ns.ShowExplorer then ns.ShowExplorer(true, "presets") end end },
+  } end)
   return p
 end
 
@@ -582,6 +590,7 @@ local function newNotice(f)
   n.go:SetPoint("RIGHT", -8, 0)
   Wd.RichTip(n.go, function() return { title = L["Choose packs"],
     text = L["The Packs tab: tick the packs you want. They are loaded at the next reload."], click = L["Click: open it."] } end)
+  Wd.RightMenu(n, function() return { { text = L["Choose packs"], func = function() if ns.ShowPacks then ns.ShowPacks(true) end end } } end)
   n:Hide()
   return n
 end
@@ -595,6 +604,7 @@ local function build(f)
   s.hint = s:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   s.hint:SetPoint("LEFT", 2, 0)
   s.hint:SetText(L["Search your tiles or boards"])
+  f.searchBox = s                                   -- (A3) Ctrl+K finds it
   s:SetScript("OnTextChanged", function(self)
     local text = self:GetText() or ""
     self.hint:SetShown(text == "")

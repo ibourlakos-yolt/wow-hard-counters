@@ -85,9 +85,9 @@ describe("stints", function()
       ns.RefreshRunList()
       local keys = {}
       for _, n in ipairs(br.nodesData) do keys[#keys + 1] = n.key end
-      assert.are.same({ "all", "char", "places", "z:1429", "z:1436" }, keys)
+      assert.are.same({ "all" }, keys)                              -- (0.5.0) no tree: fields over the list
+      assert.is_false(br.tree:IsShown())
       assert.are.equal(2, br.nodesData[1].count)
-      assert.are.equal(1, br.nodesData[4].count)
       assert.are.equal(2, #br.rowsData)
       assert.are.equal(b, br.rowsData[1].key)                         -- newest first
       local row = br.rowsData[2]
@@ -95,11 +95,32 @@ describe("stints", function()
       assert.are.equal(HC:ZoneName(1429), row.cells.where)
       assert.are.equal("10:00", row.cells.active)
       assert.are.equal("Stint #" .. b, br.rowsData[1].cells.name)  -- no name: its number
-      -- a place in the tree narrows the list
-      br.node = "z:1436"
+      -- (0.5.0, H2) the fields narrow the list: Where, Length, From, Counted; Clear puts them back
+      local F = ns.StintFilters
+      assert.are.equal(6, #br.filterFields)
+      assert.are.equal("By hand", row.cells.from)
+      F.where = 1436
       br:Refresh()
       assert.are.equal(1, #br.rowsData)
       assert.are.equal(b, br.rowsData[1].key)
+      assert.truthy(br.filterFields[2].value:GetText():find(HC:ZoneName(1436), 1, true))
+      F.where = nil
+      F.len = "short"
+      br:Refresh()
+      assert.are.equal(2, #br.rowsData)                               -- both under 15 minutes
+      F.len = "long"
+      br:Refresh()
+      assert.are.equal(0, #br.rowsData)
+      assert.truthy(br.footer:GetText():find("0 of 2", 1, true))
+      F.len, F.counted = "any", "splits"
+      br:Refresh()
+      assert.are.equal(1, #br.rowsData)                               -- the one with a split
+      assert.are.equal(a, br.rowsData[1].key)
+      F.from = "boards"
+      br:Refresh()
+      assert.are.equal(0, #br.rowsData)
+      br.clearBtn:GetScript("OnClick")(br.clearBtn)
+      assert.are.equal(2, #br.rowsData)
       -- ns.ShowRunCard (the card of 0.3): the tab with that stint selected, its detail at the bottom
       ns.ShowRunCard(HC:GetStintRecord(a))
       assert.are.equal("all", br.node)
@@ -159,5 +180,29 @@ describe("stints", function()
       assert.is_nil(listed.runs or listed.run)
       assert.are.same({}, env.errors)
     end, { settings = sv })
+  end)
+end)
+
+describe("where a stint came from (0.5.0, H2)", function()
+  it("records a board's name, and whether its Reset saved it", function()
+    UI.with(function(ctx)
+      local HC, ns, env = ctx.HC, ctx.hc, ctx.env
+      local M = ns.BoardModel
+      local b = M.Create(nil, { name = "Farm loop", shown = true })
+      M.AddReading(b, "hc:gold")
+      M.ControlAll(b, "start")
+      for _ = 1, 7 do env:advance(60); HC:Emit("hc:money.in", 100, "none", 1429) end
+      local id = M.SaveBoard(b)
+      assert.truthy(id)
+      local rec = HC:GetStintRecord(id)
+      assert.are.equal("board", rec.src)
+      assert.are.equal("Farm loop", rec.board)
+      assert.is_nil(rec.atReset)
+      for _ = 1, 7 do env:advance(60); HC:Emit("hc:money.in", 100, "none", 1429) end
+      local id2 = M.ControlAll(b, "reset")
+      assert.truthy(id2)
+      assert.is_true(HC:GetStintRecord(id2).atReset)
+      assert.are.same({}, ctx.env.errors)
+    end)
   end)
 end)

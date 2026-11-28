@@ -194,7 +194,7 @@ end
 --- Save a record from a window's snapshot (Win.Snapshot): a board's "Save as run". A board's window watches every
 --- counter, so the record has them all (rec.partial only for a window that watched some: snap.partial), with the
 --- best single values it kept, but no item lists (HC-2(c)). Returns the record id.
-function ns.SaveWindowRecord(snap, label)
+function ns.SaveWindowRecord(snap, label, from)
   if not (ns.ready and type(snap) == "table") then return nil end
   local R = store()
   local id = R.nextId
@@ -208,6 +208,10 @@ function ns.SaveWindowRecord(snap, label)
   for cid, m in pairs(type(snap.max) == "table" and snap.max or {}) do rec.live[cid] = { max = U.copy(m) } end
   rec.pausedSeconds = math.max(0, (rec.stop or rec.start) - rec.start - rec.elapsed)
   rec.mainZone = mainZone(rec.deltas) or (type(ns.currentZone) == "number" and ns.currentZone or nil)
+  -- (0.5.0, H2) where it came from: a board (saved, or at its Reset), so the Runs tab can find it by board
+  if type(from) == "table" then
+    rec.src, rec.board, rec.boardId, rec.atReset = from.src, from.board, from.boardId, from.atReset or nil
+  end
   keep(R, rec)
   return id
 end
@@ -230,7 +234,7 @@ function HC:StartRun(label)
   local info = W.entityInfo()
   local run = {
     id = id, label = (type(label) == "string" and label ~= "") and label:sub(1, 64) or nil,
-    char = ns.guid, charName = info.name, start = now, state = "running",
+    char = ns.guid, charName = info.name, start = now, state = "running", src = "hand",
     pausedSeconds = 0, lastSeen = now, acc = {}, live = {},
     splits = { { start = now, acc = {} } },
   }
@@ -288,6 +292,7 @@ function HC:StopRun()
     id = run.id, label = run.label, char = run.char, charName = run.charName,
     start = run.start, stop = now, pausedSeconds = run.pausedSeconds,
     deltas = trimmedDeltas(run.acc, TOP_KEEP), live = U.deepcopy(run.live),
+    src = run.auto and "instance" or run.src,           -- (0.5.0, H2) a dungeon's, or started by hand
   }
   rec.elapsed = math.max(0, now - run.start - run.pausedSeconds)
   rec.activeSeconds = run.acc[TIME] and run.acc[TIME].sum or 0

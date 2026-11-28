@@ -168,8 +168,8 @@ function W.Button(parent, text, width, onClick)
 end
 
 --- Right-click opens a menu (0.5.0, the user: "right-click is the player's best friend"): itemsFn(frame) returns
---- ns.Menu items (or nil for no menu). On a Button the left click keeps its OnClick: call this after setting it.
---- On any other frame it takes OnMouseUp, keeping one set before. W.rightMenus counts the frames given a menu.
+--- ns.Menu items (or nil for no menu). It listens on OnMouseUp, so a button's OnClick (left clicks only, the
+--- default) is never touched and can be set again later; an OnMouseUp set before is kept. W.rightMenus counts them.
 W.rightMenus = 0
 function W.RightMenu(frame, itemsFn)
   if not (frame and itemsFn) then return frame end
@@ -180,20 +180,11 @@ function W.RightMenu(frame, itemsFn)
     if type(items) == "table" and #items > 0 and ns.Menu then ns.Menu.Show(self, items) end
   end
   frame.hcRightMenu = open
-  local okT, objType = pcall(frame.GetObjectType, frame)
-  if okT and (objType == "Button" or objType == "CheckButton") then
-    frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    local orig = frame:GetScript("OnClick")
-    frame:SetScript("OnClick", function(self, button, ...)
-      if button == "RightButton" then open(self) elseif orig then orig(self, button, ...) end
-    end)
-  else
-    frame:EnableMouse(true)
-    local orig = frame:GetScript("OnMouseUp")
-    frame:SetScript("OnMouseUp", function(self, button, ...)
-      if button == "RightButton" then open(self) elseif orig then orig(self, button, ...) end
-    end)
-  end
+  if frame.IsMouseEnabled and not frame:IsMouseEnabled() then frame:EnableMouse(true) end
+  local orig = frame:GetScript("OnMouseUp")
+  frame:SetScript("OnMouseUp", function(self, button, ...)
+    if button == "RightButton" then open(self) elseif orig then orig(self, button, ...) end
+  end)
   return frame
 end
 
@@ -270,6 +261,12 @@ function W.Status(parent, width, onClick)
   function b.GetFontString(self) return self.text end
   b:SetScript("OnClick", onClick)
   b:SetState("", false)
+  -- (D0) right-click: the state by name and the switch, whatever the pill switches
+  W.RightMenu(b, function(self)
+    local click = self:GetScript("OnClick")
+    return { { text = self.stateText or "", title = true },
+      { text = ns.L["Switch it"], disabled = click == nil, func = function() if click then click(self, "LeftButton") end end } }
+  end)
   return b
 end
 

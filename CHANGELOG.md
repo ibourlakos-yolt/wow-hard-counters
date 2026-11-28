@@ -40,6 +40,17 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 - In the window: the **?** on a tile's card in the Boards tab, or "How it's made" in its menu and in the Explorer, opens
   the same as a small panel; a click outside or Escape closes it. The Explorer's tile details show it too.
 
+### Stints: finding them
+- The Stints tab finds stints with fields over the list instead of the tree: **Who**, **Where**, **When**, **Length**,
+  **From** (a board, a board's Reset, a dungeon, started by hand) and **Counted** (a tracker or one of its numbers,
+  stints with splits or with an item list); **Clear** puts them back. A new **From** column says where each came from.
+  Stints saved before 0.5 read "Unknown" there.
+
+### Right-click
+- Right-click opens a menu on: tabs (help, tutorial, tab labels), column headings (sort), status switches, the
+  Explorer's kinds, Overview rows, a board's clock buttons, the packs reminder and the "more boards" panel in the
+  Boards tab, and on the HUD the Move, Hide and Edit tabs.
+
 ### Explorer
 - The list on the left folds like the Auction House's: **Boards** (with Ready-made boards under it), **Tiles** (per
   board, and Displays), **Readings**, **Trackers**, then one entry per other character. A + opens one; what you open

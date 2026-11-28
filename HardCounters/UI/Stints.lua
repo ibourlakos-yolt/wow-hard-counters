@@ -225,15 +225,9 @@ local function nodes()
     if na ~= nb then return na < nb end
     return tostring(a) < tostring(b)
   end)
-  local out = {
-    { key = "all", text = L["All stints"], count = #list },
-    { key = "char", text = L["This character"], count = mine },
-    { key = "places", text = L["Places"], count = placed },
-  }
-  for _, z in ipairs(zones) do
-    out[#out + 1] = { key = "z:" .. tostring(z), text = zoneName(z), count = byZone[z], indent = 1 }
-  end
-  return out
+  -- (0.5.0, H2) no tree: the fields over the list do the finding (inNode still reads the old keys for callers)
+  local _ = mine + placed
+  return { { key = "all", text = L["All stints"], count = #list } }
 end
 
 local function matches(search, ...)
@@ -245,21 +239,201 @@ local function matches(search, ...)
   return false
 end
 
+---------------------------------------------------------------------------
+-- (0.5.0, H2; the user: "categorized in many ways not just places; durations, original boards, attributes of the
+-- boards, related readings, trackers, even counters. Instead of action-house like layout, employ selector field
+-- combo boxing and filtering") six fields over the list, kept for the session: Who, Where, When, Length, From,
+-- Counted. "The board's attributes" has nothing behind it (a run keeps no board look); readings, trackers and
+-- counters are one field (a reading is its counter as the player sees it; a tracker groups them).
+---------------------------------------------------------------------------
+
+local F = { who = "all", where = nil, when = "any", len = "any", from = "any", counted = nil }
+local countedCache = setmetatable({}, { __mode = "k" })   -- rec -> { [readingId] = true | false }
+local DAY = 86400
+
+local function fromWord(rec)
+  if rec.src == "board" then return rec.board or L["A board"] end
+  if rec.src == "instance" then return L["Dungeon"] end
+  if rec.src == "hand" then return L["By hand"] end
+  return ""
+end
+
+local function readingCounted(rec, rid)
+  local c = countedCache[rec]
+  if not c then c = {}; countedCache[rec] = c end
+  if c[rid] == nil then
+    local r = ns.readings[rid]
+    local v = r and Wd.RecordReading(r, rec)
+    c[rid] = type(v) == "number" and v ~= 0
+  end
+  return c[rid]
+end
+
+local function passes(rec)
+  if F.who == "char" and rec.char ~= ns.guid then return false end
+  if F.who ~= "all" and F.who ~= "char" and rec.charName ~= F.who then return false end
+  if F.where ~= nil and rec.mainZone ~= F.where then return false end
+  local age = ns.wow.now() - (rec.start or 0)
+  if F.when == "today" and age > DAY then return false end
+  if F.when == "week" and age > 7 * DAY then return false end
+  if F.when == "month" and age > 30 * DAY then return false end
+  if F.when == "older" and age <= 30 * DAY then return false end
+  local a = rec.activeSeconds or 0
+  if F.len == "short" and a >= 900 then return false end
+  if F.len == "mid" and (a < 900 or a > 3600) then return false end
+  if F.len == "long" and a <= 3600 then return false end
+  if F.from == "boards" and rec.src ~= "board" then return false end
+  if F.from == "reset" and not (rec.src == "board" and rec.atReset) then return false end
+  if F.from == "instance" and rec.src ~= "instance" then return false end
+  if F.from == "hand" and rec.src ~= "hand" then return false end
+  if F.from == "unknown" and rec.src ~= nil then return false end
+  if type(F.from) == "table" and rec.board ~= F.from.board then return false end
+  local c = F.counted
+  if c == "splits" and not rec.splits then return false end
+  if c == "items" then
+    local any = false
+    for _, Lv in pairs(rec.live or {}) do if type(Lv) == "table" and Lv.m and next(Lv.m) then any = true end end
+    if not any then return false end
+  end
+  if type(c) == "table" then
+    local ok = false
+    for _, rid in ipairs(c.readings) do if readingCounted(rec, rid) then ok = true; break end end
+    if not ok then return false end
+  end
+  return true
+end
+
 local function rows(node, search)
   local out, r = {}, headline()
   for _, rec in ipairs(records()) do
-    if inNode(rec, node) then
+    if inNode(rec, node) and passes(rec) then
       local name, where, when = stintName(rec), zoneName(rec.mainZone), whenText(rec)
-      if matches(search, name, where, when, rec.charName) then
+      if matches(search, name, where, when, rec.charName, rec.board) then
         local v, text
         if r then v, text = Wd.RecordReading(r, rec) end
         out[#out + 1] = { key = rec.id, rec = rec, headV = type(v) == "number" and v or nil, cells = {
-          when = when, name = name, where = where, active = U.duration(rec.activeSeconds), head = text or "" } }
+          when = when, name = name, where = where, from = fromWord(rec), active = U.duration(rec.activeSeconds),
+          head = text or "" } }
       end
     end
   end
   return out
 end
+
+local refresh
+local function set(k, v) return function() F[k] = v; if refresh then refresh() end end end
+
+local WHO_TEXT = { all = "All characters", char = "This character" }
+local WHEN = { { "any", "Any time" }, { "today", "Today" }, { "week", "Last 7 days" }, { "month", "Last 30 days" }, { "older", "Older" } }
+local LEN = { { "any", "Any length" }, { "short", "Under 15 minutes" }, { "mid", "15 to 60 minutes" }, { "long", "Over an hour" } }
+local FROM_TEXT = { any = "Anywhere", boards = "A board", reset = "A board, at its Reset", instance = "Dungeons", hand = "Started by hand",
+  unknown = "Unknown (before 0.5)" }
+
+local function pick(list, k) for _, e in ipairs(list) do if e[1] == k then return L[e[2]] end end return "" end
+
+local filterBar = {
+  { key = "who", label = L["Who"], width = 130,
+    text = function() return WHO_TEXT[F.who] and L[WHO_TEXT[F.who]] or F.who end,
+    active = function() return F.who ~= "all" end,
+    choices = function()
+      local items = { { text = L["All characters"], checked = F.who == "all", func = set("who", "all") },
+        { text = L["This character"], checked = F.who == "char", func = set("who", "char") } }
+      local seen = {}
+      for _, rec in ipairs(records()) do
+        if rec.charName and not seen[rec.charName] then
+          seen[rec.charName] = true
+          items[#items + 1] = { text = rec.charName, checked = F.who == rec.charName, func = set("who", rec.charName) }
+        end
+      end
+      return items
+    end },
+  { key = "where", label = L["Where"], width = 150,
+    text = function() return F.where and zoneName(F.where) or L["Anywhere"] end,
+    active = function() return F.where ~= nil end,
+    choices = function()
+      local by, zones = {}, {}
+      for _, rec in ipairs(records()) do
+        local z = rec.mainZone
+        if z ~= nil then if not by[z] then by[z] = 0; zones[#zones + 1] = z end; by[z] = by[z] + 1 end
+      end
+      table.sort(zones, function(a, b) if by[a] ~= by[b] then return by[a] > by[b] end return zoneName(a) < zoneName(b) end)
+      local items = { { text = L["Anywhere"], checked = F.where == nil, func = set("where", nil) } }
+      for _, z in ipairs(zones) do
+        items[#items + 1] = { text = format("%s  (%d)", zoneName(z), by[z]), checked = F.where == z,
+          func = function() F.where = z; refresh() end }
+      end
+      return items
+    end },
+  { key = "when", label = L["When"], width = 120, text = function() return pick(WHEN, F.when) end,
+    active = function() return F.when ~= "any" end,
+    choices = function()
+      local items = {}
+      for _, e in ipairs(WHEN) do items[#items + 1] = { text = L[e[2]], checked = F.when == e[1], func = set("when", e[1]) } end
+      return items
+    end },
+  { key = "len", label = L["Length"], width = 130, text = function() return pick(LEN, F.len) end,
+    active = function() return F.len ~= "any" end,
+    choices = function()
+      local items = {}
+      for _, e in ipairs(LEN) do items[#items + 1] = { text = L[e[2]], checked = F.len == e[1], func = set("len", e[1]) } end
+      return items
+    end },
+  { key = "from", label = L["From"], width = 150,
+    text = function() return type(F.from) == "table" and F.from.board or L[FROM_TEXT[F.from] or ""] end,
+    active = function() return F.from ~= "any" end,
+    choices = function()
+      local boards, seen = {}, {}
+      for _, rec in ipairs(records()) do
+        if rec.src == "board" and rec.board and not seen[rec.board] then
+          seen[rec.board] = true
+          boards[#boards + 1] = { text = rec.board, checked = type(F.from) == "table" and F.from.board == rec.board,
+            func = function() F.from = { board = rec.board }; refresh() end }
+        end
+      end
+      local items = { { text = L["Anywhere"], checked = F.from == "any", func = set("from", "any") },
+        { text = L["A board (any)"], checked = F.from == "boards", func = set("from", "boards") } }
+      if #boards > 0 then items[#items + 1] = { text = L["One board"], sub = boards } end
+      items[#items + 1] = { text = L["A board, at its Reset"], checked = F.from == "reset", func = set("from", "reset") }
+      items[#items + 1] = { text = L["Dungeons"], checked = F.from == "instance", func = set("from", "instance") }
+      items[#items + 1] = { text = L["Started by hand"], checked = F.from == "hand", func = set("from", "hand") }
+      items[#items + 1] = { text = L["Unknown (before 0.5)"], checked = F.from == "unknown", func = set("from", "unknown") }
+      return items
+    end },
+  { key = "counted", label = L["Counted"], width = 150,
+    text = function()
+      local c = F.counted
+      if c == nil then return L["Anything"] elseif c == "splits" then return L["Has splits"] elseif c == "items" then return L["Has an item list"] end
+      return c.title
+    end,
+    active = function() return F.counted ~= nil end,
+    choices = function()
+      local items = { { text = L["Anything"], checked = F.counted == nil, func = set("counted", nil) } }
+      local byTracker, order = {}, {}
+      for _, rid in ipairs(ns.readingOrder or {}) do
+        local r = ns.readings[rid]
+        if r and r.scopeSet and r.scopeSet.run and r.tracker then
+          if not byTracker[r.tracker] then byTracker[r.tracker] = {}; order[#order + 1] = r.tracker end
+          table.insert(byTracker[r.tracker], rid)
+        end
+      end
+      for _, tid in ipairs(order) do
+        local t = HC:GetTracker(tid)
+        local list = byTracker[tid]
+        local sub = { { text = L["Any of it"], func = function() F.counted = { title = t and t.title or tid, readings = list }; refresh() end } }
+        for _, rid in ipairs(list) do
+          local r = ns.readings[rid]
+          sub[#sub + 1] = { text = r.title, func = function() F.counted = { title = r.title, readings = { rid } }; refresh() end }
+        end
+        items[#items + 1] = { text = t and t.title or tid, sub = sub }
+      end
+      items[#items + 1] = { text = L["Has splits"], checked = F.counted == "splits", func = set("counted", "splits") }
+      items[#items + 1] = { text = L["Has an item list"], checked = F.counted == "items", func = set("counted", "items") }
+      return items
+    end },
+}
+
+local function clearFilters() F.who, F.where, F.when, F.len, F.from, F.counted = "all", nil, "any", "any", "any", nil end
+ns.StintFilters = F                -- (tests)
 
 --- One item of the detail: a label and its value (the browser draws the value right-aligned; `text` alone still
 --- reads as the label).
@@ -359,8 +533,6 @@ local function detail(row)
   return { title = stintName(rec) .. "   " .. GREY .. rangeText(rec) .. "|r", lines = lines, items = items }
 end
 
-local refresh
-
 local function confirm(text, fn)
   if ns.Boards and ns.Boards.Confirm then ns.Boards.Confirm(text, fn) else fn() end
 end
@@ -390,7 +562,13 @@ end
 
 local function footer()
   local maxKept = (ns.settings and ns.settings.maxRuns) or 500
-  return format(L["%d stints kept (Options: up to %d)"], #records(), maxKept)
+  local shown = browser and browser.rowsData or {}
+  local active = 0
+  for _, row in ipairs(shown) do active = active + (row.rec.activeSeconds or 0) end
+  if #shown < #records() then
+    return format(L["%d of %d stints \194\183 active %s in all (Options: up to %d kept)"], #shown, #records(), U.duration(active), maxKept)
+  end
+  return format(L["%d stints kept \194\183 active %s in all (Options: up to %d)"], #records(), U.duration(active), maxKept)
 end
 
 --- The header button: Start stint, or Stop and keep while one is open (dungeons open their own). A refusal (storage
@@ -416,7 +594,7 @@ function refresh()
   if not (content and content:IsShown() and browser) then return end
   for k in pairs(zoneNames) do zoneNames[k] = nil end
   local r = headline()
-  browser.spec.columns[5].title = r and r.title or ""       -- the headline may have changed (Options)
+  browser.spec.columns[6].title = r and r.title or ""       -- the headline may have changed (Options)
   local btn = browser.headerBtns[1]
   if btn then btn:SetText(HC:GetRunClock() and L["Stop and keep"] or L["Start stint"]) end
   browser:Refresh()
@@ -430,12 +608,14 @@ local function build(f)
       { key = "when", title = L["When"], width = 100, sort = function(row) return row.rec.start or 0 end },
       { key = "name", title = L["Name"] },
       { key = "where", title = L["Where"], width = 120 },
+      { key = "from", title = L["From"], width = 90 },
       { key = "active", title = L["Active"], width = 56, align = "RIGHT",
         sort = function(row) return row.rec.activeSeconds or 0 end },
       -- the headline reading (Wd.HeadlineId: the player's choice); its title is set at each refresh
       { key = "head", title = "", width = 84, align = "RIGHT", sort = function(row) return row.headV or -math.huge end },
     },
     nodes = nodes, rows = rows, detail = detail, actions = actions, footer = footer,
+    noTree = true, filterBar = filterBar, filterClear = clearFilters,
     header = {
       { text = L["Start stint"], width = 110, func = startStop, tip = startStopTip },
     },
@@ -507,7 +687,7 @@ local _ = ns.Help and ns.Help.Register(ID, {
     "Click a stint: its {Numbers}, {Counts}, what dropped, its {Best} single values and its {Splits} fill the bottom of the tab.",
     "{Rename...} it, {Copy as text} to paste it anywhere, or {Delete} it.",
     "{Start stint} at the top right starts one by hand and {Stop and keep} saves it; dungeons record themselves. /hc stint start and /hc stint stop do the same from the chat line.",
-    "{This character} and {Places} on the left narrow the list; the search box finds a stint by name, place or date.",
+    "The fields over the list narrow it: {Who}, {Where}, {When}, {Length}, {From} (a board, a dungeon, by hand) and {Counted} (a tracker or one of its numbers); {Clear} puts them back. The search box finds a stint by name, place, board or date.",
   },
   effect = "Stints are your yardstick: a big per-hour tile on a board compares what you do now with your past stints in the same place. Deleting a stint only removes that record; your counters and history are untouched.",
   tour = {

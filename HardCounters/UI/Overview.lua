@@ -48,6 +48,13 @@ local function newRow(i)
   r.btn = Wd.Button(r, "", 90, nil)
   r.btn:SetHeight(20)
   r.btn:SetPoint("RIGHT", -6, 0)
+  -- (D0) right-click anywhere on the row: its one action
+  Wd.RightMenu(r, function(self)
+    local b = self.btn
+    local click = b:IsShown() and b:GetScript("OnClick")
+    if not click then return nil end
+    return { { text = self.label:GetText() or "", title = true }, { text = b:GetText() or "", func = function() click(b) end } }
+  end)
   rows[i] = r
   return r
 end

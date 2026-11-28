@@ -472,6 +472,7 @@ local function newTab(i)
       b:HookScript("OnLeave", tabTipOff)
     end
   end
+  if b then Wd.RightMenu(b, function(self) return self.hcId and Win.TabMenuItems(self.hcId, true) end) end
   if not b then
     b = Wd.Button(main, "", 80, nil)
     b:SetHeight(22)
@@ -537,6 +538,7 @@ local function newSideTab(i)
     if not t:IsMouseEnabled() then t:EnableMouse(true) end
     local function onUp(self, button, upInside)
       if button == "LeftButton" and upInside ~= false and self.hcId then Win.Show(self.hcId, true) end
+      if button == "RightButton" and self.hcId then Win.TabMenu(self, self.hcId) end       -- (D0)
     end
     if type(t.SetCustomOnMouseUpHandler) == "function" then t:SetCustomOnMouseUpHandler(onUp)
     else t:HookScript("OnMouseUp", onUp) end
@@ -558,6 +560,7 @@ local function newSideTab(i)
     hl:SetAllPoints()
     hl:SetColorTexture(1, 1, 1, 0.15)
     t:SetScript("OnClick", function(self) if self.hcId then Win.Show(self.hcId, true) end end)
+    Wd.RightMenu(t, function(self) return self.hcId and Win.TabMenuItems(self.hcId) end)
     t:SetScript("OnEnter", sideTip)
     t:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     main.sidePlain = true
@@ -670,6 +673,35 @@ function refreshHelpButtons()
   end
 end
 Win.RefreshHelpButtons = refreshHelpButtons
+
+--- (D0) right-click on a tab: its help and tutorial; on a bottom tab also how the bottom tabs are labelled.
+function Win.TabMenuItems(id, bottom)
+  local def = defs[id]
+  if not def then return nil end
+  local has = ns.Help and ns.Help.For(id) ~= nil
+  local items = {
+    { text = def.title or id, title = true },
+    { text = L["Open"], func = function() Win.Show(id, true) end },
+    { text = format(L['Help for "%s"'], def.title or id), disabled = not has,
+      func = function() Win.Show(id, true); ns.Help.Show(id) end },
+    { text = format(L['Tutorial for "%s"'], def.title or id), disabled = not has,
+      func = function() Win.Show(id, true); ns.Help.Tour(id, 1) end },
+  }
+  if bottom then
+    local cur = labelMode()
+    local sub = {}
+    for _, m in ipairs({ { "both", "Icon and title" }, { "title", "Title only" }, { "icon", "Icon only" } }) do
+      sub[#sub + 1] = { text = L[m[2]], checked = cur == m[1], func = function() ns.settings.tabLabels = m[1]; refreshTabs() end }
+    end
+    items[#items + 1] = { text = L["Tab labels"], sub = sub }
+  end
+  return items
+end
+
+function Win.TabMenu(anchor, id)
+  local items = Win.TabMenuItems(id, false)
+  if items then ns.Menu.Show(anchor, items) end
+end
 
 --- The Help button's menu: this tab's page and tutorial (greyed on a tab with no help: a pack that brought none),
 --- the full tutorial, the Guide.
@@ -798,8 +830,9 @@ end
 --- The open tab's search box, or nil.
 local function searchBox()
   local sel = conf(MAIN).selected
-  local b = sel and ns.Browser and ns.Browser.For(Win.Content(sel))
-  return b and b.searchBox or nil
+  local content = sel and Win.Content(sel)
+  local b = content and ns.Browser and ns.Browser.For(content)
+  return (b and b.searchBox) or (content and content.searchBox) or nil   -- (a tab with a box of its own: Boards)
 end
 
 --- A key pressed while the window is shown (A3): Ctrl+K puts the cursor in the open tab's search box.

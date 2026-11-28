@@ -112,7 +112,7 @@ describe("help and tab tours", function()
       ns.ShowGuide(true)
       assert.is_true(Win.HelpItems()[4].disabled)
       ns.Menu.Show = function(_, it) items = it end
-      main.help:GetScript("OnClick")(main.help, "RightButton")
+      main.help:GetScript("OnMouseUp")(main.help, "RightButton")
       ns.Menu.Show = realShow
       assert.are.equal('Help for "Guide"', items[1].text)
       if ctx.farmer then

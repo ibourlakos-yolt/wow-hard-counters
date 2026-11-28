@@ -665,13 +665,13 @@ end
 
 --- One record for the board: its window's period (every counter: not partial), named after the board. nowOnly:
 --- not the previous period. Returns the record id.
-function M.SaveBoard(board, nowOnly)
+function M.SaveBoard(board, nowOnly, atReset)
   if not M.OnTimer(board) then return nil end
   local w = M.BoardWindow(board)
   local which = M.Savable(w)
   if not which or (nowOnly and which ~= "now") then return nil end
   local snap = which == "now" and Win.Snapshot(w) or w.prev
-  local id = ns.SaveWindowRecord(snap, board.name)
+  local id = ns.SaveWindowRecord(snap, board.name, { src = "board", board = board.name, boardId = board.id, atReset = atReset })
   if id and which == "prev" then w.prev = nil end
   return id
 end
@@ -684,7 +684,7 @@ function M.ControlAll(board, action)
   local list = M.BoardWindows(board)
   if #list == 0 then return nil end
   if action == "reset" then
-    local saved = M.SaveBoard(board, true)
+    local saved = M.SaveBoard(board, true, true)
     for _, w in ipairs(list) do w.prev = nil; Win.Restart(w) end
     return saved
   end

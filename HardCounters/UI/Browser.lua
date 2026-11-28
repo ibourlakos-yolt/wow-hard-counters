@@ -33,6 +33,10 @@
 --   hover(row, on)  -> the pointer entered (on) or left a row (the Explorer shows that board, HC-68)
 --   rowMenu(row, anchor) -> right-click on a row; without it the row's actions as a menu
 --   splitKey   -> where the splitter's place is saved (settings.windows[splitKey].detailH); nil: not saved
+--   noTree     -> true: no tree; the list takes the whole width (0.5.0: the Runs tab finds with filters instead)
+--   filterBar  -> { { key, label, width, choices = fn() -> Menu items, text = fn() -> the value shown,
+--                 active = fn() -> true when it filters } }: dropdowns in rows under the search (0.5.0, H2)
+--   filterClear -> fn(): the Clear button beside them (resets every field and the search)
 local ADDON, ns = ...
 
 local L, Wd = ns.L, ns.Widgets
@@ -146,9 +150,43 @@ function Browser.New(parent, spec)
     prev = hb
   end
 
+  -- (0.5.0, H2) the filter bar: labelled dropdowns in rows of up to four under the search row
+  b.topH = TOP_H
+  if spec.filterBar then
+    b.filterFields = {}
+    local x, row = 12, 0
+    local roomW = 760
+    for _, fdef in ipairs(spec.filterBar) do
+      local w = fdef.width or 130
+      local lw = 48
+      if x + lw + w > roomW then x, row = 12, row + 1 end
+      local y = -(TOP_H + row * 24)
+      local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+      lbl:SetPoint("TOPLEFT", x, y - 5)
+      lbl:SetWidth(lw - 4)
+      lbl:SetJustifyH("RIGHT")
+      lbl:SetText(fdef.label or "")
+      local dd = Wd.Dropdown(parent, w, function(self) ns.Menu.Show(self, fdef.choices()) end)
+      dd:SetPoint("TOPLEFT", x + lw, y)
+      dd.def, dd.label = fdef, lbl
+      b.filterFields[#b.filterFields + 1] = dd
+      x = x + lw + w + 8
+    end
+    if spec.filterClear then
+      local y = -(TOP_H + row * 24)
+      if x + 70 > roomW then row = row + 1; x = 12; y = -(TOP_H + row * 24) end
+      b.clearBtn = Wd.Button(parent, L["Clear"], 64, function() spec.filterClear(); b:SetSearch("") end)
+      b.clearBtn:SetHeight(22)
+      b.clearBtn:SetPoint("TOPLEFT", x, y)
+      tip(b.clearBtn, function() return { title = L["Clear"], text = L["Every field back to all, and the search emptied."] } end)
+    end
+    b.topH = TOP_H + (row + 1) * 24 + 2
+  end
+
   -- the tree
   local tree = panel(parent, 0.3)
-  tree:SetPoint("TOPLEFT", 4, -TOP_H)
+  tree:SetPoint("TOPLEFT", 4, -b.topH)
+  if spec.noTree then tree:Hide() end
   tree:SetPoint("BOTTOMLEFT", 4, BAR_H + GAP)
   tree:SetWidth(TREE_W)
   tree.rows = {}
@@ -233,7 +271,7 @@ end
 
 --- The detail pane's height within its bounds: at least DETAIL_MIN, and the list keeps LIST_MIN_ROWS rows.
 function B:ClampDetail(h)
-  local total = num(self.parent:GetHeight(), 400) - TOP_H - (BAR_H + GAP) - GAP - SPLIT_H
+  local total = num(self.parent:GetHeight(), 400) - self.topH - (BAR_H + GAP) - GAP - SPLIT_H
   local most = max(DETAIL_MIN, total - HEAD_H - LIST_MIN_ROWS * ROW_H)
   return floor(min(max(h, DETAIL_MIN), most) + 0.5)
 end
@@ -251,7 +289,8 @@ function B:Layout()
   local list, d, sp = self.list, self.detail, self.splitter
   local dh = self:ClampDetail(self.detailH)
   list:ClearAllPoints()
-  list:SetPoint("TOPLEFT", self.tree, "TOPRIGHT", GAP, 0)
+  if self.spec.noTree then list:SetPoint("TOPLEFT", self.parent, "TOPLEFT", 4, -self.topH)
+  else list:SetPoint("TOPLEFT", self.tree, "TOPRIGHT", GAP, 0) end
   list:SetPoint("BOTTOMRIGHT", self.parent, "BOTTOMRIGHT", -4, BAR_H + GAP + dh + SPLIT_H)
   sp:ClearAllPoints()
   sp:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, 0)
@@ -264,18 +303,19 @@ end
 
 function B:ListWidth()
   local w = num(self.parent:GetWidth(), 600)
+  if self.spec.noTree then return max(w - 8, 100) end
   return max(w - 4 - TREE_W - GAP - 4, 100)
 end
 
 function B:VisibleRows()
   local h = num(self.parent:GetHeight(), 400)
-  local listH = h - TOP_H - (BAR_H + GAP + (self.layoutDH or self.detailH) + SPLIT_H)
+  local listH = h - self.topH - (BAR_H + GAP + (self.layoutDH or self.detailH) + SPLIT_H)
   return max(1, floor((listH - HEAD_H) / ROW_H))
 end
 
 function B:TreeRows()
   local h = num(self.parent:GetHeight(), 400)
-  return max(1, floor((h - TOP_H - BAR_H - GAP - 8) / NODE_H))
+  return max(1, floor((h - self.topH - BAR_H - GAP - 8) / NODE_H))
 end
 
 local function level(node) return node.level or node.indent or 0 end
@@ -511,6 +551,19 @@ function B:Head(i)
     self:Refresh()
   end)
   tip(h, function() return { title = h.text:GetText() or "", click = L["Click: sort by this column; again: the other way."] } end)
+  -- (D0) right-click: sort by any column, or the other way
+  Wd.RightMenu(h, function()
+    local items = { { text = L["Sort by"], title = true } }
+    for _, c in ipairs(self:ColumnSpec()) do
+      if (c.title or "") ~= "" then
+        items[#items + 1] = { text = c.title, checked = self.sortKey == c.key,
+          func = function() self.sortKey, self.sortDesc = c.key, false; self:Refresh() end }
+      end
+    end
+    items[#items + 1] = { text = L["Reverse"], disabled = self.sortKey == nil,
+      func = function() self.sortDesc = not self.sortDesc; self:Refresh() end }
+    return items
+  end)
   list.heads[i] = h
   return h
 end
@@ -863,6 +916,11 @@ function B:Refresh()
   if self.filterBtn then
     local active = spec.filtersActive and spec.filtersActive()
     self.filterBtn:SetText(active and (L["Filters"] .. " *") or L["Filters"])
+  end
+  for _, dd in ipairs(self.filterFields or {}) do
+    dd:SetText(dd.def.text and dd.def.text() or "")
+    local on = dd.def.active and dd.def.active()
+    if dd.value then dd.value:SetTextColor(on and 1 or 0.9, on and 0.82 or 0.9, on and 0 or 0.9) end
   end
   self:Draw()
 end
