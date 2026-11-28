@@ -67,15 +67,27 @@ end
 -- (0.5.0) a Big value too wide for its room steps down a font size (Big stops at 16 pt, Big half width goes to 12):
 -- checked only when the text's length changed, so a steady tile costs nothing
 local BIG_FONTS = { "GameFontNormalHuge", "GameFontNormalLarge", "GameFontHighlight" }
+
+-- (0.5.0-beta2, a tester's report: 2,094 caught errors in one session) a stat the game hides in combat is handed to
+-- the font string as a secret (CS-9's pass-through); the string's text and width are secret then too, and neither
+-- may be measured or added. These read them as nothing, so the fitting and the arrow skip that redraw.
+local function isSecret(v) return ns.wow.isSecret and ns.wow.isSecret(v) or false end
+local function plainWidth(fs)
+  local w = fs:GetStringWidth()
+  if type(w) ~= "number" or isSecret(w) then return nil end
+  return w
+end
+
 local function fitValue(fs, room, last)
-  local t = fs:GetText() or ""
+  local t = fs:GetText()
+  if t == nil or isSecret(t) then return end            -- a hidden value keeps the font it has
   local len = #t
   if fs.fitLen == len and fs.fitRoom == room then return end
   fs.fitLen, fs.fitRoom = len, room
   for k = 1, last do
     fs:SetFontObject(BIG_FONTS[k])
-    local w = fs:GetStringWidth()
-    if type(w) ~= "number" or w <= room or k == last then return end
+    local w = plainWidth(fs)
+    if not w or w <= room or k == last then return end
   end
 end
 
@@ -698,8 +710,8 @@ local function drawCell(w, cell, board, idx)
   if cell.foot == "heroHalf" then
     local on = M.TrendBadge(tile, board) ~= nil
     fitValue(cell.value, colW - (on and 18 or 0), 3)
-    local vw = cell.value:GetStringWidth()
-    if on and type(vw) == "number" and vw + 18 > colW then on = false end   -- 12 pt and still no room: no arrow
+    local vw = plainWidth(cell.value)
+    if on and (not vw or vw + 18 > colW) then on = false end   -- 12 pt and still no room (or hidden): no arrow
     if on then
       cell.arrow:ClearAllPoints()
       cell.arrow:SetPoint("LEFT", cell.value, "LEFT", math.min(vw, colW) + 4, 0)
@@ -713,8 +725,8 @@ local function drawCell(w, cell, board, idx)
       cell.arrow:SetPoint("RIGHT", cell.value, "LEFT", -3, 0)
     end
   else
-    local vw = cell.value:GetStringWidth()
-    if type(vw) == "number" and vw + 16 <= colW and drawArrow(cell.arrow, tile, board) then
+    local vw = plainWidth(cell.value)
+    if vw and vw + 16 <= colW and drawArrow(cell.arrow, tile, board) then
       cell.arrow:ClearAllPoints()
       cell.arrow:SetPoint("LEFT", cell.value, "LEFT", vw + 4, 0)
     else
@@ -774,8 +786,8 @@ local function drawRow(w, board)
       w.trend:SetText(ns.TrendText(tv))
       w.trend:SetTextColor(c[1], c[2], c[3])
       -- (0.5.0) words that don't fit beside the number: the arrow alone
-      local vw, tw = w.value:GetStringWidth(), w.trend:GetStringWidth()
-      if type(vw) == "number" and type(tw) == "number" and vw + 6 + 14 + 1 + tw > room then w.trend:SetText("") end
+      local vw, tw = plainWidth(w.value), plainWidth(w.trend)
+      if not (vw and tw) or vw + 6 + 14 + 1 + tw > room then w.trend:SetText("") end
       if ARROW[ts] then
         w.trendArrow:SetTexture(ARROW[ts])
         -- the arrow art is gold: grey it first so the tint matches the words (red on gold drew orange, 2026-11-20)

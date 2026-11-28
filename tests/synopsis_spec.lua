@@ -285,3 +285,58 @@ describe("a card in the Boards tab", function()
     end)
   end)
 end)
+
+-- 0.5.0-beta2, a tester's report (a mage, 2,094 caught errors): in combat a stat's value reaches its font string as a
+-- secret, and 0.5's fitting and arrow measured that text: "attempt to get length of local 't' (a secret string
+-- value)", "attempt to perform arithmetic on local 'vw' (a secret number value)"
+describe("a tile showing a value the game hides in combat", function()
+  it("is never measured: Big, Big half width and Medium tiles draw without an error", function()
+    UI.with(function(ctx)
+      local HC, ns = ctx.HC, ctx.hc
+      HC:RegisterPack("TestSecretFit", { namespace = "tsf" })
+      local secret = ctx.env:secretValue()
+      HC:RegisterReading("tsf:crit", { title = "Crit", scopes = { "now" }, formatter = "percent",
+        compute = function() return 5 end, stale = function() return true, "in combat" end,
+        live = function() return secret end })
+      local M, B = ns.BoardModel, ns.Boards
+      local b = M.Create(nil, { name = "Secret", shown = true })
+      for _, size in ipairs({ "large", "largeHalf", "half", "half", "line" }) do
+        local t = M.AddReading(b, "tsf:crit")
+        t.scope = "now"
+        M.SetSize(t, size)
+      end
+      B.Refresh(b.id, true)
+      -- what the game does with a secret handed to a font string: its text and width are secret too. In the game a
+      -- secret is still a string or a number (type() says so) that refuses # and arithmetic; here a real string and
+      -- number marked secret, and the font string counts every refit it is asked for
+      ctx.env.secret["12.5%"] = true
+      ctx.env.secret[4321.25] = true
+      local refits = 0
+      local function hide(fs)
+        if not fs then return end
+        fs.GetText = function() return "12.5%" end
+        fs.GetStringWidth = function() return 4321.25 end
+        fs.SetFontObject = function() refits = refits + 1 end
+      end
+      local f = B.Frame(b.id)
+      local kinds = {}
+      for _, w in ipairs(f.rowFrames) do
+        kinds[#kinds + 1] = w.row.kind
+        hide(w.value)
+        hide(w.trend)
+        for _, c in ipairs(w.cells or {}) do hide(c.value) end
+      end
+      assert.truthy(table.concat(kinds, ","):find("hero", 1, true))
+      assert.truthy(table.concat(kinds, ","):find("grid", 1, true))
+      for _, w in ipairs(f.rowFrames) do for _, c in ipairs(w.cells or {}) do c.value.fitLen = nil end end
+      for _, w in ipairs(f.rowFrames) do if w.value then w.value.fitLen = nil end end
+      B.Refresh(b.id)
+      B.Refresh(b.id)
+      assert.are.equal(0, refits)                                  -- never measured, never refitted
+      for _, w in ipairs(f.rowFrames) do
+        for _, c in ipairs(w.cells or {}) do assert.is_false(c.arrow:IsShown()) end
+      end
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)

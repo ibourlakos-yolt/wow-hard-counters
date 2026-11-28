@@ -15,6 +15,10 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 - The tutorial's HUD step names the Hide tab and Alt+click; the Guide too.
 
 ### Fixed
+- **In combat, a board with Character Stats numbers logged an error at every redraw** (a tester's report: over two
+  thousand in one session; BugSack stayed quiet, the numbers still showed). The game hides those stats in combat and
+  0.5's Big and Medium tiles tried to measure them to fit the number and the trend arrow. A hidden value is no longer
+  measured: it keeps its size, with no arrow, until the fight ends.
 - The HUD tooltip's backup close (a click off its board, for a game client without the click event) never ran.
 
 ## 0.5.0-beta1 (2026-11-28)
