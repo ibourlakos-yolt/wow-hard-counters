@@ -1282,7 +1282,7 @@ describe("the Boards tab and the New board dialog", function()
       -- a rule names itself
       pocket.show.runOnly = true
       ns.RefreshExplorer()
-      assert.truthy(rowFor("^Pocket").cells[2]:GetText():find("only during stints", 1, true))
+      assert.truthy(rowFor("^Pocket").cells[2]:GetText():find("only during runs", 1, true))
       -- select it: + Tile, the clock, the On HUD switch, Edit on screen; the rest under More...
       row = rowFor("^Pocket")
       row:GetScript("OnClick")(row, "LeftButton")

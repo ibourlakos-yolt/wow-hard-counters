@@ -19,7 +19,7 @@ end
 local function click(b) b:GetScript("OnClick")(b, "LeftButton") end
 
 describe("stints", function()
-  it("has the stint names of the run API: the same functions under the player's word", function()
+  it("has the run names of the run API: the same functions under the player's word", function()
     local env = boot()
     local HC, ns = env.HC, env.ns
     assert.is_true(HC:Supports("stints"))
@@ -49,7 +49,7 @@ describe("stints", function()
     assert.is_nil(HC:GetStint())
   end)
 
-  it("is a tab on the shared browser: places, the detail at the bottom, actions, Start stint and Stop and keep", function()
+  it("is a tab on the shared browser: places, the detail at the bottom, actions, Start run and Stop and keep", function()
     local sv = { profiles = { Default = { windows = { _main = { selected = "runs" }, runs = { scale = 1 } } } } }
     UI.with(function(ctx)
       local HC, ns, env = ctx.HC, ctx.hc, ctx.env
@@ -59,7 +59,7 @@ describe("stints", function()
       assert.are_not.equal("runs", ns.settings.windows._main.selected)
       assert.is_nil(ns.settings.windows.runs)
       local def = Win.Def("stints")
-      assert.are.equal("Stints", def.title)
+      assert.are.equal("Runs", def.title)
       assert.are.equal(4, def.tabOrder)
       assert.truthy(def.about)
       assert.is_nil(Win.Def("runs"))
@@ -94,7 +94,7 @@ describe("stints", function()
       assert.are.equal("Goldshire", row.cells.name)
       assert.are.equal(HC:ZoneName(1429), row.cells.where)
       assert.are.equal("10:00", row.cells.active)
-      assert.are.equal("Stint #" .. b, br.rowsData[1].cells.name)  -- no name: its number
+      assert.are.equal("Run #" .. b, br.rowsData[1].cells.name)  -- no name: its number
       -- (0.5.0, H2) the fields narrow the list: Where, Length, From, Counted; Clear puts them back
       local F = ns.StintFilters
       assert.are.equal(6, #br.filterFields)
@@ -147,8 +147,8 @@ describe("stints", function()
       assert.are.equal("Westfall loop", HC:GetStintRecord(a).label)
       br.spec.actions(br:SelectedRow())[2].func()                     -- (0.5.0) in the detail pane, not a window
       assert.truthy(br.textPane.title:GetText():find("Westfall loop", 1, true))
-      assert.truthy(br.textPane.edit:GetText():find("Stint: Westfall loop", 1, true))
-      assert.truthy(br.footer:GetText():find("2 stints kept", 1, true))
+      assert.truthy(br.textPane.edit:GetText():find("Run: Westfall loop", 1, true))
+      assert.truthy(br.footer:GetText():find("2 runs kept", 1, true))
       ns.Boards.Confirm = function(_, fn) fn() end
       br.spec.actions(br:SelectedRow())[3].func()
       assert.is_nil(HC:GetStintRecord(a))
@@ -156,17 +156,17 @@ describe("stints", function()
       assert.is_nil(br.selected)
       -- the header: Start stint, then Stop and keep while one is open
       local head = br.headerBtns[1]
-      assert.are.equal("Start stint", head:GetText())
+      assert.are.equal("Start run", head:GetText())
       click(head)
       assert.truthy(HC:GetStint())
       assert.are.equal("Stop and keep", head:GetText())
       env:advance(30)
       click(head)
       assert.is_nil(HC:GetStint())
-      assert.are.equal("Start stint", head:GetText())
+      assert.are.equal("Start run", head:GetText())
       assert.are.equal(2, #br.rowsData)
       -- the chat line: /hc stint, and the names before 0.4.0 still work unlisted
-      _G.SlashCmdList.HARDCOUNTERS("stint start Mine")
+      _G.SlashCmdList.HARDCOUNTERS("run start Mine")
       assert.are.equal("Mine", HC:GetStint().label)
       _G.SlashCmdList.HARDCOUNTERS("run stop")
       assert.is_nil(HC:GetStint())
@@ -174,14 +174,14 @@ describe("stints", function()
       assert.is_false(Win.IsShown("stints"))
       local listed = {}
       for _, c in ipairs(ns.SlashList()) do listed[c.name] = true end
-      assert.is_true(listed.stints and listed.stint)
-      assert.is_nil(listed.runs or listed.run)
+      assert.is_true(listed.runs and listed.run)                    -- (0.5.0, H1) runs again; stints unlisted
+      assert.is_nil(listed.stints or listed.stint)
       assert.are.same({}, env.errors)
     end, { settings = sv })
   end)
 end)
 
-describe("where a stint came from (0.5.0, H2)", function()
+describe("where a run came from (0.5.0, H2)", function()
   it("records a board's name, and whether its Reset saved it", function()
     UI.with(function(ctx)
       local HC, ns, env = ctx.HC, ctx.hc, ctx.env

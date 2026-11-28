@@ -230,7 +230,7 @@ STEPS = {
       return lines(
         format(L["This is the Hard Counters window. %s opens it; so do the minimap button and the game's AddOns menu."], gold("/hc")),
         "",
-        bullet(L["The icon tabs down its right edge are Hard Counters' own: Boards, Explorer, Packs, Stints and Guide. Hover one for its name."]),
+        bullet(L["The icon tabs down its right edge are Hard Counters' own: Boards, Explorer, Packs, Runs and Guide. Hover one for its name."]),
         bullet(L["The tabs along the bottom: Overview (where everything stands), the packs' own tabs, Options, Report a problem, and Diagnostics when it is on."]),
         bullet(L["Under the title, one line says what the open tab is for."]),
         bullet(format(L["At the top right, on every tab: %s. It has a page and a short tutorial for the open tab, this tutorial again, and the Guide."],
@@ -277,24 +277,24 @@ STEPS = {
           or L["Do it now if you like: this window stays open, and the tutorial waits."])
     end },
 
-  { title = L["Stints: stretches you kept"], tab = "stints",
+  { title = L["Runs: stretches you kept"], tab = "stints",
     text = function()
       return lines(
-        L["A stint is a stretch of play saved with its numbers: how long, how much gold and XP, what dropped."],
+        L["A run is a stretch of play saved with its numbers: how long, how much gold and XP, what dropped."],
         "",
-        bullet(L["Dungeons record themselves: walk in, and when you leave the stint is here."]),
-        bullet(L["Any board can save its clock's stretch as a stint (its menu: Save as stint)."]),
-        bullet(format(L["%s and %s do it from the chat line."], gold("/hc stint start"), gold("/hc stint stop"))),
-        bullet(L["Click a stint for its details below the list. A big number on a board compares itself with your past stints in the same zone."]))
+        bullet(L["Dungeons record themselves: walk in, and when you leave the run is here."]),
+        bullet(L["Any board can save its clock's stretch as a run (its menu: Save as run)."]),
+        bullet(format(L["%s and %s do it from the chat line."], gold("/hc run start"), gold("/hc run stop"))),
+        bullet(L["Click a run for its details below the list. A big number on a board compares itself with your past runs in the same zone."]))
     end },
 
   { title = L["Overview and Options, along the bottom"], tab = "overview",
     text = function()
       return lines(
-        L["The Overview tab is where everything stands for this character: packs, trackers, boards and whether they are on your HUD, the open stint, how much history is kept. Anything that needs a look is listed first, amber, with the click that fixes it."],
+        L["The Overview tab is where everything stands for this character: packs, trackers, boards and whether they are on your HUD, the open run, how much history is kept. Anything that needs a look is listed first, amber, with the click that fixes it."],
         "",
         bullet(L["Options (along the bottom too) holds every setting: the window, boards, history and storage, profiles. /hc options opens it."]),
-        bullet(L["Options, History: how many stints are kept, how many days, hours and weeks of history, and when your day ends (midnight by default)."]))
+        bullet(L["Options, History: how many runs are kept, how many days, hours and weeks of history, and when your day ends (midnight by default)."]))
     end },
 
   { title = L["The packs' tabs"],
@@ -313,7 +313,7 @@ STEPS = {
   { title = L["Guide: all of this, any time"], tab = "guide",
     text = function()
       return lines(
-        L["That's the tutorial. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, stints, the packs, every /hc command, and where pack authors start."],
+        L["That's the tutorial. The Guide tab has what it said and more: the concepts, boards and tiles in depth, history, runs, the packs, every /hc command, and where pack authors start."],
         "",
         bullet(format(L["%s, at the top of this window on every tab: %s starts this tutorial again (so does %s); the two above it are about the open tab only, its help page and its own short tutorial."], gold(L["Help"]), gold(L["Full tutorial"]), gold("/hc tutorial"))),
         bullet(format(L["%s lists every command. When something breaks, the %s tab along the bottom (or %s) makes a report to paste."], gold("/hc help"), gold(L["Report a problem"]), gold("/hc report"))),

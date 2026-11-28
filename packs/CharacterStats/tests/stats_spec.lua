@@ -231,7 +231,7 @@ describe("Character Stats, phase 1 (live readings)", function()
     assert.are.same({ "hcstats:mage.caster" }, by["Your class"].keys)
     assert.are.equal(17, #by["Other classes"].keys)
     assert.is_nil(by["Roles"])                                  -- (0.5.0) no role boards: no Roles group
-    -- the design's tiles, in order (sizes on a core before 0.5: Big, half width and Line, half width read "half")
+    -- the design's tiles, in order, on the 0.5 core (which has Big, half width and Line, half width)
     local function list(key)
       local out = {}
       for _, t in ipairs(M.PRESETS[key].tiles) do
@@ -241,13 +241,13 @@ describe("Character Stats, phase 1 (live readings)", function()
       return out
     end
     assert.are.same({ "armor/large", "health/half", "sta/half", "dodge/half", "parry/half", "block/half", "blockvalue/half",
-      "defense/line/bar", "hit/half", "ap/half" }, list("hcstats:warrior.tank"))
-    assert.are.same({ "spelldmg/large", "spellcrit/half", "spellhit/half", "spelldmg:3/half", "spelldmg:5/half",
-      "spelldmg:7/half", "int/half", "power/half", "mp5cast/half", "fsr/line/bar" }, list("hcstats:mage.caster"))
-    assert.are.same({ "spelldmg:6/large", "spellcrit:6/half", "spellhit/half", "spelldmg:3/half", "spellcrit:3/half",
-      "sta/half", "int/half", "health/half", "spellpen/half", "fsr/line/bar" }, list("hcstats:warlock.caster"))
-    assert.are.same({ "ap/large", "crit/half", "hit/half", "mhdps/half", "ohdps/half", "mhspeed/half", "ohspeed/half",
-      "agi/half", "str/half", "mainskill/line/bar", "offskill/line/bar" }, list("hcstats:rogue.melee"))
+      "defense/line/bar", "hit/lineHalf", "ap/lineHalf" }, list("hcstats:warrior.tank"))
+    assert.are.same({ "spelldmg/large", "spellcrit/largeHalf", "spellhit/largeHalf", "spelldmg:3/half", "spelldmg:5/half",
+      "spelldmg:7/half", "int/half", "power/lineHalf", "mp5cast/lineHalf", "fsr/line/bar" }, list("hcstats:mage.caster"))
+    assert.are.same({ "spelldmg:6/large", "spellcrit:6/largeHalf", "spellhit/largeHalf", "spelldmg:3/half", "spellcrit:3/half",
+      "sta/half", "int/half", "health/lineHalf", "spellpen/lineHalf", "fsr/line/bar" }, list("hcstats:warlock.caster"))
+    assert.are.same({ "ap/large", "crit/largeHalf", "hit/largeHalf", "mhdps/half", "ohdps/half", "mhspeed/half", "ohspeed/half",
+      "agi/lineHalf", "str/lineHalf", "mainskill/line/bar", "offskill/line/bar" }, list("hcstats:rogue.melee"))
     -- the same tiles, kept apart by class: a shaman should not have to guess the paladin's healer board is theirs
     assert.are.same(list("hcstats:paladin.healer"), list("hcstats:shaman.healer"))
     assert.are.equal("Spell damage: Shadow", M.TileTitle(M.Create("hcstats:priest.caster").tiles[1]))
@@ -278,7 +278,7 @@ describe("Character Stats, phase 1 (live readings)", function()
     assert.are.equal("largeHalf", w.tiles[2].size)
     assert.are.equal("lineHalf", got["hcstats:warrior.tank"].tiles[9].size)
     assert.are.equal("melee", w.role)
-    assert.is_false(supports(HC, "tileSizes5"))                -- (today's core: an unknown feature answers false)
+    assert.is_true(supports(HC, "tileSizes5"))                 -- (the 0.5 core has them)
   end)
 
   it("reads regeneration per 5 seconds and per second, from spirit, haste and healing crit (2026-11-25)", function()

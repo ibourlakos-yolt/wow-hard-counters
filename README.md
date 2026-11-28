@@ -32,7 +32,7 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
    tutorial) runs it again.
    A new character starts with no boards: the **Boards** tab's *New board...* makes the first one.
 3. Open Hard Counters with **`/hc`**, the **minimap button**, or the game's **AddOns menu**. Its **Guide** tab is the
-   manual: the concepts, boards and tiles, history, stints, the packs and every command. The **Overview** tab (along
+   manual: the concepts, boards and tiles, history, runs, the packs and every command. The **Overview** tab (along
    the bottom) says where everything stands, and what needs a look; **Options** sits beside it.
 
 **Boards** are the panels that stay on screen while you play. Each one holds tiles, and each tile shows one reading.
@@ -43,10 +43,10 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
   - Right-click a tile to change it: big number, row, **bar toward a target**, **gauge**, total or per hour,
     character or whole account, or a target of your own.
 - **The board's clock:** start, pause and reset the board's timer; a tile can follow the board (this session, today,
-  this stint...). Dungeons record themselves as **stints**; any other stretch of play can be saved as one.
+  this run...). Dungeons record themselves as **runs**; any other stretch of play can be saved as one.
 - **History comes with your tiles.** Placing a tile switches its tracker on, with daily totals (90 days by default),
   unless you chose that tracker's history yourself. The **Explorer** tab lists every tracker with what it keeps and
-  what it takes on disk; **Options ▸ History** sets how long days, hours and weeks are kept, how many stints are
+  what it takes on disk; **Options ▸ History** sets how long days, hours and weeks are kept, how many runs are
   kept, and when your day ends.
 
 ### Commands
@@ -56,9 +56,9 @@ One download, five addon folders. Choose the packs you want in the window's **Pa
 | `/hc` | Open the Hard Counters window |
 | `/hc tutorial` | The full tutorial, from its first step; `/hc tutorial <tab>` that tab's own |
 | `/hc guide` | The Guide tab (`/hc guide commands`: straight to a page) |
-| `/hc boards`, `/hc explorer`, `/hc stints`, `/hc overview`, `/hc options` | Those tabs (`/hc trackers`: the Explorer on Trackers) |
+| `/hc boards`, `/hc explorer`, `/hc runs`, `/hc overview`, `/hc options` | Those tabs (`/hc trackers`: the Explorer on Trackers) |
 | `/hc board` | List your boards; `/hc board <name>` puts one on your HUD or takes it off; `/hc board new` makes one |
-| `/hc stint start [label]`, `/hc stint stop` | Record a stint by hand (`/hc run` still works) |
+| `/hc run start [label]`, `/hc run stop` | Record a run by hand (`/hc run` still works) |
 | `/hc ledger` | Farmer's money Ledger |
 | `/hc stats` | The Character Stats window |
 | `/hc edit` | Edit every board |

@@ -216,9 +216,9 @@ function C.Detail(row)
       { text = L["In instances"], status = { text = L[RULE_WORD[show.instance == "hide" and "hide" or "show"]],
         on = show.instance ~= "hide", func = function() setShow("instance", show.instance == "hide" and "show" or "hide") end,
         tip = { title = L["In instances"], text = L["Shows or hides in dungeons and raids."], click = L["Click: switch."] } } },
-      { text = L["Only during a stint"], status = { text = show.runOnly and L["Yes"] or L["No"], on = show.runOnly and "warn" or false,
+      { text = L["Only during a run"], status = { text = show.runOnly and L["Yes"] or L["No"], on = show.runOnly and "warn" or false,
         func = function() setShow("runOnly", not show.runOnly) end,
-        tip = { title = L["Only during a stint"], text = L["Yes: on your HUD only while a stint is open (a dungeon, or one you started)."],
+        tip = { title = L["Only during a run"], text = L["Yes: on your HUD only while a run is open (a dungeon, or one you started)."],
           click = L["Click: switch."] } } },
       { text = L["Faded until hovered"], status = { text = show.mouseoverFade and L["Yes"] or L["No"], on = show.mouseoverFade and "warn" or false,
         func = function() setShow("mouseoverFade", not show.mouseoverFade) end,
@@ -302,7 +302,7 @@ local function boardActions(b)
       tip = { title = L["The board's clock"], state = st == "running" and L["Now: running"] or L["Now: paused"], on = st == "running",
         text = L["Its tiles count over this clock: pause it for a break."], click = st == "running" and L["Click: pause."] or L["Click: start."] } }
     acts[#acts + 1] = { text = L["Reset"], func = function() Bo().Control(b, "reset"); refreshAll() end,
-      tip = { title = L["Reset"], text = L["The clock and its tiles start from zero. Real play since the last start is saved as a stint first."] } }
+      tip = { title = L["Reset"], text = L["The clock and its tiles start from zero. Real play since the last start is saved as a run first."] } }
   end
   local hud = hudSwitch(b)
   acts[#acts + 1] = { text = hud.text, status = true, on = hud.on, func = hud.func, tip = hud.tip }
@@ -316,7 +316,7 @@ local function boardActions(b)
       func = function() Bo().ShowNow(b.id); refresh() end },
     { text = L["Reset position"], tip = L["Back to the centre of the screen at its normal size."],
       func = function() Bo().ResetPosition(b); refresh() end },
-    { text = L["Save as stint"], tip = L["Keep what its clock counted so far as a stint (the Stints tab)."],
+    { text = L["Save as run"], tip = L["Keep what its clock counted so far as a run (the Runs tab)."],
       func = function() Bo().SaveBoard(b); refresh() end, disabled = not st },
     { text = L["Look"], sub = Bo().LookItems(b), func = function() end,
       tip = L["Opacity, background, the numbers' colour and scale on your HUD."] },

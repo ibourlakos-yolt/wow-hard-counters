@@ -89,7 +89,7 @@ local function liveIds(rec)
   return out
 end
 
-local function stintName(rec) return rec.label or format(L["Stint #%d"], rec.id or 0) end
+local function stintName(rec) return rec.label or format(L["Run #%d"], rec.id or 0) end
 
 local function whenText(rec) return date("%Y-%m-%d %H:%M", rec.start or 0) end
 
@@ -131,7 +131,7 @@ end
 --- Every number of a kept stint as plain text.
 function ns.RunSummaryText(rec)
   local out = {}
-  out[#out + 1] = format(L["Stint: %s"], stintName(rec)) .. (rec.charName and ("  (" .. rec.charName .. ")") or "")
+  out[#out + 1] = format(L["Run: %s"], stintName(rec)) .. (rec.charName and ("  (" .. rec.charName .. ")") or "")
   out[#out + 1] = format(L["%s   active %s, elapsed %s%s"], rangeText(rec), U.duration(rec.activeSeconds),
     U.duration(rec.elapsed), rec.mainZone and ("   " .. format(L["in %s"], zoneName(rec.mainZone))) or "")
   out[#out + 1] = ""
@@ -227,7 +227,7 @@ local function nodes()
   end)
   -- (0.5.0, H2) no tree: the fields over the list do the finding (inNode still reads the old keys for callers)
   local _ = mine + placed
-  return { { key = "all", text = L["All stints"], count = #list } }
+  return { { key = "all", text = L["All runs"], count = #list } }
 end
 
 local function matches(search, ...)
@@ -547,7 +547,7 @@ local function detail(row)
     local cmp = avg and BM.CompareText(v, avg)
     if cmp then
       items[#items + 1] = { text = format(L["%s against your average there"], r.title),
-        value = cmp:gsub(" vs your average here", "") .. "  " .. GREY .. format(L["(%d stints)"], cnt) .. "|r" }
+        value = cmp:gsub(" vs your average here", "") .. "  " .. GREY .. format(L["(%d runs)"], cnt) .. "|r" }
     end
   end
   numberItems(rec, items)
@@ -569,15 +569,15 @@ local function actions(row)
   if not row then return {} end
   local rec = row.rec
   return {
-    { text = L["Rename..."], tip = L["Give this stint a name of your own (a dungeon names its stint after itself)."],
+    { text = L["Rename..."], tip = L["Give this run a name of your own (a dungeon names its run after itself)."],
       func = function()
-        askText(L["Stint name"], rec.label or "", function(s) HC:RenameRun(rec.id, s); refresh() end)
+        askText(L["Run name"], rec.label or "", function(s) HC:RenameRun(rec.id, s); refresh() end)
       end },
-    { text = L["Copy as text"], tip = L["Every number of this stint as plain text, to paste anywhere."],
-      func = function() browser:ShowText(format(L["Stint: %s"], stintName(rec)), ns.RunSummaryText(rec)) end },
+    { text = L["Copy as text"], tip = L["Every number of this run as plain text, to paste anywhere."],
+      func = function() browser:ShowText(format(L["Run: %s"], stintName(rec)), ns.RunSummaryText(rec)) end },
     { text = L["Delete"], tip = L["Removes this record only: your counters, history and boards don't change."],
       func = function()
-        confirm(format(L["Delete the stint %s? Your counts don't change."], stintName(rec)), function()
+        confirm(format(L["Delete the run %s? Your counts don't change."], stintName(rec)), function()
           HC:DeleteRun(rec.id)                        -- HC_RUN_DELETED refreshes the tab
         end)
       end },
@@ -590,9 +590,9 @@ local function footer()
   local active = 0
   for _, row in ipairs(shown) do active = active + (row.rec.activeSeconds or 0) end
   if #shown < #records() then
-    return format(L["%d of %d stints \194\183 active %s in all (Options: up to %d kept)"], #shown, #records(), U.duration(active), maxKept)
+    return format(L["%d of %d runs \194\183 active %s in all (Options: up to %d kept)"], #shown, #records(), U.duration(active), maxKept)
   end
-  return format(L["%d stints kept \194\183 active %s in all (Options: up to %d)"], #records(), U.duration(active), maxKept)
+  return format(L["%d runs kept \194\183 active %s in all (Options: up to %d)"], #records(), U.duration(active), maxKept)
 end
 
 --- The header button: Start stint, or Stop and keep while one is open (dungeons open their own). A refusal (storage
@@ -607,11 +607,11 @@ end
 local function startStopTip()
   local active, elapsed, state = HC:GetRunClock()
   if not active then
-    return L["Starts a stint now: everything counted from here is in it until Stop and keep. Dungeons start their own."]
+    return L["Starts a run now: everything counted from here is in it until Stop and keep. Dungeons start their own."]
   end
   local run = HC:GetRun()
-  return format(L["Ends the open stint (%s: %s, active %s, elapsed %s) and keeps it in this list."],
-    run and (run.label or format(L["Stint #%d"], run.id)) or "", L[state or ""], U.duration(active), U.duration(elapsed))
+  return format(L["Ends the open run (%s: %s, active %s, elapsed %s) and keeps it in this list."],
+    run and (run.label or format(L["Run #%d"], run.id)) or "", L[state or ""], U.duration(active), U.duration(elapsed))
 end
 
 function refresh()
@@ -620,7 +620,7 @@ function refresh()
   local r = headline()
   browser.spec.columns[6].title = r and r.title or ""       -- the headline may have changed (Options)
   local btn = browser.headerBtns[1]
-  if btn then btn:SetText(HC:GetRunClock() and L["Stop and keep"] or L["Start stint"]) end
+  if btn then btn:SetText(HC:GetRunClock() and L["Stop and keep"] or L["Start run"]) end
   browser:Refresh()
 end
 ns.RefreshRunList = refresh
@@ -641,22 +641,22 @@ local function build(f)
     nodes = nodes, rows = rows, detail = detail, actions = actions, footer = footer,
     noTree = true, filterBar = filterBar, filterClear = clearFilters,
     header = {
-      { text = L["Start stint"], width = 110, func = startStop, tip = startStopTip },
+      { text = L["Start run"], width = 110, func = startStop, tip = startStopTip },
     },
     empty = function(node, search)
       if search ~= "" then return L["Nothing matches the search."] end
       if node == "all" then
-        return L["No stints yet: walk into a dungeon, or use Start stint at the top right."]
+        return L["No runs yet: walk into a dungeon, or use Start run at the top right."]
       end
-      return L["No stints here."]
+      return L["No runs here."]
     end,
-    noSelection = L["Click a stint for its numbers: totals, per hour, what dropped, its best and its splits."],
+    noSelection = L["Click a run for its numbers: totals, per hour, what dropped, its best and its splits."],
   })
   ns.StintsBrowser = browser
 end
 
 Win.Register(ID, {
-  title = L["Stints"], icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", tabOrder = 4,
+  title = L["Runs"], icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", tabOrder = 4,
   about = L["Stretches of play you kept, each with its numbers: dungeons, farming rounds, board timers."],
   width = 720, height = 440, minWidth = 600, minHeight = 360,
   build = build, onShow = function() refresh() end,
@@ -700,24 +700,25 @@ HC.RegisterCallback(owner, "HC_RUN_STARTED", function() refresh() end)
 HC.RegisterCallback(owner, "HC_RUN_STOPPED", function() refresh() end)
 HC.RegisterCallback(owner, "HC_RUN_DELETED", function() refresh() end)
 
-ns.AddSlash("stints", function() ns.ToggleRunList() end, L["the Stints tab: stretches of play you kept, with their numbers"])
-ns.AddSlash("runs", function() ns.ToggleRunList() end)              -- (its name before 0.4.0; not listed)
+-- (0.5.0, H1) "runs" again; "stints" (0.4's word) still answers, unlisted. The window id stays "stints".
+ns.AddSlash("runs", function() ns.ToggleRunList() end, L["the Runs tab: stretches of play you kept, with their numbers"])
+ns.AddSlash("stints", function() ns.ToggleRunList() end)            -- (its name in 0.4; not listed)
 -- luacheck: push no max line length
 
 -- This tab's help and tour (UI/Help.lua): change them with the tab.
 local _ = ns.Help and ns.Help.Register(ID, {
-  what = "A stint is a stretch of play you kept, with its numbers: how long you were active, the gold, the XP, what dropped. This tab lists the stints kept on this account, newest first.",
+  what = "A run is a stretch of play you kept, with its numbers: how long you were active, the gold, the XP, what dropped. This tab lists the runs kept on this account, newest first.",
   can = {
-    "Click a stint: its {Numbers}, {Counts}, what dropped, its {Best} single values and its {Splits} fill the bottom of the tab.",
+    "Click a run: its {Numbers}, {Counts}, what dropped, its {Best} single values and its {Splits} fill the bottom of the tab.",
     "{Rename...} it, {Copy as text} to paste it anywhere, or {Delete} it.",
-    "{Start stint} at the top right starts one by hand and {Stop and keep} saves it; dungeons record themselves. /hc stint start and /hc stint stop do the same from the chat line.",
-    "The fields over the list narrow it: {Who}, {Where}, {When}, {Length}, {From} (a board, a dungeon, by hand) and {Counted} (a tracker or one of its numbers); {Clear} puts them back. The search box finds a stint by name, place, board or date.",
+    "{Start run} at the top right starts one by hand and {Stop and keep} saves it; dungeons record themselves. /hc run start and /hc run stop do the same from the chat line.",
+    "The fields over the list narrow it: {Who}, {Where}, {When}, {Length}, {From} (a board, a dungeon, by hand) and {Counted} (a tracker or one of its numbers); {Clear} puts them back. The search box finds a run by name, place, board or date.",
   },
-  effect = "Stints are your yardstick: a big per-hour tile on a board compares what you do now with your past stints in the same place. Deleting a stint only removes that record; your counters and history are untouched.",
+  effect = "Runs are your yardstick: a big per-hour tile on a board compares what you do now with your past runs in the same place. Deleting a run only removes that record; your counters and history are untouched.",
   tour = {
-    { title = "One row per stint", text = "Each row is a stint: {When} it started, its {Name}, {Where} you spent most of it and how long you were {Active}; the last column is your headline number. A dungeon names its stint after itself." },
-    { title = "Where stints come from", text = "Three ways: walk into a dungeon (it records itself and keeps the stint when you leave), a board with a timer of its own (its menu keeps the stretch its clock counted), or {Start stint} here and {Stop and keep} when you are done." },
-    { title = "Look inside one", text = "Click a stint and its numbers fill the bottom of the tab: per hour and totals, what dropped, the best single values, the splits. {Copy as text} shows all of it there as text, selected, to paste anywhere." },
+    { title = "One row per run", text = "Each row is a run: {When} it started, its {Name}, {Where} you spent most of it and how long you were {Active}; the last column is your headline number. A dungeon names its run after itself." },
+    { title = "Where runs come from", text = "Three ways: walk into a dungeon (it records itself and keeps the run when you leave), a board with a timer of its own (its menu keeps the stretch its clock counted), or {Start run} here and {Stop and keep} when you are done." },
+    { title = "Look inside one", text = "Click a run and its numbers fill the bottom of the tab: per hour and totals, what dropped, the best single values, the splits. {Copy as text} shows all of it there as text, selected, to paste anywhere." },
   },
 })
 -- luacheck: pop

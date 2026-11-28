@@ -281,7 +281,7 @@ local function newPanel(i)
   p.reset:SetFrameLevel(p:GetFrameLevel() + 2)
   p.reset:SetPoint("RIGHT", p.hud, "LEFT", -4, 0)
   Wd.RichTip(p.reset, function() return { title = L["Reset"],
-    text = L["The board's clock and its tiles start from zero. Real play since the last start is saved as a stint first."],
+    text = L["The board's clock and its tiles start from zero. Real play since the last start is saved as a run first."],
     click = L["Click: reset now."] } end)
   p.pause = Wd.Button(p, L["Pause"], CLOCK_W, function(self)
     if self.board and Bo() then Bo().ToggleTimer(self.board); refresh() end

@@ -160,7 +160,18 @@ local probeSpec = {
     local items = {}
     for _, l in ipairs(ns.ProbeLines(rec)) do items[#items + 1] = { text = l, tip = l } end
     if #items == 0 then items[1] = { text = "nothing kept yet", grey = true } end
-    return { title = rec.name, lines = { format("%s  \194\183  %s  \194\183  %s%s|r", rec.kind, rec.feature,
+    -- (0.5.0, G1) a tester asked "is X working on Forever?": the answer in a sentence first, then the raw lines
+    local SAY = {
+      ok = "The game answers this call here.",
+      missing = "This client has no such call: %s can't use it.",
+      error = "The call failed here: the lines below say how.",
+      changed = "It answered differently than last time.",
+      secret = "It answers with a hidden value in combat.",
+      ["never fired"] = "Not seen yet this session.",
+      ["not run yet"] = "Not run yet: Run (below) tries it now.",
+    }
+    local say = SAY[rec.status] and format(SAY[rec.status], rec.feature) or rec.status
+    return { title = rec.name, lines = { say, format("%s  \194\183  used by %s  \194\183  %s%s|r", rec.kind, rec.feature,
       STATUS_COLOR[rec.status] or "", rec.status) }, items = items }
   end,
   actions = function(row)

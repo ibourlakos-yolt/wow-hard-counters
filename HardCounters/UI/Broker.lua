@@ -106,7 +106,7 @@ local function tooltip(tt, onMinimap)
   local run = HC:GetRun()
   if run then
     local ra, _, state = HC:GetRunClock()
-    tt:AddDoubleLine(format(L["Stint: %s"], run.label or ("#" .. run.id)), (state == "running" and L["running"] or L["paused"]) .. " " .. U.duration(ra),
+    tt:AddDoubleLine(format(L["Run: %s"], run.label or ("#" .. run.id)), (state == "running" and L["running"] or L["paused"]) .. " " .. U.duration(ra),
       1, 1, 1, state == "running" and 0.4 or 1, state == "running" and 1 or 0.82, state == "running" and 0.4 or 0)
     local hid = Wd.HeadlineId()
     if hid then
@@ -115,7 +115,7 @@ local function tooltip(tt, onMinimap)
       tt:AddDoubleLine("   " .. ns.readings[hid].title, text or "-", DIM[1], DIM[2], DIM[3], r, g, b)
     end
   else
-    tt:AddLine(L["No stint open"], GREY[1], GREY[2], GREY[3])
+    tt:AddLine(L["No run open"], GREY[1], GREY[2], GREY[3])
   end
   tt:AddLine(" ")
   boardLines(tt, long)

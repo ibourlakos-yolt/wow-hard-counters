@@ -246,7 +246,7 @@ local function build()
   f.checks = {
     check(f, L["in combat"], -140, "combat", 122),
     check(f, L["in instances"], -162, "instance", 122),
-    check(f, L["only while a stint is open"], -184, "runOnly", 122),
+    check(f, L["only while a run is open"], -184, "runOnly", 122),
   }
   f.create = Wd.Button(f, L["Create"], 90, function() create() end)
   f.create:SetPoint("BOTTOMRIGHT", -16, 14)

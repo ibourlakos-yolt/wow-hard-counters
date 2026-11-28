@@ -171,7 +171,7 @@ local function entries()
   end
 
   -- the stint (a run: HC:GetRun)
-  head(L["Stint"])
+  head(L["Run"])
   local run = HC:GetRun()
   local sum = ns.RunSummary and ns.RunSummary() or {}
   local limit = (ns.settings and ns.settings.maxRuns) or 500
@@ -179,14 +179,14 @@ local function entries()
     local active, _, state = HC:GetRunClock()
     row({ label = run.label or ("#" .. tostring(run.id)), state = state == "running" and L["running"] or L["paused"], on = state == "running",
       value = ns.U.duration(active or 0),
-      action = { text = L["Stop and keep"], func = function() HC:StopRun() end, tip = L["End the stint and keep it in the Stints tab."] } })
+      action = { text = L["Stop and keep"], func = function() HC:StopRun() end, tip = L["End the run and keep it in the Runs tab."] } })
   else
-    row({ label = L["No stint open"], state = L["none"], on = false, value = L["dungeons start one by themselves"],
-      action = { text = L["Start stint"], func = function() HC:StartRun() end, tip = L["Start a stint now: everything counted until you stop it is kept with it."] } })
+    row({ label = L["No run open"], state = L["none"], on = false, value = L["dungeons start one by themselves"],
+      action = { text = L["Start run"], func = function() HC:StartRun() end, tip = L["Start a run now: everything counted until you stop it is kept with it."] } })
   end
-  row({ label = L["Stints kept"], value = format(L["%d (the newest %d are kept: Options, History)"], sum.kept or 0, limit),
-    action = { text = L["Stints"], func = function() if ns.ShowStints then ns.ShowStints(true) elseif ns.ToggleRunList then ns.ToggleRunList() end end,
-      tip = L["The Stints tab: every stint kept, with its numbers."] } })
+  row({ label = L["Runs kept"], value = format(L["%d (the newest %d are kept: Options, History)"], sum.kept or 0, limit),
+    action = { text = L["Runs"], func = function() if ns.ShowStints then ns.ShowStints(true) elseif ns.ToggleRunList then ns.ToggleRunList() end end,
+      tip = L["The Runs tab: every run kept, with its numbers."] } })
 
   -- this session
   head(L["This session"])
@@ -301,7 +301,7 @@ end
 
 ns.Windows.Register(ID, {
   title = L["Overview"], icon = "Interface\\Icons\\INV_Misc_Note_01", place = "bottom", bottomOrder = -100,
-  about = "Where everything stands for this character: packs, trackers, boards, stints, history, warnings.",
+  about = "Where everything stands for this character: packs, trackers, boards, runs, history, warnings.",
   width = 720, height = 440, minWidth = MIN_W, minHeight = MIN_H,
   minSize = function() return MIN_W, contentH end,
   build = build,
@@ -322,15 +322,15 @@ ns.AddSlash("overview", function() ns.ShowOverview() end, L["the Overview tab: w
 
 -- This tab's help and tour (UI/Help.lua): change them with the tab.
 local _ = ns.Help and ns.Help.Register(ID, {
-  what = "The Overview is one page on where everything stands for this character: your packs, the trackers counting, your boards and whether they are on your HUD, the open stint, this session, how much history is kept, and Diagnostics.",
+  what = "The Overview is one page on where everything stands for this character: your packs, the trackers counting, your boards and whether they are on your HUD, the open run, this session, how much history is kept, and Diagnostics.",
   can = {
     "Read {Needs a look} first: it appears only when something is off, each line with the button that fixes it.",
     "A lamp tells each state: green on, grey off, amber needs a look. A board's lamp is also its switch: click it to put that board on your HUD or take it off.",
-    "Each line has a button to the tab where you change it: {Packs}, {Explorer}, {Boards}, {Stints}, {Options}.",
+    "Each line has a button to the tab where you change it: {Packs}, {Explorer}, {Boards}, {Runs}, {Options}.",
   },
   effect = "Nothing here works differently from the other tabs: this page only gathers what they say, so a quick look tells you whether Hard Counters is counting what you expect.",
   tour = {
     { title = "Needs a look", text = "When something is off (no packs chosen, a board lost off screen, tiles whose tracker is off) it is listed at the top, amber, with the one click that fixes it." },
-    { title = "Everything else, one line each", text = "Packs, trackers, boards, the stint, this session, history and Diagnostics. The button at the end of a line opens the tab where it is changed." },
+    { title = "Everything else, one line each", text = "Packs, trackers, boards, the run, this session, history and Diagnostics. The button at the end of a line opens the tab where it is changed." },
   },
 })

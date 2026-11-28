@@ -228,7 +228,7 @@ describe("the Guide tab", function()
       for _, c in ipairs(ns.SlashList()) do
         assert.truthy(text:find("/hc " .. c.name, 1, true), c.name)
       end
-      for _, s in ipairs({ "/hc tutorial", "/hc guide", "/hc board", "/hc stint", "/hc track", "/hc report", "/hc fish", "My pack",
+      for _, s in ipairs({ "/hc tutorial", "/hc guide", "/hc board", "/hc run", "/hc track", "/hc report", "/hc fish", "My pack",
         "/hc help", "/hardcounters" }) do
         assert.truthy(text:find(s, 1, true), s)
       end

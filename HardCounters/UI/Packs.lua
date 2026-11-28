@@ -42,13 +42,8 @@ local refresh
 
 local function G() return ns.globalSettings or {} end
 
---- A small right-click helper (a shared one comes with Widgets later): itemsFn() -> the menu's items.
-local function rightMenu(frame, itemsFn)
-  frame:EnableMouse(true)
-  frame:SetScript("OnMouseUp", function(self, button)
-    if button == "RightButton" and ns.Menu then ns.Menu.Show(self, itemsFn(self)) end
-  end)
-end
+--- Right-click: the shared helper (Widgets.RightMenu, D0). itemsFn() -> the menu's items.
+local function rightMenu(frame, itemsFn) return ns.Widgets.RightMenu(frame, itemsFn) end
 
 --- "0.4.0-beta2" against "0.5.0-beta1": -1, 0 or 1 (numbers first, then a release beats a test build, then
 --- alpha < beta < rc by name). nil when either isn't a version.

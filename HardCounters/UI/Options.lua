@@ -34,9 +34,9 @@ local function options()
           set = function(_, v) s().ldb = v; refresh() end,
         },
         autoInstanceRuns = {
-          type = "toggle", order = 3, name = L["Record dungeons as stints by themselves"], width = "full",
-          desc = L["Entering an instance starts a stint named after it; leaving saves it to the Stints tab "
-            .. "(5 active minutes or more). Stints you start yourself are never touched."],
+          type = "toggle", order = 3, name = L["Record dungeons as runs by themselves"], width = "full",
+          desc = L["Entering an instance starts a run named after it; leaving saves it to the Runs tab "
+            .. "(5 active minutes or more). Runs you start yourself are never touched."],
           get = function() return s().autoInstanceRuns ~= false end,
           set = function(_, v) s().autoInstanceRuns = v and true or false end,
         },
@@ -49,8 +49,8 @@ local function options()
       type = "group", name = L["History"], order = 2, inline = true,
       args = {
         maxRuns = {
-          type = "select", order = 1, name = L["Stints kept"],
-          desc = L["The newest stints kept in the Stints tab; older ones are dropped. About 2.6 KB each: 500 take about 1.3 MB. Lowering it drops the oldest when the next one is saved."],
+          type = "select", order = 1, name = L["Runs kept"],
+          desc = L["The newest runs kept in the Runs tab; older ones are dropped. About 2.6 KB each: 500 take about 1.3 MB. Lowering it drops the oldest when the next one is saved."],
           values = { [100] = "100", [200] = "200", [500] = "500", [1000] = "1000", [2000] = "2000" },
           sorting = { 100, 200, 500, 1000, 2000 },
           get = function() return s().maxRuns or 500 end,

@@ -1069,7 +1069,8 @@ ns.AddOptions("windows", function()
     get = function() return labelMode() end,
     set = function(_, v) ns.settings.tabLabels = v; refreshTabs() end }
   args.searchKey = { type = "toggle", order = 85, width = "full", name = L["Ctrl+K jumps to the search box"],
-    desc = L["While the Hard Counters window is open, Ctrl+K puts the cursor in the open tab's search box (the Explorer, Stints, Diagnostics). Not in combat: there it is the game's key."],
+    desc = L["While the Hard Counters window is open, Ctrl+K puts the cursor in the open tab's search box (Boards, "
+      .. "the Explorer, Runs, Diagnostics). Not in combat: there it is the game's key."],
     get = function() return ns.Browser and ns.Browser.SearchKeyOn() end,
     set = function(_, v) if v then ns.settings.searchKey = nil else ns.settings.searchKey = false end end }
   args.scale = { type = "range", order = 90, name = L["Scale of the Hard Counters window"], min = 0.5, max = 2, step = 0.05,

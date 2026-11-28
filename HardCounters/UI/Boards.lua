@@ -108,7 +108,7 @@ end
 --- Start, pause, stop or reset a board's timer; says so when a reset saved a record.
 local function controlAll(board, action)
   local saved = M.ControlAll(board, action)
-  if saved and ns.Print then ns.Print(L["%s: saved as stint #%d (the Stints tab)"], board.name, saved) end
+  if saved and ns.Print then ns.Print(L["%s: saved as run #%d (the Runs tab)"], board.name, saved) end
   Boards.RefreshAll()
 end
 
@@ -122,8 +122,8 @@ end
 local function saveBoard(board)
   local id = M.SaveBoard(board)
   if ns.Print then
-    if id then ns.Print(L["%s: saved as stint #%d (the Stints tab)"], board.name, id)
-    else ns.Print(L["Nothing to save yet: a stint needs 5 active minutes."]) end
+    if id then ns.Print(L["%s: saved as run #%d (the Runs tab)"], board.name, id)
+    else ns.Print(L["Nothing to save yet: a run needs 5 active minutes."]) end
   end
   Boards.RefreshAll()
 end
@@ -251,7 +251,7 @@ local function runControls(w, board)
   end)
   Wd.RichTip(w.reset, function()
     return { title = L["Reset"],
-      text = L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a stint."] }
+      text = L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a run."] }
   end)
 end
 
@@ -830,7 +830,7 @@ local function drawRow(w, board)
     local hero = M.HeroIndex(board)
     local ht = hero and board.tiles[hero]
     local s = M.SplitsText(ht and ht.reading or "hc:goldph", ht and ht.calc)
-    w.label:SetText(s or L["Splits: start a stint"])
+    w.label:SetText(s or L["Splits: start a run"])
     w.value:SetText("")
   elseif row.kind == "label" then
     w.label:SetText(tile.text or L["Heading"])
@@ -1361,7 +1361,7 @@ function Boards.ResetPosition(board)
 end
 
 -- (2026-11-25, the user) "On HUD" / "Only here" say where a board is; "Shown" / "Off" said neither
-local REASON = { off = "Only here", runOnly = "On HUD, hidden: only during stints", instance = "On HUD, hidden: in instances",
+local REASON = { off = "Only here", runOnly = "On HUD, hidden: only during runs", instance = "On HUD, hidden: in instances",
   combat = "On HUD, hidden: in combat" }
 
 --- The board's status in words for the Boards, Explorer and Overview tabs: "On HUD"; "Only here" (in the Hard Counters window,
@@ -2097,7 +2097,7 @@ local function showItems(board)
       { text = L["show"], checked = s.instance ~= "hide", func = set("instance", "show") },
       { text = L["hide"], checked = s.instance == "hide", func = set("instance", "hide") },
     } },
-    { text = L["Only while a stint is open"], checked = s.runOnly, func = set("runOnly", not s.runOnly) },
+    { text = L["Only while a run is open"], checked = s.runOnly, func = set("runOnly", not s.runOnly) },
     { text = L["Faded until the mouse is over it"], checked = s.mouseoverFade, func = set("mouseoverFade", not s.mouseoverFade) },
   }
 end
@@ -2117,8 +2117,8 @@ function Boards.AllItems(board)
     func = function() controlAll(board, "stop") end }
   items[#items + 1] = { text = L["Reset (from zero)"], func = function() controlAll(board, "reset") end }
   local which = M.BoardSavable(board)
-  items[#items + 1] = { text = which == "prev" and L["Save the last period as a stint"] or L["Save as stint"],
-    disabled = not which, tip = L["One record in the Stints tab for this board: every counter. Needs 5 active minutes."],
+  items[#items + 1] = { text = which == "prev" and L["Save the last period as a run"] or L["Save as run"],
+    disabled = not which, tip = L["One record in the Runs tab for this board: every counter. Needs 5 active minutes."],
     func = function() saveBoard(board) end }
   return items
 end

@@ -7,18 +7,18 @@ local HC, L, U = ns.HC, ns.L, ns.U
 -- HC:StartRun and the others give their reasons in the API's words (Core/Runs.lua keeps "run"): the chat line says
 -- them in the player's
 local REASON = {
-  ["a run is already open"] = "a stint is already open: /hc stint stop keeps it",
-  ["no open run"] = "no stint open: /hc stint start [name]",
-  ["the run is not running"] = "the stint is paused already",
-  ["the run is not paused"] = "the stint is not paused",
+  ["a run is already open"] = "a run is already open: /hc run stop keeps it",
+  ["no open run"] = "no run open: /hc run start [name]",
+  ["the run is not running"] = "the run is paused already",
+  ["the run is not paused"] = "the run is not paused",
   ["storage not ready"] = "not ready yet: try again in a moment",
   ["storage is read-only"] = "nothing can be kept this session: Hard Counters' storage is read-only",
 }
 
 local function status()
   local run = HC:GetRun()
-  if not run then ns.Print(L["no stint open. /hc stint start [name]"]); return end
-  ns.Print(L["stint #%d %s: %s, active %s, elapsed %s, %d split(s)"], run.id, run.label or "", L[run.state],
+  if not run then ns.Print(L["no run open. /hc run start [name]"]); return end
+  ns.Print(L["run #%d %s: %s, active %s, elapsed %s, %d split(s)"], run.id, run.label or "", L[run.state],
     U.duration(run.activeSeconds), U.duration(run.elapsed), run.splitCount)
 end
 
@@ -36,16 +36,16 @@ local function stint(rest)
   cmd = (cmd or ""):lower()
   if cmd == "start" then
     local id, err = HC:StartRun(arg)
-    report(id, err, id and L["stint started"] .. (arg ~= "" and (": " .. arg) or ""))
+    report(id, err, id and L["run started"] .. (arg ~= "" and (": " .. arg) or ""))
   elseif cmd == "stop" then
     local id, err = HC:StopRun()
-    report(id, err, L["stint stopped and kept (the Stints tab)"])
+    report(id, err, L["run stopped and kept (the Runs tab)"])
   elseif cmd == "pause" then
     local ok, err = HC:PauseRun()
-    report(ok, err, L["stint paused"])
+    report(ok, err, L["run paused"])
   elseif cmd == "resume" then
     local ok, err = HC:ResumeRun()
-    report(ok, err, L["stint resumed"])
+    report(ok, err, L["run resumed"])
   elseif cmd == "split" then
     local n, err = HC:SplitRun(arg)
     report(n, err, n and (L["split"] .. " " .. n) or "")
@@ -54,8 +54,9 @@ local function stint(rest)
   end
 end
 
-ns.AddSlash("stint", stint, L["a stint by hand: start [name] | stop (keeps it) | pause | resume | split [name] | status"])
-ns.AddSlash("run", stint)                     -- (its name before 0.4.0; not listed)
+-- (0.5.0, H1) "run" again; "stint" (0.4's word) still answers, unlisted
+ns.AddSlash("run", stint, L["a run by hand: start [name] | stop (keeps it) | pause | resume | split [name] | status"])
+ns.AddSlash("stint", stint)                   -- (its name in 0.4; not listed)
 
 ---------------------------------------------------------------------------
 -- /hc track: trackers from the chat line (HC-19). The Trackers window (/hc trackers) is the main way; this is the

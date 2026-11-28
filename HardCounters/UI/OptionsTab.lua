@@ -99,8 +99,8 @@ end
 local _ = ns.Help and ns.Help.Register(ID, {
   what = "Options holds every setting of Hard Counters, the same as /hc options and the game's own options under AddOns: the window, boards and the move key, the minimap button, history and storage, Diagnostics, and profiles.",
   can = {
-    "{General}: what \"this week\" means, the data broker feed, dungeon stints, the move key for boards, tab labels, the window's scale, the minimap button, automatic field notes.",
-    "{History}: how many stints are kept, how many days, hours and weeks of history, and when your day ends.",
+    "{General}: what \"this week\" means, the data broker feed, dungeon runs, the move key for boards, tab labels, the window's scale, the minimap button, automatic field notes.",
+    "{History}: how many runs are kept, how many days, hours and weeks of history, and when your day ends.",
     "{Profiles}: share settings between characters, or keep one set each.",
   },
   effect = "A setting applies at once, except the hour the day ends, which waits for the next reload or login (the option says so). Boards stay each character's own whatever the profile.",

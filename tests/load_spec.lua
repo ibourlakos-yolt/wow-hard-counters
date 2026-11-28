@@ -62,7 +62,7 @@ describe("load smoke test", function()
       nsHC.UpdateBroker()
       nsHC.LauncherTooltip({ AddLine = function() end, AddDoubleLine = function() end })
       for _, cmd in ipairs({ "", "help", "run", "run start x", "run split", "run pause", "run resume", "run stop", "runs",
-        "stint", "stint start y", "stint split", "stint pause", "stint resume", "stint stop", "stint stop", "stints",
+        "stint", "run start y", "run split", "run pause", "run resume", "run stop", "run stop", "stints",
         "panel compact", "panel full", "panel", "live", "board", "board new leveling", "board mini 1", "board 1", "edit",
         "edit", "track", "track 1 off", "track 1 on", "track 1 history daily 30", "track 1 history off", "windows", "diag",
         "diag mark", "diag probes", "diag snap", "diag", "ledger", "ledger", "nonsense" }) do
