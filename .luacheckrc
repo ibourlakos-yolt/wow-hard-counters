@@ -57,6 +57,7 @@ files["HardCounters/UI/Broker.lua"] = {
 }
 -- Boards (v2 M5): the model is pure; the frames and menus use frame APIs and static popups.
 files["HardCounters/UI/BoardModel.lua"] = { read_globals = {} }
+files["HardCounters/UI/Synopsis.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "C_Timer" } }
 files["HardCounters/UI/Menu.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip" } }
 files["HardCounters/UI/Trackers.lua"] = { read_globals = { "CreateFrame", "GameTooltip" } }
 files["HardCounters/UI/Browser.lua"] = { read_globals = { "CreateFrame", "GameTooltip", "GetCursorPosition" } }

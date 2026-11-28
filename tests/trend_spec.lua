@@ -137,7 +137,9 @@ describe("trend on a board (HC-53)", function()
     M.SetCalc(t, "recent")
     assert.is_true(M.TrendBadgeFits(t))
     M.SetSize(t, "half")
-    assert.is_false(M.TrendBadgeFits(t))                          -- extras are on the big number only
+    assert.is_true(M.TrendBadgeFits(t))                           -- (0.5.0) any number tile: an arrow on the smaller sizes
+    M.SetSize(t, "lineHalf")
+    assert.is_true(M.TrendBadgeFits(t))
     local owned = M.AddReading(b, "hc:owned", { size = "large" })
     assert.is_false(M.TrendBadgeFits(owned))
   end)

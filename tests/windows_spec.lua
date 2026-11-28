@@ -881,7 +881,7 @@ describe("the Explorer's trackers", function()
       local nodes = table.concat(nodeTexts(), "|")
       assert.truthy(nodes:find("Trackers", 1, true))
       assert.truthy(nodes:find("Testing", 1, true))
-      assert.truthy(nodes:find("WHAT IS COUNTED", 1, true))   -- (a caption)
+      assert.is_nil(nodes:find("WHAT IS COUNTED", 1, true))   -- (0.5.0) heads by kind, no captions
       -- the list: Name, On, History, Size
       assert.are.same({ "Name", "On", "History", "Size" },
         { br.list.heads[1].text:GetText(), br.list.heads[2].text:GetText(), br.list.heads[3].text:GetText(), br.list.heads[4].text:GetText() })
@@ -1242,11 +1242,16 @@ describe("the Boards tab and the New board dialog", function()
       end
       local nodes = {}
       for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
-      assert.are.equal("MY SETUP", nodes[1])                       -- (a caption)
-      assert.truthy(nodes[2]:find("^Boards"))
-      assert.truthy(nodes[3]:find("^Tiles"))
-      assert.truthy(table.concat(nodes, "|"):find("Ready-made boards", 1, true))
+      -- (0.5.0) heads by kind, folding like the AH's: Boards open with Ready-made boards under it, the rest folded
+      assert.truthy(nodes[1]:find("^Boards"))
+      assert.truthy(nodes[2]:find("^Ready%-made boards"))
+      assert.truthy(table.concat(nodes, "|"):find("Tiles", 1, true))
+      assert.is_nil(table.concat(nodes, "|"):find("Activity", 1, true))   -- folded until opened
+      br:Fold("presets", false)
+      nodes = {}
+      for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
       assert.truthy(table.concat(nodes, "|"):find("Activity", 1, true))   -- (HC-57: presets by category)
+      assert.is_false(ns.settings.windows.explorer.folded.presets)        -- saved
       local row = rowFor("^Pocket")
       assert.truthy(row)
       assert.truthy(row.cells[2]:GetText():find("On HUD", 1, true))
@@ -1301,8 +1306,22 @@ describe("the Boards tab and the New board dialog", function()
       assert.are.equal(1, pocket.scale)
       -- the detail: its rules, the command, the On HUD and Mini switches, its tiles with values
       ns.RefreshExplorer()
-      assert.truthy(br.detail.text:GetText():find("/hc board pocket", 1, true))
-      local miniItem = br.detail.items[2]
+      -- (0.5.0, G1) where it is and its clock first; its rules as switches, its look; the command last
+      assert.truthy(br.detail.text:GetText():find("On HUD", 1, true))
+      local miniItem, ruleTexts, cmd = nil, {}, false
+      for _, it in ipairs(br.detail.items) do
+        if it:IsShown() then
+          local tx = it.text:GetText() or ""
+          if tx == "Mini mode (one line)" then miniItem = it end
+          if tx:find("/hc board pocket", 1, true) then cmd = true end
+          ruleTexts[#ruleTexts + 1] = tx
+        end
+      end
+      local joined = table.concat(ruleTexts, "|")
+      assert.truthy(joined:find("In combat", 1, true))
+      assert.truthy(joined:find("Faded until hovered", 1, true))
+      assert.truthy(joined:find("Look", 1, true))
+      assert.truthy(cmd or #ruleTexts < 12)                         -- (the command is last: past the pane's rows here)
       assert.are.equal("Mini", miniItem.pill:GetText())
       miniItem.pill:GetScript("OnClick")(miniItem.pill)
       assert.is_false(pocket.mini)
@@ -1317,9 +1336,14 @@ describe("the Boards tab and the New board dialog", function()
       local function moreItem(text) for _, it in ipairs(more) do if it.text == text then return it end end end
       moreItem("Save as preset").func()
       assert.are.equal("Your presets", BM.PresetGroups()[#BM.PresetGroups()].title)
-      -- (0.4.0) no All off HUD, All on HUD or Edit all: the header has New board... only
-      assert.are.equal(1, #br.headerBtns)
-      assert.are.equal("New board...", br.headerBtns[1]:GetText())
+      -- (0.5.0, D3) no header buttons: New board... is a right-click on the Boards node
+      assert.are.equal(0, #br.headerBtns)
+      local nm
+      ns.Menu.Show = function(_, items) nm = items end
+      br:NodeMenu({ key = "boards" }, br.tree)
+      ns.Menu.Show = realShow
+      assert.are.equal("New board...", nm[1].text)
+      assert.are.equal("Open all", nm[2].text)
       -- Delete (under More...): its tiles go with it (v8)
       local n = #BM.CollectionTiles() - #pocket.tiles
       row = rowFor("^Pocket")
@@ -1469,15 +1493,15 @@ describe("a new character", function()
       ns.Tutorial.Hide()
       assert.is_false(w:IsShown())
       -- the other character's board, in the Explorer, copied to this one
-      ns.ShowExplorer(true, "others")
+      ns.ShowExplorer(true, "oc:Alt - Elsewhere")
       ns.Windows.Content("explorer"):SetSize(762, 568)
       ns.RefreshExplorer()
       local br = ns.BoardsBrowser
       local nodes = {}
       for _, r in ipairs(br.tree.rows) do if r:IsShown() then nodes[#nodes + 1] = r.text:GetText() end end
-      assert.truthy(table.concat(nodes, "|"):find("OTHER CHARACTERS", 1, true))        -- (a caption, 0.4.0)
+      assert.is_nil(table.concat(nodes, "|"):find("OTHER CHARACTERS", 1, true))        -- (0.5.0: a head per character)
       assert.truthy(table.concat(nodes, "|"):find("Alt", 1, true))
-      br:Select("o:Alt - Elsewhere:1", "others")
+      br:Select("o:Alt - Elsewhere:1", "oc:Alt - Elsewhere")
       local copyBtn
       for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Copy to this character..." then copyBtn = b end end
       assert.truthy(copyBtn)

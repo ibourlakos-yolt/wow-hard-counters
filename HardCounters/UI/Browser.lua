@@ -13,8 +13,14 @@
 -- spec (every function is called at each refresh; the provider owns its data and its filters):
 --   columns    { { key, title, width (nil: the one that takes the rest), align, sort = fn(row) -> value } }, or
 --              function(nodeKey) -> such a list (the sort resets when the set changes)
---   nodes()    -> { { key, text, count, indent, grey, head } }: the tree (head: a caption, not clickable); the first
---              clickable one is selected at first
+--   nodes()    -> { { key, text, count, indent (or level: 0, 1, 2), grey, head } }: the tree (head: a caption, not
+--              clickable); the first clickable one is selected at first. A node's children are the nodes after it
+--              with a deeper level. (0.5.0) Drawn like the Auction House's category list: level 0 on the AH's
+--              category art with a +/- when it has children.
+--   foldKey    -> where folded nodes are saved (settings.windows[foldKey].folded = { [key] = true | false }); nil:
+--              nothing folds. foldDefault(key) -> true: folded until the player opens it
+--   nodeMenu(node, anchor) -> right-click on a tree node: Menu items (nil: none). Open all / Close all are added
+--              when the tree folds
 --   rows(nodeKey, search) -> { { key, cells = { [colKey] = text }, grey } }: already filtered by the provider
 --   filters()  -> Menu items (keepOpen ones redraw in place), or nil: no Filters button at all
 --   filtersActive() -> true when a filter hides something (the button says so)
@@ -35,7 +41,11 @@ local floor, max, min = math.floor, math.max, math.min
 local Browser = {}
 ns.Browser = Browser
 
-local TOP_H, TREE_W, ROW_H, HEAD_H, BAR_H, SB_W, GAP = 30, 150, 18, 18, 26, 12, 6
+local TOP_H, TREE_W, ROW_H, HEAD_H, BAR_H, SB_W, GAP = 30, 170, 18, 18, 26, 12, 6
+local NODE_H = 20                     -- (0.5.0) a tree row, like the AH's category buttons
+local FILTER_BG = "Interface\\AuctionFrame\\UI-AuctionFrame-FilterBg"
+local PLUS, MINUS = "Interface\\Buttons\\UI-PlusButton-Up", "Interface\\Buttons\\UI-MinusButton-Up"
+local TITLE_HL = "Interface\\QuestFrame\\UI-QuestTitleHighlight"
 local DETAIL_H, DETAIL_MIN, LIST_MIN_ROWS, SPLIT_H = 200, 90, 4, 6
 local ITEM_H, LINE_H = 20, 13
 local GREY, WHITE, GOLD, CAPTION = { 0.5, 0.5, 0.5 }, { 1, 1, 1 }, { 1, 0.82, 0 }, { 0.62, 0.62, 0.66 }
@@ -257,7 +267,75 @@ end
 
 function B:TreeRows()
   local h = num(self.parent:GetHeight(), 400)
-  return max(1, floor((h - TOP_H - BAR_H - GAP - 8) / ROW_H))
+  return max(1, floor((h - TOP_H - BAR_H - GAP - 8) / NODE_H))
+end
+
+local function level(node) return node.level or node.indent or 0 end
+
+--- Is this node folded? (Only in a tree that folds; a node the player never touched takes foldDefault.)
+function B:IsFolded(key)
+  if not self.spec.foldKey then return false end
+  local f = Wd.Conf(self.spec.foldKey).folded
+  local v
+  if type(f) == "table" then v = f[key] end           -- (false: opened by the player; nil: never touched)
+  if v == nil then return self.spec.foldDefault and self.spec.foldDefault(key) and true or false end
+  return v
+end
+
+--- Fold or unfold a node (saved).
+function B:Fold(key, on)
+  if not self.spec.foldKey then return end
+  local c = Wd.Conf(self.spec.foldKey)
+  c.folded = type(c.folded) == "table" and c.folded or {}
+  c.folded[key] = on and true or false
+  self:Refresh()
+end
+
+--- Every node with children, folded or opened at once (right-click: Open all, Close all).
+function B:FoldAll(on)
+  if not self.spec.foldKey then return end
+  local c = Wd.Conf(self.spec.foldKey)
+  c.folded = type(c.folded) == "table" and c.folded or {}
+  for key in pairs(self.hasKids or {}) do c.folded[key] = on and true or false end
+  self:Refresh()
+end
+
+--- The tree as drawn: nodes whose ancestors are all open. Notes which nodes have children and each one's parent.
+function B:BuildTree()
+  local nodes = self.nodesData
+  local kids, parent, out, stack = {}, {}, {}, {}
+  for i, node in ipairs(nodes) do
+    local lv = level(node)
+    while #stack > 0 and level(stack[#stack]) >= lv do stack[#stack] = nil end
+    local p = stack[#stack]
+    if p then parent[node.key] = p.key; kids[p.key] = true end
+    stack[#stack + 1] = node
+    local _ = i
+  end
+  self.hasKids, self.parentOf = kids, parent
+  for _, node in ipairs(nodes) do
+    local hidden, p = false, parent[node.key]
+    while p do
+      if self:IsFolded(p) then hidden = true; break end
+      p = parent[p]
+    end
+    if not hidden then out[#out + 1] = node end
+  end
+  self.treeData = out
+end
+
+--- Open a node selected from code (the Explorer opened on Trackers) and every ancestor of it.
+function B:OpenTo(key)
+  if not self.spec.foldKey or not self.parentOf then return end
+  local c = Wd.Conf(self.spec.foldKey)
+  local p = key
+  while p do
+    if self:IsFolded(p) then
+      c.folded = type(c.folded) == "table" and c.folded or {}
+      c.folded[p] = false
+    end
+    p = self.parentOf[p]
+  end
 end
 
 function B:DetailRows(textH)
@@ -268,8 +346,26 @@ end
 -- Drawing
 ---------------------------------------------------------------------------
 
+--- Right-click on a tree node: the provider's items, then Open all / Close all in a tree that folds.
+function B:NodeMenu(node, anchor)
+  local items = {}
+  if self.spec.nodeMenu then
+    for _, it in ipairs(self.spec.nodeMenu(node, anchor) or {}) do items[#items + 1] = it end
+  end
+  if self.spec.foldKey and next(self.hasKids or {}) then
+    items[#items + 1] = { text = L["Open all"], func = function() self:FoldAll(false) end }
+    items[#items + 1] = { text = L["Close all"], func = function() self:FoldAll(true) end }
+  end
+  if #items > 0 then ns.Menu.Show(anchor, items) end
+end
+
+--- (0.5.0, the user: "the categories should be collapsible; reminiscent of the AH look and feel") the Classic
+--- Auction House's category list: level 0 on its category art (a flat amber strip if the art is missing) in gold
+--- with a +/- when it has children, level 1 indented on the same art fainter, level 2 indented plain. The selected
+--- node takes the quest log's title highlight, as the AH does. A click selects (and opens) a node; a click on the
+--- +/- only folds or unfolds it.
 function B:DrawTree()
-  local tree, nodes = self.tree, self.nodesData
+  local tree, nodes = self.tree, self.treeData or self.nodesData
   local n = self:TreeRows()
   self.treeOff = max(0, min(self.treeOff, #nodes - n))
   for i = 1, n do
@@ -277,41 +373,86 @@ function B:DrawTree()
     local r = tree.rows[i]
     if not r then
       r = CreateFrame("Button", nil, tree)
-      r:SetHeight(ROW_H)
-      r:SetPoint("TOPLEFT", 2, -4 - (i - 1) * ROW_H)
-      r:SetPoint("TOPRIGHT", -2, -4 - (i - 1) * ROW_H)
-      r.sel = r:CreateTexture(nil, "BACKGROUND")
+      r:SetHeight(NODE_H)
+      r:SetPoint("TOPLEFT", 2, -4 - (i - 1) * NODE_H)
+      r:SetPoint("TOPRIGHT", -2, -4 - (i - 1) * NODE_H)
+      r.flat = r:CreateTexture(nil, "BACKGROUND", nil, 0)
+      r.flat:SetAllPoints()
+      r.flat:SetColorTexture(0.20, 0.16, 0.05, 0.6)
+      r.art = r:CreateTexture(nil, "BACKGROUND", nil, 1)
+      r.art:SetAllPoints()
+      r.art:SetTexture(FILTER_BG)
+      r.art:SetTexCoord(0, 0.53125, 0, 0.625)
+      r.sel = r:CreateTexture(nil, "ARTWORK")
       r.sel:SetAllPoints()
-      r.sel:SetColorTexture(1, 0.82, 0, 0.18)
+      r.sel:SetTexture(TITLE_HL)
+      if r.sel.SetBlendMode then r.sel:SetBlendMode("ADD") end
       r.hl = r:CreateTexture(nil, "HIGHLIGHT")
       r.hl:SetAllPoints()
-      r.hl:SetColorTexture(1, 1, 1, 0.08)
+      r.hl:SetTexture(TITLE_HL)
+      if r.hl.SetBlendMode then r.hl:SetBlendMode("ADD") end
+      r.hl:SetAlpha(0.5)
+      r.toggle = CreateFrame("Button", nil, r)
+      r.toggle:SetSize(14, 14)
+      r.toggle:SetPoint("LEFT", 3, 0)
+      r.toggle:SetScript("OnClick", function(btn)
+        local key = btn:GetParent().key
+        if key then self:Fold(key, not self:IsFolded(key)) end
+      end)
+      r.count = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+      r.count:SetPoint("RIGHT", -6, 0)
+      r.count:SetJustifyH("RIGHT")
       r.text = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
       r.text:SetPoint("LEFT", 6, 0)
-      r.text:SetPoint("RIGHT", -4, 0)
+      r.text:SetPoint("RIGHT", r.count, "LEFT", -4, 0)
       r.text:SetJustifyH("LEFT")
       r.text:SetWordWrap(false)
+      r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
       r:EnableMouseWheel(true)
       r:SetScript("OnMouseWheel", function(_, delta) self.treeOff = self.treeOff - delta; self:DrawTree() end)
       tree.rows[i] = r
     end
     if node then
       local on = node.key == self.node
-      r.text:SetPoint("LEFT", 6 + 10 * (node.indent or 0), 0)
+      local lv = level(node)
+      local kids = self.spec.foldKey and self.hasKids and self.hasKids[node.key]
+      local x = 6 + 12 * lv + ((kids or (lv == 0 and self.spec.foldKey)) and 16 or 0)
+      r.text:SetPoint("LEFT", x, 0)
+      r.toggle:SetShown(kids and true or false)
+      if kids then
+        local tex = self:IsFolded(node.key) and PLUS or MINUS
+        r.toggle:SetNormalTexture(tex)
+        r.toggle:ClearAllPoints()
+        r.toggle:SetPoint("LEFT", 3 + 12 * lv, 0)
+      end
+      local art = not node.head and lv <= 1
+      r.flat:SetShown(art)
+      r.art:SetShown(art)
+      r.flat:SetAlpha(lv == 0 and 1 or 0.45)
+      r.art:SetAlpha(lv == 0 and 1 or 0.45)
+      r.text:SetFontObject(lv == 0 and "GameFontNormalSmall" or "GameFontHighlightSmall")
       if node.head then
         -- a caption: small capitals in grey, no count, not clickable
         r.text:SetText(node.text:upper())
         color(r.text, CAPTION)
+        r.count:SetText("")
         r.sel:Hide()
         r.hl:SetShown(false)
         r:SetScript("OnClick", nil)
       else
-        r.text:SetText(node.count and (node.text .. "  |cff808080" .. node.count .. "|r") or node.text)
-        color(r.text, on and GOLD or (node.grey and GREY or WHITE))
+        r.text:SetText(node.text)
+        r.count:SetText(node.count and ("(" .. node.count .. ")") or "")
+        color(r.text, (lv == 0 or on) and GOLD or (node.grey and GREY or WHITE))
         r.sel:SetShown(on)
         r.hl:SetShown(true)
-        r:SetScript("OnClick", function()
+        r:SetScript("OnClick", function(btn, button)
+          if button == "RightButton" then self:NodeMenu(node, btn); return end
           self.node, self.listOff, self.selected = node.key, 0, nil
+          if kids and self:IsFolded(node.key) then
+            local c = Wd.Conf(self.spec.foldKey)
+            c.folded = type(c.folded) == "table" and c.folded or {}
+            c.folded[node.key] = false
+          end
           self:Refresh()
         end)
       end
@@ -455,7 +596,7 @@ function B:RowMenu(row, anchor)
   local items = {}
   for _, a in ipairs(acts) do
     items[#items + 1] = { text = a.text, disabled = a.disabled, checked = a.status and (a.on == true) or nil,
-      tip = type(a.tip) == "string" and a.tip or nil, func = function() a.func(anchor) end }
+      tip = type(a.tip) == "string" and a.tip or nil, sub = a.sub, func = function() a.func(anchor) end }
   end
   ns.Menu.Show(anchor, items)
 end
@@ -594,7 +735,7 @@ function B:DrawActions()
       local items = {}
       for _, a in ipairs(more) do
         items[#items + 1] = { text = a.text, disabled = a.disabled, tip = type(a.tip) == "string" and a.tip or nil,
-          func = function() a.func(btn) end }
+          sub = a.sub, func = function() a.func(btn) end }
       end
       ns.Menu.Show(btn, items)
     end)
@@ -672,10 +813,13 @@ function B:Refresh()
     end
   end
   if not found then self.node = first end
-  -- a node chosen from code (the Explorer opened on Trackers) scrolls into view in the tree
+  self:BuildTree()
+  -- a node chosen from code (the Explorer opened on Trackers) opens its ancestors and scrolls into view
   if self.node ~= self.shownNode then
     self.shownNode = self.node
-    for i, node in ipairs(self.nodesData) do
+    self:OpenTo(self.node)
+    self:BuildTree()
+    for i, node in ipairs(self.treeData) do
       if node.key == self.node then
         local n = self:TreeRows()
         if i <= self.treeOff or i > self.treeOff + n then self.treeOff = max(0, i - 2) end

@@ -48,7 +48,8 @@ local function confirm(text, fn) if Bo() and Bo().Confirm then Bo().Confirm(text
 
 local CALC_WORD = { total = "Total", perHour = "Per hour", recent = "Recent", trend = "Trend" }
 local DISPLAY_WORD = { number = "Number", bar = "Bar", gauge = "Gauge", odometer = "Odometer", mix = "Mix" }
-local SIZE_WORD = { large = "Big", half = "Half width", line = "Line" }
+local SIZE_WORD = { large = "Big", largeHalf = "Big, half width", half = "Medium, half width", line = "Line",
+  lineHalf = "Line, half width" }
 
 local function scopeWord(scope)
   if scope == "run" then return L["board timer"] end
@@ -85,11 +86,13 @@ local function tileEntries()
   return out
 end
 
-local function tileRows(search)
+local function tileRows(search, node)
   local M, out = BM(), {}
+  local only = type(node) == "string" and node:match("^tb:(.+)$")     -- (0.5.0) one board's tiles
   for _, e in ipairs(tileEntries()) do
     local label = M.TileLabel(e.tile, e.board)
-    if matches(search, label) or matches(search, e.board and e.board.name) then
+    if (not only or (e.board and tostring(e.board.id) == only))
+        and (matches(search, label) or matches(search, e.board and e.board.name)) then
       local onHud = M.TileOnHud(e.tile)
       out[#out + 1] = { key = "t:" .. tostring(e.id), entry = e, grey = not (onHud and e.board.shown),
         cells = { name = label, board = e.board and e.board.name or "", shows = showsText(e), now = tileValue(e) } }
@@ -147,14 +150,15 @@ local function tileDetail(row)
   local r = ns.readings[e.raw.reading]
   local lines = {}
   if r and r.description then lines[#lines + 1] = r.description end
-  local items = {
-    { text = L["Now"], value = tileValue(e) },
-    { text = L["Board"], value = e.board.name .. "  " .. (ns.BoardStatusText and (ns.BoardStatusText(e.board)) or "") },
-    { text = L["On your HUD"], status = tileOnHud(e) },
-    { text = L["Period"], value = scopeWord(e.raw.scope) },
-    { text = L["Shows as"], value = showsText(e) },
-    { text = L["Displays it can take"], head = true },
-  }
+  -- (0.5.0, G1) "why does it say that?" first: the value, then how it is made, line by line (BoardModel.Explain)
+  local items = { { text = L["Now"], value = tileValue(e), big = true } }
+  for _, l in ipairs(M.Explain(e.tile, e.board, {})) do
+    if l.label ~= L["What"] then items[#items + 1] = { text = l.label, value = l.text, warn = l.warn, grey = false } end
+  end
+  items[#items + 1] = { text = L["Board"], value = e.board.name .. "  " .. (ns.BoardStatusText and (ns.BoardStatusText(e.board)) or "") }
+  items[#items + 1] = { text = L["On your HUD"], status = tileOnHud(e) }
+  items[#items + 1] = { text = L["Shows as"], value = showsText(e) }
+  items[#items + 1] = { text = L["Displays it can take"], head = true }
   local cur = M.TileDisplay(e.tile)
   for _, d in ipairs(M.DISPLAY_ORDER) do
     if M.DisplayFits(e.tile, d) then
@@ -189,6 +193,8 @@ local function tileActions(row)
       tip = { title = L["Edit..."], text = L["Everything about this tile: what it counts, its period, total or per hour, number, bar or gauge, its size, its name."],
         click = L["Click: the tile's menu."] } },
     { text = hud.text, status = true, on = hud.on, func = hud.func, tip = hud.tip },
+    { text = L["How it's made"], func = function(btn) if ns.Synopsis then ns.Synopsis.Show(btn, e.tile, e.board, "panel") end end,
+      tip = { title = L["How it's made"], text = L["What it counts, over when, and how the number is worked out, in a small panel."] } },
     { text = L["Move to board..."], func = function(btn) moveMenu(btn, e) end,
       tip = { title = L["Move to board..."], text = L["Another board, or a new one of its own. It keeps its settings."] } },
     { text = L["Delete tile"], more = true, tip = L["Delete this tile; your counts don't change."], func = function()
@@ -268,6 +274,32 @@ local function readingDetail(row)
     { text = L["Periods"], value = TC().ScopeChips(r) },
     { text = L["Grey periods need history; a tile placed turns daily history on."], grey = true },
   }
+  -- (0.5.0, G1) "what is this number, and is it what I want before I add it?"
+  local function ctitle(id) local c = id and ns.counters[id]; return c and c.title or id end
+  local from
+  if r.compute then
+    local ins = {}
+    for _, id in ipairs(r.inputs or {}) do local x = ns.readings[id]; ins[#ins + 1] = x and x.title or id end
+    from = #ins > 0 and table.concat(ins, ", ") or L["worked out by its pack"]
+  elseif r.live or not r.counter then
+    from = L["read from the game, live"]
+  else
+    from = r.minus and format(L["%s less %s"], ctitle(r.counter), ctitle(r.minus)) or ctitle(r.counter)
+  end
+  table.insert(items, 1, { text = L["Counted from"], value = from })
+  local calcs = {}
+  for _, c in ipairs(ns.CALC_ORDER or {}) do
+    if ns.CalcAllowed(r, c) then calcs[#calcs + 1] = L[({ total = "Total", perHour = "Per hour", recent = "Recent", trend = "Trend" })[c] or c] end
+  end
+  if #calcs > 0 then table.insert(items, 2, { text = L["Can show as"], value = table.concat(calcs, ", ") }) end
+  local fits = {}
+  local probe = { kind = "reading", reading = r.id }
+  for _, d in ipairs(BM().DISPLAY_ORDER) do if BM().DisplayFits(probe, d) then fits[#fits + 1] = L[DISPLAY_WORD[d] or d] end end
+  table.insert(items, 3, { text = L["Fits"], value = table.concat(fits, ", ") })
+  if t and t.on and not r.param then
+    local ok, _, text = pcall(HC.Reading, HC, r.id, "session", nil)
+    if ok and text then table.insert(items, 1, { text = L["This session"], value = text }) end
+  end
   local on = {}
   for _, e in ipairs(tileEntries()) do if e.raw.reading == r.id then on[#on + 1] = e end end
   items[#items + 1] = { text = format(L["On your boards (%d)"], #on), head = true }
@@ -292,7 +324,7 @@ end
 ---------------------------------------------------------------------------
 
 local DISPLAY_TEXT = {
-  number = "The number itself. Big (with a small graph of the last minutes), Half width (two side by side) or Line. Takes Total, Per hour, Recent and Trend.",
+  number = "The number itself, in five sizes: Big (with a small graph of the last minutes), Big half width, Medium half width, Line and Line half width. Takes Total, Per hour, Recent and Trend.",
   bar = "A bar filling toward a target: the next level, a skill's cap, or a target you type. Total or per hour.",
   gauge = "A dial toward a target, for a rate you want to keep up: total, per hour or recent.",
   odometer = "Rolling digits for a running total: counts and distances.",
@@ -344,7 +376,7 @@ local function addAs(anchor, d)
   local look = { display = d, size = (M.DISPLAYS[d].sizes or {})[1] }
   local list = M.Store().list
   if #list == 0 then
-    if ns.Print then ns.Print(L["Make a board first: New board... (top right)."]) end
+    if ns.Print then ns.Print(L["Make a board first: the Boards tab, New board..."]) end
     return
   end
   if #list == 1 then return Bo().AddReadingMenu(anchor, list[1], look) end
@@ -366,27 +398,32 @@ end
 -- The composed provider
 ---------------------------------------------------------------------------
 
+--- (0.5.0, the user: "the head categories should be entity oriented; i.e. Boards, readings/tiles, trackers, and then
+--- per-character contents") heads by kind, each one clickable and folding: Boards (its ready-made ones under it),
+--- Tiles (per board; the displays), Readings (per category), Trackers (per category; Not loaded), then one head per
+--- other character. Captions that only grouped ("My setup", "Add", "What is counted") are gone.
 local function nodes()
-  local out = { { key = "h:setup", text = L["My setup"], head = true } }
-  for _, n in ipairs(BC().BoardNodes()) do out[#out + 1] = n end
-  out[#out + 1] = { key = "tiles", text = L["Tiles"], count = #tileEntries() }
-  out[#out + 1] = { key = "h:add", text = L["Add"], head = true }
-  for _, n in ipairs(BC().PresetNodes()) do out[#out + 1] = n end
-  for _, n in ipairs(readingNodes()) do out[#out + 1] = n end
-  out[#out + 1] = { key = "displays", text = L["Displays"], count = #BM().DISPLAY_ORDER }
-  out[#out + 1] = { key = "h:counted", text = L["What is counted"], head = true }
-  for _, n in ipairs(TC().Nodes()) do out[#out + 1] = n end
-  local others = BC().OtherNodes()
-  if #others > 0 then
-    out[#out + 1] = { key = "h:others", text = L["Other characters"], head = true }
-    for _, n in ipairs(others) do out[#out + 1] = n end
+  local out = {}
+  local function add(n, lv) n.level = lv; n.indent = nil; out[#out + 1] = n end
+  for _, n in ipairs(BC().BoardNodes()) do add(n, 0) end
+  for _, n in ipairs(BC().PresetNodes()) do add(n, (n.indent or 0) + 1) end
+  local groups = BM().TilesByBoard()
+  add({ key = "tiles", text = L["Tiles"], count = #tileEntries() }, 0)
+  for _, g in ipairs(groups) do
+    if g.board and #g.entries > 0 then add({ key = "tb:" .. tostring(g.board.id), text = g.board.name, count = #g.entries }, 1) end
+  end
+  add({ key = "displays", text = L["Displays"], count = #BM().DISPLAY_ORDER }, 1)
+  for _, n in ipairs(readingNodes()) do add(n, n.indent or 0) end
+  for _, n in ipairs(TC().Nodes()) do add(n, n.key == "unloaded" and 1 or (n.indent or 0)) end
+  for _, n in ipairs(BC().OtherNodes()) do
+    if n.key ~= "others" then add(n, 0) end                -- one head per other character
   end
   return out
 end
 
 local function kind(node)
   node = tostring(node)
-  if node == "tiles" then return "tiles" end
+  if node == "tiles" or node:sub(1, 3) == "tb:" then return "tiles" end
   if node == "readings" or node:sub(1, 3) == "rc:" then return "readings" end
   if node == "displays" then return "displays" end
   if TC().Owns(node) then return "trackers" end
@@ -413,7 +450,7 @@ end
 
 local function rows(node, search)
   local k = kind(node)
-  if k == "tiles" then return tileRows(search) end
+  if k == "tiles" then return tileRows(search, node) end
   if k == "readings" then return readingRows(node, search) end
   if k == "displays" then return displayRows(search) end
   if k == "trackers" then return TC().Rows(node, search) end
@@ -457,7 +494,7 @@ local function footer()
 end
 
 local EMPTY = {
-  boards = "No boards yet: New board... at the top right. A new board stays in this window until you put it on your HUD.",
+  boards = "No boards yet. The Boards tab makes one: New board... A new board stays in this window until you put it on your HUD.",
   tiles = "No tiles yet: add one from Readings, a board's + Tile, or a ready-made board.",
 }
 
@@ -466,13 +503,19 @@ local function build(f)
   browser = ns.Browser.New(f, {
     columns = columns, nodes = nodes, rows = rows, detail = detail, actions = actions, footer = footer,
     rowMenu = rowMenu, hover = hover, splitKey = ID,
+    -- (0.5.0) the tree folds like the AH's; Boards starts open, every other head folded
+    foldKey = ID, foldDefault = function(key) return key ~= "boards" end,
+    nodeMenu = function(node)
+      -- (0.5.0, D3) New board left the Explorer's header; a right-click on Boards still offers it
+      if node.key == "boards" then
+        return { { text = L["New board..."], func = function() Bo().OpenNewBoard() end,
+          tip = L["Make a board: ready-made, empty, or a copy."] } }
+      end
+      if kind(node.key) == "trackers" then return TC().Filters() end
+      return nil
+    end,
     filters = function() if kind(browser.node) == "trackers" then return TC().Filters() end return { { text = L["Filters apply to Trackers"], title = true } } end,
     filtersActive = function() return TC().FiltersActive() end,
-    header = {
-      { text = L["New board..."], width = 110, func = function() Bo().OpenNewBoard() end,
-        tip = { title = L["New board..."], text = L["Make a board: ready-made, empty, or a copy. It appears in the Boards tab; you choose whether it also goes on your HUD."],
-          click = L["Click: the New board dialog."] } },
-    },
     empty = function(node, search)
       if search ~= "" then return L["Nothing matches the search."] end
       local k = kind(node)
@@ -488,7 +531,7 @@ end
 
 ns.Windows.Register(ID, {
   title = L["Explorer"], icon = "Interface\\Icons\\INV_Misc_Spyglass_03", tabOrder = 2,
-  about = "Everything you can count and show: find a board, tile, reading or tracker and act on it.",
+  about = "Find any board, tile, reading or tracker, yours or another character's, and act on it.",
   width = 720, height = 440, minWidth = 600, minHeight = 400,
   build = build,
   onShow = function()
@@ -525,16 +568,17 @@ local _ = ns.Help and ns.Help.Register(ID, {
   what = "The Explorer lists everything Hard Counters can count and show, in one place: your boards and tiles, the ready-made boards, every reading, the five displays, and the trackers behind them. Pick a kind on the left, a row in the middle; its details and what you can do with it come below.",
   can = {
     "{Boards} and {Tiles}: yours, with their status, clock and value now. Below a board: {+ Tile}, {Pause} or {Start}, {Reset}, its {On HUD} switch, {Edit on screen}, and {More...}.",
-    "{Ready-made boards}: pick one and {New board from it...}.",
+    "{Ready-made boards}, under {Boards}: pick one and {New board from it...}.",
+    "A + beside a kind opens it, a - folds it; a right-click on a kind offers {Open all} and {Close all}.",
     "{Readings}: every number by category, with {Add tile...}; {Displays}: number, bar, gauge, odometer, mix, and the tiles that use each.",
     "{Trackers}: what is counted, with its {Counting} switch, {History...} and its size on disk; {Not loaded} lists data of packs you no longer use.",
     "Drag the bar between the list and the details to give either more room; hover a board's row to see where it is on screen.",
   },
   effect = "A switch here is the same as on the board itself: what is {On HUD} is drawn on your screen while you play, and a tracker that is off counts nothing. A tile you add switches its tracker on, with daily history.",
   tour = {
-    { title = "Kinds on the left", text = "The tree is grouped: {My setup} (your boards and tiles), {Add} (ready-made boards, readings, displays), {What is counted} (trackers). Click one; the columns change with it.", before = function() ns.ShowExplorer(true, "boards") end },
+    { title = "Kinds on the left", text = "The list on the left is by kind: {Boards}, {Tiles}, {Readings}, {Trackers}, then your other characters. A + opens a kind; click one and the columns change with it.", before = function() ns.ShowExplorer(true, "boards") end },
     { title = "A row, its details, its actions", text = "Click a row: its details fill the lower half, with switches you can click (green: on), and the buttons at the bottom act on it. Rarer actions are under {More...}; a right-click on the row lists them all." },
-    { title = "Add something", text = "Under {Readings}, pick a number and {Add tile...}; under {Displays}, add a tile drawn as a bar or a gauge; under {Ready-made boards}, {New board from it...}.", before = function() ns.ShowExplorer(true, "readings") end },
+    { title = "Add something", text = "Under {Readings}, pick a number and {Add tile...}; under {Tiles}, {Displays} adds a tile drawn as a bar or a gauge; under {Boards}, {Ready-made boards} and {New board from it...}.", before = function() ns.ShowExplorer(true, "readings") end },
     { title = "What is counted", text = "Under {Trackers}, each tracker says whether it is {Counting}, what history it keeps and what it takes on disk. {History...} chooses how much; placing a tile turns it on for you.", before = function() ns.ShowExplorer(true, "trackers") end },
   },
 })

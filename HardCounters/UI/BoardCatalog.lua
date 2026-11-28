@@ -14,7 +14,7 @@
 local ADDON, ns = ...
 
 local HC, L = ns.HC, ns.L
-local format = string.format
+local format, floor = string.format, math.floor
 
 local C = {}
 ns.BoardCatalog = C
@@ -196,17 +196,35 @@ function C.Detail(row)
       items = items }
   end
   if row.board then
+    -- (0.5.0, G1) "why isn't it on my screen?" and "what is on it": where it is and its clock first, then its rules
+    -- as switches (they were one sentence to decode), its look, its tiles with their sizes, what it was made from
     local b = row.board
     local show = b.show or {}
     local clock = Bo().ClockText(b)
-    local lines = {
-      format(L["On the HUD: in combat it %s; in instances it %s%s%s."], L[RULE_WORD[show.combat or "show"]],
-        L[RULE_WORD[show.instance or "show"]], show.runOnly and L["; only while a stint is open"] or "",
-        show.mouseoverFade and L["; faded until you hover it"] or ""),
-      format(L["/hc board %s puts it on or off your HUD from the chat line."], b.name:lower()),
-    }
+    local lines = { clock ~= "" and format("%s \194\183 %s", row.cells.status or "", clock) or (row.cells.status or "") }
+    local function setShow(k, v) b.show = b.show or {}; b.show[k] = v; Bo().Refresh(b.id); refreshAll() end
+    local COMBAT_NEXT = { show = "fade", fade = "hide", hide = "show" }
+    local combat = show.combat or "show"
     local items = {
       { text = L["Where"], value = row.cells.status, status = hudSwitch(b) },
+      { text = L["In combat"], status = { text = L[RULE_WORD[combat]], on = combat == "show" or (combat == "fade" and "warn") or false,
+        func = function() setShow("combat", COMBAT_NEXT[combat]) end,
+        tip = { title = L["In combat"], state = format(L["Now: it %s"], L[RULE_WORD[combat]]), on = combat == "show",
+          text = L["Shows, fades to half its opacity, or hides while you fight."], click = L["Click: the next one."] } } },
+      { text = L["In instances"], status = { text = L[RULE_WORD[show.instance == "hide" and "hide" or "show"]],
+        on = show.instance ~= "hide", func = function() setShow("instance", show.instance == "hide" and "show" or "hide") end,
+        tip = { title = L["In instances"], text = L["Shows or hides in dungeons and raids."], click = L["Click: switch."] } } },
+      { text = L["Only during a stint"], status = { text = show.runOnly and L["Yes"] or L["No"], on = show.runOnly and "warn" or false,
+        func = function() setShow("runOnly", not show.runOnly) end,
+        tip = { title = L["Only during a stint"], text = L["Yes: on your HUD only while a stint is open (a dungeon, or one you started)."],
+          click = L["Click: switch."] } } },
+      { text = L["Faded until hovered"], status = { text = show.mouseoverFade and L["Yes"] or L["No"], on = show.mouseoverFade and "warn" or false,
+        func = function() setShow("mouseoverFade", not show.mouseoverFade) end,
+        tip = { title = L["Faded until hovered"], text = L["Yes: at half its opacity until the mouse is over it."], click = L["Click: switch."] } } },
+      { text = L["Look"], value = format("%d%% \194\183 %s %d%% \194\183 %s %d%%", floor(M.BoardAlpha(b) * 100 + 0.5),
+          L[M.BG_NAME[M.BgKey(b) or ""] or "Custom"], floor(select(4, M.BoardBg(b)) * 100 + 0.5), L["scale"], floor((b.scale or 1) * 100 + 0.5)),
+        button = { text = L["Change"], func = function(btn) ns.Menu.Show(btn, Bo().LookItems(b)) end,
+          tip = L["Opacity, background, the numbers' colour and scale on your HUD."] } },
       { text = L["Mini mode (one line)"], status = { text = b.mini and L["Mini"] or L["Full"], on = b.mini and true or false,
         func = function() b.mini = not b.mini; Bo().Refresh(b.id, true); refreshAll() end,
         tip = { title = L["Mini mode"], state = b.mini and L["Now: one line"] or L["Now: the full board"], on = b.mini,
@@ -215,8 +233,10 @@ function C.Detail(row)
     }
     if clock ~= "" then items[#items + 1] = { text = L["Clock"], value = clock } end
     items[#items + 1] = { text = format(L["Its tiles (%d)"], #b.tiles), head = true }
+    local SW = Bo().SIZE_NAME or {}
     for _, t in ipairs(b.tiles) do
       local label = t.kind == "reading" and M.TileLabel(t, b) or (t.kind == "label" and ("[" .. (t.text or "") .. "]") or L["Splits"])
+      if t.kind == "reading" then label = label .. "  |cff808080" .. L[SW[M.TileSize(t)] or ""] .. "|r" end
       local value = ""
       if t.kind == "reading" then
         local ok, _, text = pcall(M.TileValue, t, b)
@@ -231,22 +251,35 @@ function C.Detail(row)
             click = onHud and L["Click: keep this tile off the HUD."] or L["Click: draw this tile with its board."] } } or nil }
     end
     if #b.tiles == 0 then items[#items + 1] = { text = L["(empty: + Tile below adds one)"], grey = true } end
+    local p = b.preset and M.Preset(b.preset)
+    if p then items[#items + 1] = { text = L["Made from"], value = p.name } end
+    items[#items + 1] = { text = format(L["/hc board %s puts it on or off your HUD from the chat line."], b.name:lower()), grey = true }
     return { title = b.name .. "   " .. row.cells.status, lines = lines, items = items }
   end
   local p = M.Preset(row.preset)
   if not p then return nil end
+  -- (0.5.0, G1) "what would I get?": each tile with its size and its value now where the reading is loaded
   local items = { { text = format(L["Its tiles (%d)"], #p.tiles), head = true } }
+  local SW, missing = Bo().SIZE_NAME or {}, 0
   for _, t in ipairs(p.tiles) do
     local r = t.kind == "reading" and ns.readings[t.reading]
     local label = r and ns.ReadingTitle(r, t.arg, t.calc) or (t.kind == "label" and ("[" .. (t.text or "") .. "]"))
       or (t.kind == "splits" and L["Splits"]) or tostring(t.reading)
-    items[#items + 1] = { text = label, grey = t.kind == "reading" and not r,
-      value = t.kind == "reading" and not r and L["(its pack is not loaded)"] or nil }
+    local value
+    if r then
+      local ok, _, text = pcall(HC.Reading, HC, t.reading, "session", { arg = t.arg, calc = t.calc })
+      value = (L[SW[t.size or "line"] or ""] or "") .. (ok and text and ("  " .. text) or "")
+    elseif t.kind == "reading" then
+      missing = missing + 1
+      value = L["(its pack is not loaded)"]
+    end
+    items[#items + 1] = { text = label, grey = t.kind == "reading" and not r, value = value }
   end
-  return { title = p.name .. "   |cff808080" .. (row.cells.status or "") .. "|r",
-    lines = { row.user and L["One of your presets: a board saved with Save as preset."]
-      or L["New board from it makes a board with these tiles, its trackers counting; numbers from a pack you don't have are left out."] },
-    items = items }
+  local lines = { row.user and L["One of your presets: a board saved with Save as preset."]
+    or L["New board from it makes a board with these tiles, its trackers counting; numbers from a pack you don't have are left out."] }
+  if p.tip then lines[#lines + 1] = L[p.tip] end
+  if missing > 0 then lines[#lines + 1] = "|cff808080" .. format(L["%d of them need a pack that is not loaded."], missing) .. "|r" end
+  return { title = p.name .. "   |cff808080" .. (row.cells.status or "") .. "|r", lines = lines, items = items }
 end
 
 ---------------------------------------------------------------------------
@@ -283,6 +316,8 @@ local function boardActions(b)
       func = function() Bo().ResetPosition(b); refresh() end },
     { text = L["Save as stint"], tip = L["Keep what its clock counted so far as a stint (the Stints tab)."],
       func = function() Bo().SaveBoard(b); refresh() end, disabled = not st },
+    { text = L["Look"], sub = Bo().LookItems(b), func = function() end,
+      tip = L["Opacity, background, the numbers' colour and scale on your HUD."] },
     { text = b.mini and L["Full board"] or L["Mini mode (one line)"], tip = L["One line on your HUD, or the whole board."],
       func = function() b.mini = not b.mini; Bo().Refresh(b.id, true); refreshAll() end },
     { text = L["Rename..."], func = function() askText(L["Board name"], b.name, function(s) Bo().Rename(b, s); refreshAll() end) end },
@@ -342,7 +377,7 @@ function ns.BoardMenu(b, anchor, after)
   for _, a in ipairs(boardActions(b)) do
     items[#items + 1] = { text = a.status and (a.on and "|cff60ff60" .. a.text .. "|r" or a.text) or a.text,
       tip = type(a.tip) == "string" and a.tip or (type(a.tip) == "table" and a.tip.text) or nil,
-      disabled = a.disabled, func = function() a.func(anchor); after() end }
+      disabled = a.disabled, sub = a.sub, func = function() a.func(anchor); after() end }
   end
   ns.Menu.Show(anchor, items)
 end

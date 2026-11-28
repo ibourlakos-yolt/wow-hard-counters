@@ -51,11 +51,32 @@ local function text(parent, font, justify)
   return s
 end
 
-local function valueColor(fs, settled, stateWord)
+-- (0.5.0, DESIGN §17.16 B2) one colour family for every size: gold is structure (the board's name, headings, the Big
+-- edge), grey says what a tile is (every label), white (or the tile's colour, B5) says how much. States win.
+local C_LABEL = { 0.70, 0.70, 0.74 }
+local function labelColor(fs) fs:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3]) end
+
+local function valueColor(fs, settled, stateWord, tile, board)
   if stateWord == "off" or stateWord == "missing" or stateWord == "needs history" or stateWord == "stale"
       or stateWord == "inapplicable" then fs:SetTextColor(0.5, 0.5, 0.5)
   elseif settled == false then fs:SetTextColor(0.5, 0.5, 0.5)
+  elseif tile then fs:SetTextColor(M.TileColor(tile, board))
   else fs:SetTextColor(1, 1, 1) end
+end
+
+-- (0.5.0) a Big value too wide for its room steps down a font size (Big stops at 16 pt, Big half width goes to 12):
+-- checked only when the text's length changed, so a steady tile costs nothing
+local BIG_FONTS = { "GameFontNormalHuge", "GameFontNormalLarge", "GameFontHighlight" }
+local function fitValue(fs, room, last)
+  local t = fs:GetText() or ""
+  local len = #t
+  if fs.fitLen == len and fs.fitRoom == room then return end
+  fs.fitLen, fs.fitRoom = len, room
+  for k = 1, last do
+    fs:SetFontObject(BIG_FONTS[k])
+    local w = fs:GetStringWidth()
+    if type(w) ~= "number" or w <= room or k == last then return end
+  end
 end
 
 -- trend (HC-53): green up, red down, white inside the dead band (neutral)
@@ -80,7 +101,7 @@ local function clickable(f) return isEditing(f.board) or holding end
 
 --- Mouse on or off for a board's frame and rows, as the mode asks (boards are click-through otherwise).
 local function setMouse(f)
-  f:EnableMouse(clickable(f))
+  f:EnableMouse(clickable(f) or f.infoArmed or false)
   for _, w in ipairs(f.rowFrames or {}) do w:EnableMouse(clickable(f)) end
 end
 
@@ -150,23 +171,87 @@ end
 -- Tile widgets (built per layout; a layout change rebuilds the board's rows)
 ---------------------------------------------------------------------------
 
+-- (0.5.0, the user: "Pause, resume, reset buttons should be icons instead of text; make it an option") the
+-- Stopwatch's own three textures. The two TimeManager ones are unseen on Forever: if they don't draw, set
+-- ICON_FALLBACK and the pause is two bars and the reset the dressing room's turn arrow.
+local ICON_PLAY = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
+local ICON_PAUSE = "Interface\\TimeManager\\PauseButton"
+local ICON_RESET = "Interface\\TimeManager\\ResetButton"
+local ICON_FALLBACK = false
+local ICON_RESET_FALLBACK = "Interface\\Buttons\\UI-RotationLeft-Button-Up"
+local CTRL_H = 16
+
+--- Do the board's Pause, Resume and Reset show as icons? (Options, on by default.)
+function Boards.ButtonIcons()
+  return not (ns.settings and ns.settings.boardButtonIcons == false)
+end
+
+local function setIcon(b, tex)
+  if b.tex == tex then return end
+  b.tex = tex
+  if tex == "bars" then
+    b:SetNormalTexture("")
+    b.bar1:Show(); b.bar2:Show()
+  else
+    if b.bar1 then b.bar1:Hide(); b.bar2:Hide() end
+    b:SetNormalTexture(tex)
+    b:SetPushedTexture(tex)
+    local p = b.GetPushedTexture and b:GetPushedTexture()
+    if p and p.SetVertexColor then p:SetVertexColor(0.7, 0.7, 0.7) end
+  end
+end
+
 local function runControls(w, board)
-  local function btn(label, fn)
-    local b = Wd.Button(w, label, 40, fn)
-    b:SetHeight(18)
-    local fs = b:GetFontString()
-    if fs and fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+  local icons = Boards.ButtonIcons()
+  local function btn(word, fn)
+    local b
+    if icons then
+      b = CreateFrame("Button", nil, w)
+      b:SetSize(CTRL_H, CTRL_H)
+      b:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+      b:SetScript("OnClick", fn)
+      b.isIcon = true
+      -- the action's word for the tooltip and the tests (an icon has no text)
+      function b.SetText(self, label) self.word = label end
+      function b.GetText(self) return self.word end
+      b.bar1 = b:CreateTexture(nil, "ARTWORK")
+      b.bar1:SetSize(3, 10)
+      b.bar1:SetPoint("CENTER", -3, 0)
+      b.bar1:SetColorTexture(1, 1, 1, 0.9)
+      b.bar2 = b:CreateTexture(nil, "ARTWORK")
+      b.bar2:SetSize(3, 10)
+      b.bar2:SetPoint("CENTER", 3, 0)
+      b.bar2:SetColorTexture(1, 1, 1, 0.9)
+      b.bar1:Hide(); b.bar2:Hide()
+      b:SetText(word)
+    else
+      b = Wd.Button(w, word, 40, fn)
+      b:SetHeight(CTRL_H)
+      local fs = b:GetFontString()
+      if fs and fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+    end
     return b
   end
 
   w.reset = btn(L["Reset"], function() controlAll(board, "reset") end)
   w.reset:SetPoint("RIGHT", w, "RIGHT", -4, 0)
   w.pause = btn(L["Pause"], function() toggleAll(board) end)
-  w.pause:SetWidth(52)
-  w.pause:SetPoint("RIGHT", w.reset, "LEFT", -2, 0)
-  Wd.Tip(w.pause, function() return L["Pause or start this board's timer: every tile on it. Nothing counts while paused"] end)
-  Wd.Tip(w.reset, function()
-    return L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a stint"]
+  if icons then
+    setIcon(w.reset, ICON_FALLBACK and ICON_RESET_FALLBACK or ICON_RESET)
+    w.pause:SetPoint("RIGHT", w.reset, "LEFT", -2, 0)
+  else
+    w.pause:SetWidth(52)
+    w.pause:SetPoint("RIGHT", w.reset, "LEFT", -2, 0)
+  end
+  Wd.RichTip(w.pause, function(self)
+    local _, st = M.BoardClock(board)
+    return { title = self:GetText(), state = st == "running" and L["Now: running"] or (st == "paused" and L["Now: paused"] or L["Now: stopped"]),
+      on = st == "running",
+      text = L["Pause or start this board's timer: every tile on it. Nothing counts while paused."] }
+  end)
+  Wd.RichTip(w.reset, function()
+    return { title = L["Reset"],
+      text = L["Start this board's timer again from zero. With 5 active minutes or more the period that ends is saved as a stint."] }
   end)
 end
 
@@ -178,6 +263,11 @@ local function buildRow(f, row, y)
   w:SetHeight(row.h)
   w.row = row
   if row.kind == "run" then
+    -- (0.5.0) a faint title strip from the board's top edge: the header reads as a title bar on any background
+    w.strip = w:CreateTexture(nil, "BACKGROUND", nil, 1)
+    w.strip:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    w.strip:SetPoint("BOTTOMRIGHT", w, "BOTTOMRIGHT", 0, 0)
+    w.strip:SetColorTexture(0, 0, 0, 0.25)
     w.dot = w:CreateTexture(nil, "OVERLAY")
     w.dot:SetSize(8, 8)
     w.dot:SetPoint("LEFT", 8, 0)
@@ -190,14 +280,16 @@ local function buildRow(f, row, y)
     w.name:SetPoint("RIGHT", w.clock, "LEFT", -4, 0)
   elseif row.kind == "hero" then
     w.label = text(w, "GameFontNormalSmall")
+    labelColor(w.label)
     w.label:SetPoint("TOPLEFT", 10, -4)
     w.label:SetPoint("TOPRIGHT", -10, -4)
     w.value = text(w, "GameFontNormalHuge")
     w.value:SetPoint("TOPLEFT", w.label, "BOTTOMLEFT", 0, -2)
-    -- the sparkline: bar textures (the game's fonts have no block glyphs), the last 10 minutes, oldest left
+    -- the sparkline: bar textures (the game's fonts have no block glyphs), the last 10 minutes, oldest left. (0.5.0)
+    -- Its row has room for it only when it is drawn (row.spark); the comparison line goes under it, or the value.
     w.spark = CreateFrame("Frame", nil, w)
     w.spark:SetSize(SPARK_N * SPARK_W, SPARK_H)
-    w.spark:SetPoint("TOPLEFT", w.value, "BOTTOMLEFT", 0, -3)
+    w.spark:SetPoint("TOPLEFT", w.label, "BOTTOMLEFT", 0, -26)
     w.bars = {}
     for k = 1, SPARK_N do
       local bar = w.spark:CreateTexture(nil, "ARTWORK")
@@ -215,7 +307,7 @@ local function buildRow(f, row, y)
     w.trend = text(w, "GameFontHighlight")
     w.trend:SetPoint("LEFT", w.trendArrow, "RIGHT", 1, 0)
     w.compare = text(w, "GameFontHighlightSmall")
-    w.compare:SetPoint("TOPLEFT", w.spark, "BOTTOMLEFT", 0, -3)
+    w.compare:SetPoint("TOPLEFT", w.label, "BOTTOMLEFT", 0, row.spark and -41 or -26)
     w.compare:SetPoint("RIGHT", -10, 0)
     local edge = w:CreateTexture(nil, "BORDER")
     edge:SetPoint("TOPLEFT", 4, -2)
@@ -225,9 +317,10 @@ local function buildRow(f, row, y)
   elseif row.kind == "bar" then
     -- a row over a track: the value toward the target (the reading's own, or the tile's)
     w.label = text(w, "GameFontHighlightSmall")
+    labelColor(w.label)
     w.label:SetPoint("TOPLEFT", 10, -3)
-    w.value = text(w, "GameFontHighlightSmall", "RIGHT")
-    w.value:SetPoint("TOPRIGHT", -10, -3)
+    w.value = text(w, "GameFontHighlight", "RIGHT")
+    w.value:SetPoint("TOPRIGHT", -10, -2)
     w.label:SetPoint("RIGHT", w.value, "LEFT", -6, 0)
     w.track = w:CreateTexture(nil, "BACKGROUND")
     w.track:SetPoint("BOTTOMLEFT", 10, 3)
@@ -244,6 +337,7 @@ local function buildRow(f, row, y)
     -- (the needle of HC-12's speedometer needs art: parked)
     local textX = 10 + 2 * GAUGE_R + 10
     w.label = text(w, "GameFontHighlightSmall")
+    labelColor(w.label)
     w.label:SetPoint("TOPLEFT", textX, -5)
     w.label:SetPoint("TOPRIGHT", -10, -5)
     w.value = text(w, "GameFontHighlight")
@@ -263,6 +357,7 @@ local function buildRow(f, row, y)
     -- (HC-63) digit wheels under the title; a digit that changes rolls up into place. Plain squares and the game's
     -- own font, no art; each wheel clips its two digits (the one leaving and the one coming)
     w.label = text(w, "GameFontHighlightSmall")
+    labelColor(w.label)
     w.label:SetPoint("TOPLEFT", 10, -3)
     w.label:SetPoint("TOPRIGHT", -10, -3)
     w.value = text(w, "GameFontHighlight")              -- states and values too long for the wheels
@@ -288,9 +383,10 @@ local function buildRow(f, row, y)
   elseif row.kind == "mix" then
     -- (HC-63) one bar split into a part per member, largest first, the shares written under it
     w.label = text(w, "GameFontHighlightSmall")
+    labelColor(w.label)
     w.label:SetPoint("TOPLEFT", 10, -3)
-    w.value = text(w, "GameFontHighlightSmall", "RIGHT")
-    w.value:SetPoint("TOPRIGHT", -10, -3)
+    w.value = text(w, "GameFontHighlight", "RIGHT")
+    w.value:SetPoint("TOPRIGHT", -10, -2)
     w.label:SetPoint("RIGHT", w.value, "LEFT", -6, 0)
     w.track = w:CreateTexture(nil, "BACKGROUND")
     w.track:SetPoint("TOPLEFT", 10, -18)
@@ -319,32 +415,73 @@ local function buildRow(f, row, y)
       w.lines[k] = { name = name, amount = amt }
     end
   elseif row.kind == "grid" then
+    -- (0.5.0) two columns, each cell drawn by its own footprint: Big half width (heroHalf), Medium (grid) or Line half
+    -- width (rowHalf). Padding 10 at both sides, a gutter of 8 (it was 4, and the right column ran 4 past the padding).
     w.cells = {}
-    for c = 1, 2 do
-      local cell = {}
-      cell.label = text(w, "GameFontDisableSmall")
-      cell.value = text(w, "GameFontHighlight")
+    local feet = row.cells or { "grid", "grid" }
+    for c = 1, #row.tiles do
+      local foot = feet[c] or "grid"
+      local cell = { foot = foot }
+      if foot == "heroHalf" then
+        cell.label = text(w, "GameFontNormalSmall")
+        cell.value = text(w, "GameFontNormalHuge")
+        cell.edge = w:CreateTexture(nil, "BORDER")
+        cell.edge:SetWidth(2)
+        cell.edge:SetColorTexture(1, 0.82, 0, 0.8)
+      elseif foot == "rowHalf" then
+        cell.label = text(w, "GameFontHighlightSmall")
+        cell.value = text(w, "GameFontHighlight", "RIGHT")
+      else
+        cell.label = text(w, "GameFontHighlightSmall")
+        cell.value = text(w, "GameFontHighlight")
+      end
+      labelColor(cell.label)
+      cell.arrow = w:CreateTexture(nil, "OVERLAY")
+      local a = foot == "heroHalf" and 14 or (foot == "grid" and 12 or 10)
+      cell.arrow:SetSize(a, a)
+      cell.arrow:Hide()
       w.cells[c] = cell
     end
     w:SetScript("OnSizeChanged", function(self)
-      local half = floor((self:GetWidth() - 20) / 2)
+      local colW = floor((self:GetWidth() - 28) / 2)
+      self.colW = colW
       for c, cell in ipairs(self.cells) do
-        local x = 10 + (c - 1) * (half + 4)
+        local x = 10 + (c - 1) * (colW + 8)
         cell.label:ClearAllPoints()
-        cell.label:SetPoint("TOPLEFT", x, -3)
-        cell.label:SetWidth(half)
         cell.value:ClearAllPoints()
-        cell.value:SetPoint("TOPLEFT", x, -16)
-        cell.value:SetWidth(half)
+        if cell.foot == "rowHalf" then
+          cell.value:SetPoint("RIGHT", self, "TOPLEFT", x + colW, -9)
+          cell.label:SetPoint("LEFT", self, "TOPLEFT", x, -9)
+          cell.label:SetPoint("RIGHT", cell.value, "LEFT", -4, 0)
+        else
+          cell.label:SetPoint("TOPLEFT", x, -4)
+          cell.label:SetWidth(colW)
+          cell.value:SetPoint("TOPLEFT", x, cell.foot == "heroHalf" and -17 or -17)
+          if cell.foot == "grid" then cell.value:SetWidth(colW) end
+        end
+        if cell.edge then
+          cell.edge:ClearAllPoints()
+          cell.edge:SetPoint("TOPLEFT", x - 6, -2)
+          cell.edge:SetPoint("BOTTOMLEFT", x - 6, 2)
+        end
+        cell.x = x
       end
     end)
     w:GetScript("OnSizeChanged")(w)
   else
     w.label = text(w, row.kind == "label" and "GameFontNormalSmall" or "GameFontHighlightSmall")
+    if row.kind ~= "label" then labelColor(w.label) end
     w.label:SetPoint("LEFT", 10, 0)
-    w.value = text(w, "GameFontHighlightSmall", "RIGHT")
+    -- (0.5.0) a Line's value is 12 pt, like every number but the Big ones (it was 10)
+    w.value = text(w, row.kind == "row" and "GameFontHighlight" or "GameFontHighlightSmall", "RIGHT")
     w.value:SetPoint("RIGHT", -10, 0)
     w.label:SetPoint("RIGHT", w.value, "LEFT", -6, 0)
+    if row.kind == "row" then
+      w.arrow = w:CreateTexture(nil, "OVERLAY")
+      w.arrow:SetSize(10, 10)
+      w.arrow:SetPoint("RIGHT", w.value, "LEFT", -3, 0)
+      w.arrow:Hide()
+    end
   end
   local function tileAt(self)
     local i = self.row.tiles[1]
@@ -355,6 +492,7 @@ local function buildRow(f, row, y)
     end
     return i
   end
+  w.tileAt = tileAt
   -- an item from the bags dropped on the tile (dragged here, or carried and clicked): HC-34
   w:SetScript("OnReceiveDrag", function(self) Boards.DropItem(self, board, tileAt(self)) end)
   -- edit mode: right-click a tile for its options (the control row: the board's)
@@ -377,8 +515,8 @@ end
 local function layoutFull(f)
   local board = f.board
   clearRows(f)
-  local rows, h = M.Layout(board, { compare = compareMap(board), noControls = f.isFlyout })
-  local y = -M.PAD
+  local rows, h, top = M.Layout(board, { compare = compareMap(board), noControls = f.isFlyout })
+  local y = -(top or M.PAD)
   for _, row in ipairs(rows) do
     f.rowFrames[#f.rowFrames + 1] = buildRow(f, row, y)
     y = y - row.h
@@ -386,7 +524,7 @@ local function layoutFull(f)
   if #rows == 0 then
     f.empty = f.empty or text(f, "GameFontDisableSmall")
     f.empty:SetPoint("TOPLEFT", 10, -M.PAD - 2)
-    f.empty:SetText(#board.tiles > 0 and L["Every tile of this board is kept off the HUD (Boards tab)"]
+    f.empty:SetText(#board.tiles > 0 and L["Every tile of this board is off the HUD. /hc, the Boards tab, puts them back."]
       or L["Empty board: Edit (/hc edit), then +"])
     f.empty:Show()
     h = h + 18
@@ -416,13 +554,13 @@ local function drawReading(board, i, fsLabel, fsValue)
   if live ~= nil then
     fsLabel:SetText(label)
     fsValue:SetFormattedText(fmt, live)
-    valueColor(fsValue, true, nil)
+    valueColor(fsValue, true, nil, tile, board)
     return "live", v
   end
   if st == "stale" and note then label = label .. " \194\183 " .. note end   -- the pack's word: "in combat"
   fsLabel:SetText(label)
   fsValue:SetText(valueText(t, st))
-  valueColor(fsValue, settled, st)
+  valueColor(fsValue, settled, st, tile, board)
   if st == nil and settled ~= false and M.TileCalc(tile) == "trend" then
     local c = TREND_RGB[ns.TrendState(v)]
     if c then fsValue:SetTextColor(c[1], c[2], c[3]) end
@@ -540,6 +678,51 @@ local function drawMix(w, board, i)
 end
 Boards.DrawMix, Boards.DrawOdometer = drawMix, drawOdometer   -- (tests)
 
+--- The trend badge's arrow on a number tile that isn't Big (0.5.0): shown, tinted, or hidden. True when shown.
+local function drawArrow(arrow, tile, board)
+  local tv, ts = M.TrendBadge(tile, board)
+  local tex = tv and ARROW[ts]
+  if not tex then arrow:Hide(); return false end
+  local c = TREND_RGB[ts]
+  arrow:SetTexture(tex)
+  if arrow.SetDesaturated then arrow:SetDesaturated(true) end
+  arrow:SetVertexColor(c[1], c[2], c[3])
+  arrow:Show()
+  return true
+end
+
+local function drawCell(w, cell, board, idx)
+  local tile = board.tiles[idx]
+  drawReading(board, idx, cell.label, cell.value)
+  local colW = w.colW or 100
+  if cell.foot == "heroHalf" then
+    local on = M.TrendBadge(tile, board) ~= nil
+    fitValue(cell.value, colW - (on and 18 or 0), 3)
+    local vw = cell.value:GetStringWidth()
+    if on and type(vw) == "number" and vw + 18 > colW then on = false end   -- 12 pt and still no room: no arrow
+    if on then
+      cell.arrow:ClearAllPoints()
+      cell.arrow:SetPoint("LEFT", cell.value, "LEFT", math.min(vw, colW) + 4, 0)
+      drawArrow(cell.arrow, tile, board)
+    else
+      cell.arrow:Hide()
+    end
+  elseif cell.foot == "rowHalf" then
+    if drawArrow(cell.arrow, tile, board) then
+      cell.arrow:ClearAllPoints()
+      cell.arrow:SetPoint("RIGHT", cell.value, "LEFT", -3, 0)
+    end
+  else
+    local vw = cell.value:GetStringWidth()
+    if type(vw) == "number" and vw + 16 <= colW and drawArrow(cell.arrow, tile, board) then
+      cell.arrow:ClearAllPoints()
+      cell.arrow:SetPoint("LEFT", cell.value, "LEFT", vw + 4, 0)
+    else
+      cell.arrow:Hide()
+    end
+  end
+end
+
 local function drawRow(w, board)
   local row = w.row
   local i = row.tiles[1]
@@ -561,6 +744,9 @@ local function drawRow(w, board)
       w.name:SetText(st == "running" and board.name or (board.name .. "  (" .. L[st] .. ")"))
       w.clock:SetText(U.duration(active))
       w.pause:SetText(st == "running" and L["Pause"] or (st == "paused" and L["Resume"] or L["Start"]))
+      if w.pause.isIcon then
+        setIcon(w.pause, st == "running" and (ICON_FALLBACK and "bars" or ICON_PAUSE) or ICON_PLAY)
+      end
     elseif bs ~= "run" then
       w.name:SetText(board.name .. " \194\183 " .. L[M.SCOPE_WORD[bs] or bs])
       w.clock:SetText(kind and U.duration(active) or "")
@@ -570,8 +756,10 @@ local function drawRow(w, board)
     end
   elseif row.kind == "hero" then
     local st, v = drawReading(board, i, w.label, w.value)
+    local room = (board.width or M.WIDTH) - 20
+    fitValue(w.value, room, 2)
     -- (HC-52) the recent rate at each of the last active minutes; until two are sampled, gains per minute
-    local vals = not st and not M.ReadsPart(tile) and M.HasExtra(tile, "sparkline")
+    local vals = row.spark and not st and not M.ReadsPart(tile) and M.HasExtra(tile, "sparkline")
       and (M.RecentSparkline(tile, board, SPARK_N, sparkBuf) or M.Sparkline(tile.reading, SPARK_N, 60, sparkBuf))
     w.spark:SetShown(vals and true or false)
     if vals then
@@ -585,6 +773,9 @@ local function drawRow(w, board)
       local c = TREND_RGB[ts]
       w.trend:SetText(ns.TrendText(tv))
       w.trend:SetTextColor(c[1], c[2], c[3])
+      -- (0.5.0) words that don't fit beside the number: the arrow alone
+      local vw, tw = w.value:GetStringWidth(), w.trend:GetStringWidth()
+      if type(vw) == "number" and type(tw) == "number" and vw + 6 + 14 + 1 + tw > room then w.trend:SetText("") end
       if ARROW[ts] then
         w.trendArrow:SetTexture(ARROW[ts])
         -- the arrow art is gold: grey it first so the tint matches the words (red on gold drew orange, 2026-11-20)
@@ -601,8 +792,8 @@ local function drawRow(w, board)
   elseif row.kind == "grid" then
     for c, cell in ipairs(w.cells) do
       local idx = row.tiles[c]
-      if idx then drawReading(board, idx, cell.label, cell.value)
-      else cell.label:SetText(""); cell.value:SetText("") end
+      if idx then drawCell(w, cell, board, idx)
+      else cell.label:SetText(""); cell.value:SetText(""); cell.arrow:Hide() end
     end
   elseif row.kind == "bar" then
     drawReading(board, i, w.label, w.value)
@@ -634,6 +825,7 @@ local function drawRow(w, board)
     drawMix(w, board, i)
   elseif row.kind == "row" then
     drawReading(board, i, w.label, w.value)
+    if w.arrow then drawArrow(w.arrow, tile, board) end
   elseif row.kind == "splits" then
     local hero = M.HeroIndex(board)
     local ht = hero and board.tiles[hero]
@@ -740,6 +932,7 @@ local function showFlyout(f)
   local fly = ensureFlyout(f)
   fly.board = f.board
   fly:SetWidth(f.board.width or M.WIDTH)
+  fly.bg:SetColorTexture(M.BoardBg(f.board))
   fly.layoutKey = nil
   refreshFull(fly)
   fly:ClearAllPoints()
@@ -830,9 +1023,9 @@ local function setEditChrome(f, on)
       f:SetScript("OnDragStart", nil)
       f:SetScript("OnDragStop", nil)
     end
-    f.bg:SetColorTexture(0.04, 0.04, 0.06, 0.72)
+    f.bg:SetColorTexture(M.BoardBg(f.board))
   end
-  if on and f.handle then f.handle:Hide(); f.moveHandle:Hide() end
+  if on and f.handle then f.handle:Hide(); f.moveHandle:Hide(); f.hideHandle:Hide() end
   if on then f.moveArmed = nil end
   if on or not (f.moveArmed or f.dragging) then setMouse(f) end
 end
@@ -871,6 +1064,7 @@ end
 local function startMove(f)
   f:SetMovable(true)
   f.dragging = true
+  f.wasDragged = true
   f:StartMoving()
 end
 
@@ -906,10 +1100,20 @@ end
 local function ensureHandle(f)
   if f.handle then return f.handle end
   local h = handleTab(f, L["Edit"], HANDLE_W, "BOTTOMRIGHT", "TOPRIGHT")
-  h:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   h:SetScript("OnClick", function() Boards.EditBoard(f.board.id, true) end)
   Wd.Tip(h, function() return L["Edit this board: add, remove, restyle and move its numbers"] end)
+  Wd.RightMenu(h, function() return Boards.BoardMenuItems(f.board) end)
   f.handle = h
+  -- (0.5.0, C2) Hide, beside Edit: takes the board off the HUD (the window's On HUD switch), and says how it comes back
+  local x = handleTab(f, L["Hide"], HANDLE_W, "BOTTOMRIGHT", "TOPRIGHT")
+  x:ClearAllPoints()
+  x:SetPoint("RIGHT", h, "LEFT", -2, 0)
+  x:SetScript("OnClick", function() Boards.TakeOff(f.board) end)
+  Wd.RichTip(x, function() return { title = L["Hide"],
+    text = L["Take this board off your HUD. It keeps counting; the Hard Counters window (/hc) puts it back."],
+    click = L["Click: take it off."] } end)
+  Wd.RightMenu(x, function() return Boards.BoardMenuItems(f.board) end)
+  f.hideHandle = x
   -- the move handle, at the other corner: drag it and the board follows
   local m = handleTab(f, L["Move"], MOVE_W, "BOTTOMLEFT", "TOPLEFT")
   m:RegisterForDrag("LeftButton")
@@ -920,6 +1124,7 @@ local function ensureHandle(f)
     if key then return format(L["Drag this to move the board. Or hold %s and drag the board itself (Options: the key)."], key) end
     return L["Drag this to move the board."]
   end)
+  Wd.RightMenu(m, function() return Boards.BoardMenuItems(f.board) end)
   f.moveHandle = m
   return h
 end
@@ -955,6 +1160,56 @@ local function armMove(f, on)
   end
 end
 
+-- (0.5.0, G3; the user chose Alt+click) the key that, clicked with on a board's tile, shows how its number is made.
+-- While it is held over a board the board takes clicks (not drags); released, it is click-through again.
+Boards.INFO_KEYS = { "ALT", "SHIFT", "CTRL", "NONE" }
+local INFO_KEY_SET = { ALT = true, SHIFT = true, CTRL = true, NONE = true }
+local INFO_KEY_WORD = { SHIFT = "Shift", CTRL = "Ctrl", ALT = "Alt" }
+
+function Boards.InfoKey()
+  local k = ns.settings and ns.settings.boardInfoKey
+  return INFO_KEY_SET[k] and k or "ALT"
+end
+function Boards.InfoKeyWord() return INFO_KEY_WORD[Boards.InfoKey()] end
+
+local function infoKeyDown()
+  local k = Boards.InfoKey()
+  if k == "NONE" then return false end
+  return ns.wow.modifierDown and ns.wow.modifierDown(k) or false
+end
+
+local function armInfo(f, on)
+  if (f.infoArmed or false) == on then return end
+  f.infoArmed = on or nil
+  if on then f:EnableMouse(true) elseif not f.moveArmed then setMouse(f) end
+end
+
+--- The tile under the cursor on a full board: its row frame and index, or nil (the header, the padding).
+local function tileUnderCursor(f)
+  for _, w in ipairs(f.rowFrames or {}) do
+    if w:IsShown() and w.IsMouseOver and w:IsMouseOver() and w.tileAt then
+      local i = w.tileAt(w)
+      local t = i and f.board.tiles[i]
+      if t and t.kind == "reading" then return w, i end
+      return w, nil
+    end
+  end
+  return nil
+end
+
+--- The info key's click on a board (G3): the tooltip for the tile under the cursor; a right-click there opens the
+--- tile's menu, on the header the board's (D0), without edit mode. True when it did something.
+function Boards.InfoClick(f, button)
+  if not f.infoArmed or f.board.mini then return false end
+  local w, i = tileUnderCursor(f)
+  if button == "RightButton" then
+    if i then Boards.TileMenu(w, f.board, i) else Boards.BoardMenu(w or f, f.board) end
+    return true
+  end
+  if i and ns.Synopsis then ns.Synopsis.Show(w, f.board.tiles[i], f.board, "tip"); return true end
+  return false
+end
+
 local HOVER_GAP = 0.1
 local sinceHover = HOVER_GAP
 
@@ -966,25 +1221,37 @@ function Boards.Hover(elapsed)
   sinceHover = 0
   local shown = 0
   local keyDown = moveKeyDown()
+  local infoDown = infoKeyDown()
+  -- (G3) the HUD's tooltip goes on a click off its board where GLOBAL_MOUSE_DOWN doesn't fire, and when its board goes
+  local syn = ns.Synopsis
+  if syn and syn.IsShown("tip") then
+    local _, tb = syn.Current()
+    local tf = tb and frames[tb.id]
+    local isDown = rawget(_G, "IsMouseButtonDown")
+    local anyDown = isDown and (isDown("LeftButton") or isDown("RightButton"))
+    if not (tf and tf:IsShown()) or (anyDown and not (tf.IsMouseOver and tf:IsMouseOver())) then syn.Hide() end
+  end
   for _, f in pairs(frames) do
     -- a drag whose end we never heard (the button is up and the board still follows the cursor): end it here
     if f.dragging and leftDown() == false then stopMove(f) end
     local onBoard = f:IsShown() and f.IsMouseOver and f:IsMouseOver() or false
     local over = false
     if handleFits(f) then
-      over = onBoard or (f.handle and f.handle:IsShown() and (f.handle:IsMouseOver() or f.moveHandle:IsMouseOver()))
-        or f.dragging or false
+      over = onBoard or (f.handle and f.handle:IsShown() and (f.handle:IsMouseOver() or f.moveHandle:IsMouseOver()
+        or f.hideHandle:IsMouseOver())) or f.dragging or false
     end
     if over then
       local h = ensureHandle(f)
-      if not h:IsShown() then h:Show(); f.moveHandle:Show() end
+      if not h:IsShown() then h:Show(); f.moveHandle:Show(); f.hideHandle:Show() end
       shown = shown + 1
     elseif f.handle and f.handle:IsShown() then
       f.handle:Hide()
       f.moveHandle:Hide()
+      f.hideHandle:Hide()
     end
     if not isEditing(f.board) then
       armMove(f, (f.dragging or (onBoard and keyDown)) and true or false)
+      armInfo(f, (onBoard and infoDown and not f.board.mini) and true or false)
     elseif f.moveArmed then
       f.moveArmed = nil                 -- edit mode took over the drag scripts (setEditChrome)
     end
@@ -999,7 +1266,11 @@ local function ensureFrame(board)
   buildStrip(f)
   -- an item dropped beside the tiles (the board's padding, an empty board)
   f:SetScript("OnReceiveDrag", function(self) Boards.DropItem(self, self.board, nil) end)
-  f:SetScript("OnMouseUp", function(self) Boards.DropItem(self, self.board, nil) end)
+  f:SetScript("OnMouseUp", function(self, button)
+    if Boards.DropItem(self, self.board, nil) then return end
+    if self.wasDragged then self.wasDragged = nil; return end   -- the end of a move, not a click
+    Boards.InfoClick(self, button)
+  end)
   f:Hide()
   -- BlizzMove only scales a board (Ctrl+wheel in edit mode): moving is ours (name bar, frame drag), and a draggable
   -- registration made boards take the mouse and snap back to BlizzMove's last drag spot (2026-11-20)
@@ -1114,7 +1385,7 @@ function Boards.Status(board)
       return L["Off screen?"], "offscreen"
     end
   end
-  if (board.show or {}).mouseoverFade then return L["On HUD (faded)"], "faded" end
+  if (board.show or {}).mouseoverFade or M.BoardAlpha(board) < 0.5 then return L["On HUD (faded)"], "faded" end
   return L["On HUD"], "shown"
 end
 
@@ -1151,6 +1422,7 @@ function Boards.Refresh(id, rebuild)
     f.layoutKey = nil
   end
   f:SetAlpha(alpha)
+  if not editingThis then f.bg:SetColorTexture(M.BoardBg(board)) end
   if board.mini and not editingThis then
     -- switching to the strip: the full view's rows go. (Not keyed on layoutKey: a rebuild has just cleared it, which
     -- left the rows on screen under the strip after leaving edit mode.)
@@ -1583,8 +1855,9 @@ local function moveItems(board, i)
       if now then Boards.Reveal(now, now.tiles[#now.tiles]) end
     end
   end
+  -- (0.5.0, the user: "Only here" is a poor phrase on the HUD) a menu opened on the HUD never says "here"
   for _, b in ipairs(M.MoveTargets(board)) do
-    sub[#sub + 1] = { text = b.name .. (b.shown and "" or ("  |cff808080" .. L["(Only here)"] .. "|r")), func = go(b) }
+    sub[#sub + 1] = { text = b.name .. (b.shown and "" or ("  |cff808080" .. L["(not on your HUD)"] .. "|r")), func = go(b) }
   end
   sub[#sub + 1] = { text = L["New board"], tip = L["A board of its own, with its own timer: to pause this tile alone."],
     func = go(nil) }
@@ -1603,9 +1876,12 @@ local DISPLAY_TIP = { number = "The number itself.", bar = "A bar filling toward
   gauge = "A half dial of dots filling toward a target.",
   odometer = "Rolling digits, like a car's odometer. The total only.",
   mix = "One bar split by kind: each part's share of the total, largest first." }
-local SIZE_NAME = { large = "Big", half = "Half width", line = "Line" }
-local SIZE_TIP = { large = "A big number with the last 10 minutes and how you usually do here.",
-  half = "Two side by side.", line = "One line, full width." }
+local SIZE_NAME = { large = "Big", largeHalf = "Big, half width", half = "Medium, half width", line = "Line",
+  lineHalf = "Line, half width" }
+local SIZE_TIP = { large = "A big number, full width, with the last 10 minutes and how you usually do here.",
+  largeHalf = "A big number in one of two columns.", half = "Label over number, two side by side.",
+  line = "One line, full width.", lineHalf = "One line in one of two columns." }
+Boards.SIZE_NAME = SIZE_NAME
 
 --- A reading tile's settings (what it counts, its scope, calc, display, size, target, name) as menu items: the
 --- board's tile menu and the Boards tab's Edit (HC-67) share them. board: the tile's board, or nil for a tile that
@@ -1727,8 +2003,22 @@ function Boards.TileSettingsItems(tile, board, anchor)
     end
     if M.TrendBadgeFits(tile) then
       items[#items + 1] = { text = L["Trend badge"], checked = M.HasExtra(tile, "trend"),
-        tip = L["Beside the big number: your pace now against this period's average (green up, red down)."],
+        tip = L["Your pace now against this period's average: an arrow, green up or red down (with words on a Big tile)."],
         func = function() M.SetExtra(tile, "trend", not M.HasExtra(tile, "trend")); done() end }
+    end
+    if board then
+      -- (0.5.0, B5) the value's colour: the board's, or one of nine
+      local key = M.TileColorKey(tile)
+      local bname = L[M.COLOR_NAME[board.valueColor or "white"] or "White"]
+      local sub = { { text = format(L["The board's (%s)"], bname), checked = key == nil,
+        func = function() M.SetTileColor(tile, nil); done() end } }
+      for _, k in ipairs(M.COLOR_ORDER) do
+        local c = M.COLORS[k]
+        sub[#sub + 1] = { text = format("|cff%02x%02x%02x%s|r", floor(c[1] * 255), floor(c[2] * 255), floor(c[3] * 255),
+          L[M.COLOR_NAME[k]]), checked = key == k, func = function() M.SetTileColor(tile, k); done() end }
+      end
+      items[#items + 1] = { text = L["Colour"], sub = sub,
+        tip = L["The number's colour. Grey, green and red still mean off, up and down whatever you pick."] }
     end
     local tgt = M.TileTarget(tile)
     local tdef = ns.readings[tile.reading]
@@ -1759,15 +2049,19 @@ function Boards.TileMenu(anchor, board, i)
       askText(L["Heading text"], tile.text or "", function(s) tile.text = s:sub(1, 40); Boards.Refresh(board.id, true) end)
     end }
   end
+  items[#items + 1] = { text = L["Move to top"], disabled = i == 1,
+    func = function() M.MoveTileTo(board, i, "top"); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move up"], disabled = i == 1, func = function() M.MoveTile(board, i, -1); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move down"], disabled = i == #board.tiles,
     func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end }
+  items[#items + 1] = { text = L["Move to bottom"], disabled = i == #board.tiles,
+    func = function() M.MoveTileTo(board, i, "bottom"); Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Move to"], sub = moveItems(board, i) }
   -- (v8) a reading tile is taken off the HUD (it stays on this board in the Boards tab, counting) or deleted
   local reading = tile.kind == "reading"
   if reading then
-    items[#items + 1] = { text = L["Hide from HUD"],
-      tip = L["It stays on this board in the Boards tab (Only here), still counting; put it back from there."],
+    items[#items + 1] = { text = L["Take this tile off the HUD"],
+      tip = L["It keeps counting. In the Hard Counters window (/hc), its switch on the Boards tab puts it back."],
       func = function()
         M.SetTileOnHud(tile, false)
         Boards.Refresh(board.id, true)
@@ -1877,7 +2171,69 @@ function Boards.Rename(board, name)
   return true
 end
 
-function Boards.BoardMenu(anchor, board)
+--- Take a board off the HUD (the board's menu, the Hide tab, the strip's menu): the window's On HUD switch, kept
+--- across reloads; one chat line says how it comes back (0.5.0, C2).
+function Boards.TakeOff(board, quiet)
+  board.shown = false
+  if editIds[board.id] then editIds[board.id] = nil; Boards.SyncEscape() end
+  Boards.Refresh(board.id)
+  if ns.RefreshBoards then ns.RefreshBoards() end
+  if not quiet and ns.Print then
+    ns.Print(L["%s is off your HUD. /hc board %s or the Boards tab puts it back."], board.name, board.name:lower())
+  end
+end
+
+local PCT = { 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2 }
+local BG_PCT = { { 0, "None" }, { 0.25, "25%" }, { 0.5, "50%" }, { 0.72, "Normal (72%)" }, { 0.85, "85%" }, { 1, "Solid" } }
+local SCALES = { 0.8, 0.9, 1, 1.1, 1.25, 1.5 }
+
+--- (0.5.0, B3 to B5) the board's look: opacity, background and its opacity, the numbers' colour, scale, reset.
+function Boards.LookItems(board)
+  local function redraw() Boards.Refresh(board.id, true); if ns.RefreshBoards then ns.RefreshBoards() end end
+  local function near(a, b) return math.abs((a or 0) - (b or 0)) < 0.001 end
+  local op = {}
+  for _, p in ipairs(PCT) do
+    op[#op + 1] = { text = format("%d%%", floor(p * 100 + 0.5)), checked = near(M.BoardAlpha(board), p),
+      func = function() M.SetAlpha(board, p); redraw() end }
+  end
+  local bg, bgKey = {}, M.BgKey(board)
+  for _, k in ipairs(M.BG_ORDER) do
+    bg[#bg + 1] = { text = L[M.BG_NAME[k]] .. (k == "slate" and ("  " .. L["(the default)"]) or ""), checked = bgKey == k,
+      func = function() M.SetBackground(board, k, nil); redraw() end }
+  end
+  local bga = {}
+  local cur = select(4, M.BoardBg(board))
+  for _, p in ipairs(BG_PCT) do
+    bga[#bga + 1] = { text = L[p[2]], checked = near(cur, p[1]), func = function() M.SetBackground(board, nil, p[1]); redraw() end }
+  end
+  local col = {}
+  for _, k in ipairs(M.COLOR_ORDER) do
+    local c = M.COLORS[k]
+    col[#col + 1] = { text = format("|cff%02x%02x%02x%s|r", floor(c[1] * 255), floor(c[2] * 255), floor(c[3] * 255), L[M.COLOR_NAME[k]]),
+      checked = (board.valueColor or "white") == k, func = function() M.SetValueColor(board, k); redraw() end }
+  end
+  local sc = {}
+  for _, s in ipairs(SCALES) do
+    sc[#sc + 1] = { text = format("%d%%", floor(s * 100 + 0.5)), checked = near(board.scale or 1, s),
+      func = function() board.scale = s; local f = frames[board.id]; if f then f.placed = nil end; redraw() end }
+  end
+  return {
+    { text = L["Opacity"], sub = op, tip = L["The whole board. When it fades (in combat, or until the mouse is over it) it shows at half of this."] },
+    { text = L["Background"], sub = bg },
+    { text = L["Background opacity"], sub = bga, tip = L["None: the numbers float on their own."] },
+    { text = L["Number colour"], sub = col, tip = L["Every number on the board, unless a tile has its own colour (its menu: Colour)."] },
+    { text = L["Scale"], sub = sc },
+    { text = L["Reset look"], func = function()
+      M.ResetLook(board)
+      local f = frames[board.id]
+      if f then f.placed = nil end
+      redraw()
+    end },
+  }
+end
+
+--- The board's menu items (its header, the Hide, Move and Edit tabs, the Boards tab's panels through ns.BoardMenu).
+function Boards.BoardMenuItems(board)
   local items = { { text = board.name, title = true } }
   for _, item in ipairs(Boards.AllItems(board)) do items[#items + 1] = item end
   items[#items + 1] = { text = L["Scope"], sub = Boards.ScopeItems(board) }
@@ -1887,16 +2243,12 @@ function Boards.BoardMenu(anchor, board)
       Boards.Refresh(board.id, true)
     end },
     { text = L["Visibility"], sub = showItems(board) },
+    { text = L["Look"], sub = Boards.LookItems(board) },
     { text = L["Rename"], func = function()
       askText(L["Board name"], board.name, function(s) Boards.Rename(board, s) end)
     end },
-    { text = L["Take off the HUD"], tip = L["It stays in the Hard Counters window (the Boards tab), still counting."],
-      func = function()
-        board.shown = false
-        if editIds[board.id] then editIds[board.id] = nil; Boards.SyncEscape() end
-        Boards.Refresh(board.id)
-        if ns.RefreshBoards then ns.RefreshBoards() end
-      end },
+    { text = L["Take off the HUD"], tip = L["It keeps counting. The Hard Counters window (/hc) puts it back."],
+      func = function() Boards.TakeOff(board, true) end },
     { text = L["Delete this board"], func = function()
       confirm(format(L["Delete the board %s and its tiles? Your counts don't change."], board.name), function()
         M.Delete(board.id)
@@ -1904,13 +2256,19 @@ function Boards.BoardMenu(anchor, board)
       end)
     end },
   }) do items[#items + 1] = item end
-  ns.Menu.Show(anchor, items)
+  return items
+end
+
+function Boards.BoardMenu(anchor, board)
+  ns.Menu.Show(anchor, Boards.BoardMenuItems(board))
 end
 
 function Boards.StripMenu(anchor, board)
   local items = Boards.AllItems(board)
   items[#items + 1] = { text = L["Full board"], func = function() board.mini = false; Boards.Refresh(board.id, true) end }
   items[#items + 1] = { text = L["Edit this board"], func = function() Boards.EditBoard(board.id, true) end }
+  items[#items + 1] = { text = L["Look"], sub = Boards.LookItems(board) }
+  items[#items + 1] = { text = L["Take off the HUD"], func = function() Boards.TakeOff(board) end }
   ns.Menu.Show(anchor, items)
 end
 
@@ -2090,7 +2448,11 @@ ns.On("PLAYER_ENTERING_WORLD", function()
   for _, b in ipairs(M.Store().list) do Boards.ActivateTrackers(b, false) end
   Boards.RefreshAll(true)
 end, "Boards")
-ns.On("PLAYER_REGEN_DISABLED", function() state.combat = true; Boards.RefreshAll() end, "Boards")
+ns.On("PLAYER_REGEN_DISABLED", function()
+  state.combat = true
+  if ns.Synopsis and ns.Synopsis.IsShown("tip") then ns.Synopsis.Hide() end   -- (G3) a fight starts: the tooltip goes
+  Boards.RefreshAll()
+end, "Boards")
 ns.On("PLAYER_REGEN_ENABLED", function() state.combat = false; Boards.RefreshAll() end, "Boards")
 
 local owner = {}
@@ -2140,13 +2502,26 @@ end, "Boards")
 ns.AddOptions("boards", function()
   local args = {
     intro = { type = "description", order = 0, fontSize = "medium",
-      name = L["Boards are your on-screen numbers. Hover a board: Edit above its right corner changes it, Move above "
-        .. "its left corner drags it; /hc edit edits every board."] },
+      name = L["Boards are your on-screen numbers. Hover a board: Edit and Hide above its right corner, Move above "
+        .. "its left corner; /hc edit edits every board. Alt+click a number: how it is made."] },
     moveKey = { type = "select", order = 0.5, name = L["Move a locked board with"],
       desc = L["Hold this key with the cursor over a board on your HUD, then drag the board. Boards stay click-through the rest of the time."],
       values = { SHIFT = L["Shift + drag"], CTRL = L["Ctrl + drag"], ALT = L["Alt + drag"], NONE = L["Off (the Move tab and edit mode only)"] },
       get = function() return Boards.MoveKey() end,
       set = function(_, v) ns.settings.boardMoveKey = v end },
+    infoKey = { type = "select", order = 0.6, name = L["Explain a number with"],
+      desc = L["Hold this key and click a number on a board on your HUD: a tooltip says how it is made. Any other "
+        .. "click closes it. With the key held, a right-click opens the tile's menu."],
+      values = { ALT = L["Alt + click"], SHIFT = L["Shift + click"], CTRL = L["Ctrl + click"], NONE = L["Off"] },
+      get = function() return Boards.InfoKey() end,
+      set = function(_, v) ns.settings.boardInfoKey = v end },
+    icons = { type = "toggle", order = 0.7, width = "full", name = L["Board buttons as icons"],
+      desc = L["Pause, Resume and Reset on a board show as icons; off, as words. The tooltip names the action either way."],
+      get = function() return Boards.ButtonIcons() end,
+      set = function(_, v)
+        if v then ns.settings.boardButtonIcons = nil else ns.settings.boardButtonIcons = false end
+        Boards.RefreshAll(true)
+      end },
     edit = { type = "execute", order = 1, name = L["Edit every board"], func = function() Boards.SetEditing(true) end },
     -- HC-68 (DESIGN §17.6): New board opens the dialog; each board's show and mini switches moved to the Boards tab
     new = { type = "execute", order = 2, name = L["New board..."],

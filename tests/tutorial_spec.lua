@@ -104,7 +104,6 @@ describe("the tutorial", function()
       ctx.env:advance(3)
       assert.is_nil(ns.TutorialFrame())
       Win.ShowMain(true)
-      local main = Win.Host("_main")
       local item
       for _, it in ipairs(Win.HelpItems()) do if it.text == "Full tutorial" then item = it end end
       item.func()

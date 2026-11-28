@@ -75,10 +75,11 @@ end
 --- Boot, run fn(ctx), always put the real globals back. Errors from either step are re-raised.
 function B.with(fn, opts)
   local ctx
-  local ok, err = pcall(function()
+  -- (0.5.0) a Lua error inside fn carries its traceback (assertion failures are tables: passed through as they are)
+  local ok, err = xpcall(function()
     ctx = boot(opts or {})
     fn(ctx)
-  end)
+  end, function(e) if type(e) == "string" then return debug.traceback(e, 2) end return e end)
   if ctx then ctx.client.restore() elseif getmetatable(_G) then setmetatable(_G, nil) end
   if not ok then error(err, 0) end
   return ctx

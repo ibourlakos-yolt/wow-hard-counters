@@ -223,8 +223,8 @@ STEPS = {
       return lines(
         L["The Explorer lists everything Hard Counters can count and show: your boards and tiles, the ready-made boards, every reading, the five displays, and the trackers that count them."],
         "",
-        bullet(L["Pick a kind on the left, a row in the middle: its details come below, and what you can do with it along the bottom."]),
-        bullet(format(L["%s: start from one with New board from it..."], gold(L["Ready-made boards"]))),
+        bullet(L["The list on the left is by kind: Boards, Tiles, Readings, Trackers, then your other characters. A + opens a kind; a row in the middle shows its details below, and what you can do with it along the bottom."]),
+        bullet(format(L["%s (under Boards): start from one with New board from it..."], gold(L["Ready-made boards"]))),
         bullet(format(L["%s: every number by category, with Add tile...; %s: number, bar, gauge, odometer, mix."], gold(L["Readings"]), gold(L["Displays"]))),
         bullet(format(L["%s: on or off, how much history each keeps, and its size on disk."], gold(L["Trackers"]))),
         bullet(L["Hover a board's row: it shows where it is on screen (faintly, if it is not on your HUD)."]))

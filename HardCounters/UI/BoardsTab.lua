@@ -49,6 +49,9 @@ local function cardMenu(anchor, e)
   local BM = M()
   local label = BM.TileLabel(e.tile, e.board)
   local items = { { text = label, title = true } }
+  -- (0.5.0, G2) first: how its number is made
+  items[#items + 1] = { text = L["How it's made"], tip = L["What it counts, over when, and how the number is worked out."],
+    func = function() if ns.Synopsis then ns.Synopsis.Show(anchor, e.tile, e.board, "panel") end end }
   local edit = Bo() and Bo().TileSettingsItems(e.tile, e.board, anchor) or {}
   if #edit > 0 then items[#items + 1] = { text = L["Edit"], sub = edit } end
   -- on the HUD or only here: this tile's own switch (its board has one too)
@@ -180,6 +183,28 @@ local function newCard(i)
   c.fill:SetPoint("BOTTOMLEFT", c.track, "BOTTOMLEFT", 0, 0)
   c.parts = {}
   c:SetScript("OnClick", function(self) if self.entry then cardMenu(self, self.entry) end end)
+  -- (0.5.0, G2) a small "?" at the top right: how the number is made, in a panel beside the card
+  c.why = CreateFrame("Button", nil, c)
+  c.why:SetSize(14, 14)
+  c.why:SetPoint("TOPRIGHT", -4, -4)
+  c.why:SetFrameLevel(c:GetFrameLevel() + 2)
+  c.why.text = c.why:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  c.why.text:SetAllPoints()
+  c.why.text:SetText("?")
+  c.why:SetScript("OnEnter", function(self)
+    self.text:SetTextColor(1, 0.82, 0)
+    if GameTooltip then
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetText(L["How it's made"], 1, 1, 1)
+      GameTooltip:AddLine(L["What it counts, over when, and how the number is worked out."], 0.8, 0.8, 0.8, true)
+      GameTooltip:Show()
+    end
+  end)
+  c.why:SetScript("OnLeave", function(self) self.text:SetTextColor(0.5, 0.5, 0.5); if GameTooltip then GameTooltip:Hide() end end)
+  c.why:SetScript("OnClick", function(self)
+    local e = self:GetParent().entry
+    if e and ns.Synopsis then ns.Synopsis.Show(self:GetParent(), e.tile, e.board, "panel") end
+  end)
   c:SetScript("OnEnter", function(self)
     local e = self.entry
     if not (e and GameTooltip) then return end

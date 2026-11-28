@@ -51,6 +51,7 @@ UI\Help.lua
 UI\Menu.lua
 UI\BoardModel.lua
 UI\Boards.lua
+UI\Synopsis.lua
 UI\Browser.lua
 UI\Trackers.lua
 UI\BoardCatalog.lua

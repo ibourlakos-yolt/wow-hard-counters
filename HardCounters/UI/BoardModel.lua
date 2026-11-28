@@ -49,7 +49,7 @@ local function smallEnum(r)
   return true
 end
 M.DISPLAYS = {
-  number = { sizes = { "large", "half", "line" }, calcs = { total = true, perHour = true, recent = true, trend = true } },
+  number = { sizes = { "large", "largeHalf", "half", "line", "lineHalf" }, calcs = { total = true, perHour = true, recent = true, trend = true } },
   bar = { sizes = { "line" }, calcs = { total = true, perHour = true }, needsTarget = true },
   gauge = { sizes = { "line" }, calcs = { total = true, perHour = true, recent = true }, needsTarget = true },
   odometer = { sizes = { "line" }, calcs = { total = true },
@@ -64,8 +64,10 @@ function M.DisplayFits(tile, display)
   if not d.fits then return true end
   return d.fits(ns.readings[tile.reading]) and true or false
 end
-M.SIZE_ORDER = { "large", "half", "line" }
-M.SIZES = { large = true, half = true, line = true }
+-- (0.5.0, the user: "Big half-width" and "Line half-width") five sizes: large (Big), largeHalf (Big, half width),
+-- half (Medium, half width), line (Line), lineHalf (Line, half width). The two new ones draw numbers only.
+M.SIZE_ORDER = { "large", "largeHalf", "half", "line", "lineHalf" }
+M.SIZES = { large = true, largeHalf = true, half = true, line = true, lineHalf = true }
 --- sparkline: the last minutes; vsUsual: "+18% vs your average here" (past runs in this zone); trend (HC-53): a badge,
 --- your pace now against this period's average (on a per hour or recent tile)
 M.EXTRAS = { sparkline = true, vsUsual = true, trend = true }
@@ -104,8 +106,10 @@ PLACEMENT.__index = function(p, k)
   if t then return t[k] end
   return nil
 end
+-- what belongs to the placement, not the tile: its size, its colour (0.5.0) and whether it is off the HUD
+local PLACED = { size = true, ref = true, off = true, color = true }
 PLACEMENT.__newindex = function(p, k, v)
-  if k == "size" or k == "ref" or k == "off" then rawset(p, k, v); return end
+  if PLACED[k] then rawset(p, k, v); return end
   local t = liveTile(p)
   if t then t[k] = v else rawset(p, k, v) end
 end
@@ -128,11 +132,13 @@ end
 local function adopt(B, raw)
   B.nextTile = (B.nextTile or 0) + 1
   local id = "t" .. B.nextTile
-  local size, off = raw.size, raw.off
-  raw.size, raw.off, raw.id = nil, nil, id
+  local size, off, color = raw.size, raw.off, raw.color
+  raw.size, raw.off, raw.color, raw.id = nil, nil, nil, id
   B.tiles[id] = raw
   B.tileOrder[#B.tileOrder + 1] = id
-  return placement(id, size, off)
+  local p = placement(id, size, off)
+  if color ~= nil then rawset(p, "color", color) end     -- (0.5.0) the colour is the placement's, like the size
+  return p
 end
 
 --- (v8) Is this tile drawn on its board's HUD frame? A placement with `off` stays on its board in the Overview
@@ -777,6 +783,10 @@ function HC:RegisterBoardPreset(key, def)
       tile.extras = ex
     end
     tile.arg = type(t.arg) == "table" and ns.NormalizeSet(t.arg) or t.arg   -- (HC-60: a set, the pack's own copy)
+    if t.color ~= nil then
+      if not M.COLORS[t.color] then bad("color") end
+      tile.color = t.color
+    end
     tiles[i] = tile
   end
   if def.category ~= nil and not M.CATEGORY_TITLE[def.category] then
@@ -790,8 +800,12 @@ function HC:RegisterBoardPreset(key, def)
   end
   if def.tip ~= nil and type(def.tip) ~= "string" then error("HardCounters: RegisterBoardPreset('" .. key .. "'): tip must be a string", 2) end
   if not M.PRESETS[key] then M.PRESET_ORDER[#M.PRESET_ORDER + 1] = key end
+  if def.role ~= nil and not M.ROLES[def.role] then
+    error("HardCounters: RegisterBoardPreset('" .. key .. "'): role must be tank, healer, melee, caster or ranged", 2)
+  end
   M.PRESETS[key] = { name = type(def.name) == "string" and def.name:sub(1, 32) or key, mini = def.mini and true or false,
-    tiles = tiles, pack = U.namespace(key), category = def.category, class = def.class, tip = def.tip }
+    tiles = tiles, pack = U.namespace(key), category = def.category, class = def.class, tip = def.tip, role = def.role }
+  M.CopyLook(def, M.PRESETS[key])           -- (0.5.0) valueColor, alpha, bg, bgAlpha, checked by CopyLook
   return key
 end
 
@@ -895,7 +909,7 @@ local function tileSpecs(board, from)
     if type(raw) == "table" then
       local c = U.deepcopy(raw)
       c.id, c.lastSize, c.section, c.wid = nil, nil, nil, nil
-      if ref then c.size, c.off = rawget(t, "size"), rawget(t, "off") end
+      if ref then c.size, c.off, c.color = rawget(t, "size"), rawget(t, "off"), rawget(t, "color") end
       -- a store older than this build (0.2's shared boards, saved by beta1): the tile shapes migrations change
       if c.kind == "reading" then
         if c.style ~= nil then M.ApplyStyle(c, c.style) end
@@ -915,6 +929,7 @@ function M.SaveAsPreset(board, name)
   P.list[#P.list + 1] = { key = key, name = ((name ~= nil and name ~= "") and name or board.name):sub(1, 32),
     mini = board.mini and true or false, scope = board.scope, show = U.copy(board.show or defaultShow()),
     tiles = tileSpecs(board) }
+  M.CopyLook(board, P.list[#P.list])
   return key
 end
 
@@ -979,6 +994,7 @@ function M.Create(presetKey, opts)
     shown = opts.shown and true or false,
     mini = p and p.mini or false, width = M.WIDTH, scale = 1, show = p and p.show and U.copy(p.show) or defaultShow(),
     scope = p and p.scope or nil, tiles = {} }
+  if p then M.CopyLook(p, b) end
   local B = M.Store()
   if p then
     for _, t in ipairs(p.tiles) do
@@ -1027,6 +1043,7 @@ function M.Duplicate(board, name, from, shown)
   if from == B then from = nil end
   local b = { id = newId(), name = M.FreeName(name or board.name), shown = shown and true or false, mini = board.mini and true or false,
     width = board.width or M.WIDTH, scale = 1, show = U.copy(board.show or defaultShow()), scope = board.scope, tiles = {} }
+  M.CopyLook(board, b)
   for _, s in ipairs(tileSpecs(board, from)) do
     if s.kind == "reading" then
       if from then M.FoldAlias(s) end
@@ -1272,6 +1289,114 @@ function M.MoveTile(board, i, delta)
   return true
 end
 
+--- (0.5.0, the user: "move to top and move to bottom") tile i to the first or the last place ("top" | "bottom").
+function M.MoveTileTo(board, i, where)
+  local t = board.tiles
+  local tile = t[i]
+  if not tile then return false end
+  local j = where == "top" and 1 or #t
+  if j == i then return false end
+  table.remove(t, i)
+  table.insert(t, j, tile)
+  return true
+end
+
+---------------------------------------------------------------------------
+-- A board's look (0.5.0, the user: opacity, "background color and opacity", "colors ... for the tiles"). Every
+-- field is optional and nil is 0.4's look: board.alpha (0.2 to 1), board.bg ({ r, g, b }), board.bgAlpha (0 to 1),
+-- board.valueColor (a key of M.COLORS); a tile's color (its placement's, like its size). No font size: a tile's
+-- size and the board's scale are its font size (DESIGN §17.16).
+---------------------------------------------------------------------------
+
+M.ALPHA_MIN, M.FADE = 0.2, 0.5
+M.BG_DEFAULT, M.BG_ALPHA_DEFAULT = { 0.04, 0.04, 0.06 }, 0.72
+M.COLOR_ORDER = { "white", "gold", "orange", "green", "teal", "blue", "purple", "red", "grey" }
+M.COLORS = { white = { 1, 1, 1 }, gold = { 1, 0.82, 0 }, orange = { 1, 0.6, 0.2 }, green = { 0.38, 1, 0.38 },
+  teal = { 0.3, 0.9, 0.8 }, blue = { 0.45, 0.75, 1 }, purple = { 0.75, 0.5, 1 }, red = { 1, 0.38, 0.38 },
+  grey = { 0.7, 0.7, 0.7 } }
+M.COLOR_NAME = { white = "White", gold = "Gold", orange = "Orange", green = "Green", teal = "Teal", blue = "Blue",
+  purple = "Purple", red = "Red", grey = "Grey" }
+M.BG_ORDER = { "slate", "black", "brown", "blue", "green", "red", "purple" }
+M.BGS = { slate = { 0.04, 0.04, 0.06 }, black = { 0, 0, 0 }, brown = { 0.10, 0.08, 0.02 }, blue = { 0.03, 0.06, 0.14 },
+  green = { 0.03, 0.10, 0.05 }, red = { 0.14, 0.03, 0.03 }, purple = { 0.09, 0.04, 0.13 } }
+M.BG_NAME = { slate = "Slate", black = "Black", brown = "Brown", blue = "Blue", green = "Green", red = "Red",
+  purple = "Purple" }
+M.ROLES = { tank = true, healer = true, melee = true, caster = true, ranged = true }
+
+local function clamp01(v, lo) return math.max(lo or 0, math.min(1, v)) end
+
+--- The board's own opacity (before any fade).
+function M.BoardAlpha(board)
+  local a = type(board.alpha) == "number" and board.alpha or 1
+  return clamp01(a, M.ALPHA_MIN)
+end
+
+--- r, g, b, a of the board's background (its own opacity, before the board's).
+function M.BoardBg(board)
+  local c = type(board.bg) == "table" and board.bg or M.BG_DEFAULT
+  local a = type(board.bgAlpha) == "number" and clamp01(board.bgAlpha) or M.BG_ALPHA_DEFAULT
+  return tonumber(c[1]) or 0, tonumber(c[2]) or 0, tonumber(c[3]) or 0, a
+end
+
+function M.SetAlpha(board, v)
+  if type(v) ~= "number" then board.alpha = nil; return end
+  v = clamp01(v, M.ALPHA_MIN)
+  board.alpha = v < 1 and v or nil
+end
+
+--- rgb: a key of M.BGS or { r, g, b } (nil keeps it); a: 0 to 1 (nil keeps it). Defaults are stored as nil.
+function M.SetBackground(board, rgb, a)
+  if type(rgb) == "string" then rgb = M.BGS[rgb] end
+  if type(rgb) == "table" then
+    local d = M.BG_DEFAULT
+    local same = rgb[1] == d[1] and rgb[2] == d[2] and rgb[3] == d[3]
+    board.bg = (not same) and { clamp01(rgb[1]), clamp01(rgb[2]), clamp01(rgb[3]) } or nil
+  end
+  if type(a) == "number" then
+    a = clamp01(a)
+    board.bgAlpha = a ~= M.BG_ALPHA_DEFAULT and a or nil
+  end
+end
+
+--- The background's key in M.BGS when it is one of them ("slate" for the default), else nil.
+function M.BgKey(board)
+  local r, g, b = M.BoardBg(board)
+  for _, k in ipairs(M.BG_ORDER) do
+    local c = M.BGS[k]
+    if c[1] == r and c[2] == g and c[3] == b then return k end
+  end
+  return nil
+end
+
+function M.SetValueColor(board, key) board.valueColor = (key ~= nil and key ~= "white" and M.COLORS[key]) and key or nil end
+function M.SetTileColor(tile, key) tile.color = (key ~= nil and M.COLORS[key]) and key or nil end
+
+--- The tile's own colour key, or nil (the board's).
+function M.TileColorKey(tile)
+  if M.IsPlacement(tile) then return rawget(tile, "color") end
+  return tile.color
+end
+
+--- r, g, b of a tile's value: its own colour, else its board's, else white.
+function M.TileColor(tile, board)
+  local key = M.TileColorKey(tile)
+  local c = key and M.COLORS[key] or (board and M.COLORS[board.valueColor or ""]) or M.COLORS.white
+  return c[1], c[2], c[3]
+end
+
+function M.ResetLook(board)
+  board.alpha, board.bg, board.bgAlpha, board.valueColor, board.scale = nil, nil, nil, nil, 1
+end
+
+--- Copy the look fields from one board (or preset definition) to another, checked.
+function M.CopyLook(from, to)
+  if type(from) ~= "table" or type(to) ~= "table" then return to end
+  if type(from.alpha) == "number" then M.SetAlpha(to, from.alpha) end
+  if type(from.bg) == "table" or type(from.bgAlpha) == "number" then M.SetBackground(to, from.bg, from.bgAlpha) end
+  if type(from.valueColor) == "string" then M.SetValueColor(to, from.valueColor) end
+  return to
+end
+
 --- The boards a tile of `board` can move to: every other board, in list order.
 function M.MoveTargets(board)
   local out = {}
@@ -1418,10 +1543,12 @@ function M.SetExtra(tile, name, on)
   return true
 end
 
---- Can the tile carry the trend badge? A large number shown per hour or recent, where trend fits (its scope, who).
+--- Can the tile carry the trend badge? A number of any size (0.5.0; a Big one before) shown per hour or recent,
+--- where trend fits (its scope, who). Big draws the arrow and words, the other sizes the arrow only.
+local BADGE_FOOT = { hero = true, heroHalf = true, grid = true, row = true, rowHalf = true }
 function M.TrendBadgeFits(tile)
   local c = M.TileCalc(tile)
-  if M.Footprint(tile) ~= "hero" or (c ~= "perHour" and c ~= "recent") then return false end
+  if M.TileDisplay(tile) ~= "number" or not BADGE_FOOT[M.Footprint(tile)] or (c ~= "perHour" and c ~= "recent") then return false end
   local r = ns.readings[tile.reading]
   return ns.CalcAllowed(r, "trend") and ns.CalcFits(r, "trend", tile.scope, tile.who, tile.arg) and true or false
 end
@@ -1506,8 +1633,10 @@ end
 -- Layout: rows of tiles (grid tiles pair up), heights from content (§6.1: no empty space)
 ---------------------------------------------------------------------------
 
-M.HEIGHT = { run = 24, hero = 74, heroCompare = 88, grid = 34, row = 18, bar = 26, gauge = 38, splits = 18, label = 18,
-  strip = 22, odometer = 44, mix = 40 }
+-- (0.5.0) the header row 20 (was 24); Big 46 plus its extras when drawn (it was 74 or 88 whatever it drew): the
+-- sparkline 15, the comparison line 14. Big, half width 46; Line, half width 18.
+M.HEIGHT = { run = 20, hero = 46, heroHalf = 46, grid = 34, row = 18, rowHalf = 18, bar = 26, gauge = 38, splits = 18,
+  label = 18, strip = 22, odometer = 44, mix = 40, spark = 15, compare = 14 }
 --- (2026-11-25, Farmer's Fishing basket) a mix whose reading sets `mixList`: the bar, then one line per part (name,
 --- amount, share) instead of the shares in one line. A fixed height (every part's line), so the board doesn't jump
 --- as members appear.
@@ -1520,6 +1649,10 @@ function M.MixIsList(tile)
   return r ~= nil and r.mixList == true
 end
 M.PAD = 6
+--- (0.5.0, the user: "the HUD board title areas have too much vertical padding") the top padding above a header row
+M.PAD_HEAD = 2
+--- Half-width footprints: consecutive ones pair up in two columns, whatever their size (0.5.0)
+M.HALF_FOOT = { grid = true, heroHalf = true, rowHalf = true }
 
 --- How a reading tile is drawn (the layout row's kind): "hero" (a large number), "grid" (a half number), "row" (a
 --- line number), "bar", "gauge". HC-51 ships today's footprints only: a bar or gauge is a line whatever its size,
@@ -1533,7 +1666,16 @@ function M.Footprint(tile)
   end
   local s = M.TileSize(tile)
   if s == "large" then return "hero" elseif s == "half" then return "grid" end
+  if s == "largeHalf" then return "heroHalf" elseif s == "lineHalf" then return "rowHalf" end
   return "row"
+end
+
+--- Does a Big tile draw its sparkline? (Its extra is on and the reading has gains to plot: not a stock, not one part.)
+function M.DrawsSpark(tile)
+  if not M.HasExtra(tile, "sparkline") or M.ReadsPart(tile) then return false end
+  local r = ns.readings[tile.reading]
+  local c = r and r.counter and ns.counters[r.counter]
+  return c ~= nil and c.kind ~= "stock"
 end
 
 --- { { kind = "run"|"hero"|"grid"|"row"|..., tiles = { i, j? }, h = px } } for a board's full view. The control row
@@ -1556,30 +1698,40 @@ function M.Layout(board, opts)
     local foot = tile.kind == "reading" and M.Footprint(tile)
     if rawget(tile, "off") then
       i = i + 1
-    elseif foot == "grid" then
+    elseif foot and M.HALF_FOOT[foot] then
+      -- (0.5.0) a half-width tile pairs with the next one on the HUD when that one is half-width too, whatever their
+      -- sizes; the row is as tall as its taller cell. The row's kind stays "grid"; `cells` names each footprint.
       local j = nextOn(i + 1)
       local nxt = t[j]
-      if nxt and nxt.kind == "reading" and M.Footprint(nxt) == "grid" then
-        rows[#rows + 1] = { kind = "grid", tiles = { i, j }, h = M.HEIGHT.grid }
+      local nfoot = nxt and nxt.kind == "reading" and M.Footprint(nxt)
+      if nfoot and M.HALF_FOOT[nfoot] then
+        rows[#rows + 1] = { kind = "grid", tiles = { i, j }, cells = { foot, nfoot },
+          h = math.max(M.HEIGHT[foot], M.HEIGHT[nfoot]) }
         i = j + 1
       else
-        rows[#rows + 1] = { kind = "grid", tiles = { i }, h = M.HEIGHT.grid }
+        rows[#rows + 1] = { kind = "grid", tiles = { i }, cells = { foot }, h = M.HEIGHT[foot] }
         i = i + 1
       end
     elseif foot then
       local h = M.HEIGHT[foot]
-      if foot == "hero" and opts and opts.compare and opts.compare[i] then h = M.HEIGHT.heroCompare end
+      local spark, compare
+      if foot == "hero" then
+        spark = M.DrawsSpark(tile)
+        compare = opts and opts.compare and opts.compare[i] or false
+        h = h + (spark and M.HEIGHT.spark or 0) + (compare and M.HEIGHT.compare or 0)
+      end
       if foot == "mix" and M.MixIsList(tile) then h = M.HEIGHT.mixList end
-      rows[#rows + 1] = { kind = foot, tiles = { i }, h = h }
+      rows[#rows + 1] = { kind = foot, tiles = { i }, h = h, spark = spark, compare = compare }
       i = i + 1
     else
       rows[#rows + 1] = { kind = tile.kind, tiles = { i }, h = M.HEIGHT[tile.kind] or 18 }
       i = i + 1
     end
   end
-  local h = M.PAD
+  local top = rows[1] and rows[1].kind == "run" and M.PAD_HEAD or M.PAD
+  local h = top
   for _, r in ipairs(rows) do h = h + r.h end
-  return rows, h + M.PAD
+  return rows, h + M.PAD, top
 end
 
 ---------------------------------------------------------------------------
@@ -1598,12 +1750,16 @@ function M.Visibility(board, state)
   local show = board.show or defaultShow()
   if show.runOnly and not state.runOpen then return false, 1, "runOnly" end
   if show.instance == "hide" and state.instance then return false, 1, "instance" end
-  local alpha = 1
+  -- (0.5.0, the user: "the fade adjustment (say, in combat) should always apply half opacity based on the current
+  -- opacity") the board's own opacity, halved once when it fades (in combat, or until the mouse is over it)
+  local alpha = M.BoardAlpha(board)
+  local fade = false
   if state.combat then
     if show.combat == "hide" then return false, 1, "combat" end
-    if show.combat == "fade" then alpha = 0.35 end
+    if show.combat == "fade" then fade = true end
   end
-  if show.mouseoverFade and not state.mouseOver then alpha = math.min(alpha, 0.3) end
+  if show.mouseoverFade and not state.mouseOver then fade = true end
+  if fade then alpha = alpha * M.FADE end
   return true, alpha
 end
 
@@ -1671,12 +1827,13 @@ end
 -- Mini strip (§6.3): "● 1g 9s/h  ▲18%  12:48"
 ---------------------------------------------------------------------------
 
---- The tile a board's strip and flyout headline show: its first large tile (the hero), else its first reading.
+--- The tile a board's strip and flyout headline show: its first Big tile (the hero; 0.5.0: Big or Big, half width),
+--- else its first reading.
 function M.HeroIndex(board)
   local first
   for i, t in ipairs(board.tiles) do
     if t.kind == "reading" and not rawget(t, "off") then
-      if t.size == "large" then return i end
+      if t.size == "large" or t.size == "largeHalf" then return i end
       first = first or i
     end
   end
@@ -1776,6 +1933,112 @@ function M.TileValue(tile, board, calc)
   local o = optsBuf
   o.arg, o.who, o.calc = tile.arg, tile.who, calc
   return HC:Reading(tile.reading, tile.scope, o)
+end
+
+---------------------------------------------------------------------------
+-- How a tile's number is made (0.5.0, G2 and G3; DESIGN §17.16): what it counts, from which counters, whose, over
+-- when, the sum, filters, target, the tracker, and every estimate in plain words. One reused list; a caller draws it
+-- (the window's panel, the HUD's tooltip, the Explorer's tile details).
+---------------------------------------------------------------------------
+
+local explainBuf = {}
+
+local function clockAt(t)
+  if type(t) ~= "number" then return "?" end
+  local d = rawget(_G, "date")
+  return d and d("%H:%M", t) or tostring(t)
+end
+
+--- Lines { label, text, warn } explaining tile's value on board (nil when it isn't a reading tile). `out` is reused.
+function M.Explain(tile, board, out)
+  out = out or explainBuf
+  for i = #out, 1, -1 do out[i] = nil end
+  local function add(label, text, warn) if text and text ~= "" then out[#out + 1] = { label = label, text = text, warn = warn } end end
+  if not tile or tile.kind ~= "reading" then return out end
+  local r = ns.readings[tile.reading]
+  local _, t, settled, st, note = M.TileValue(tile, board)
+  local L = ns.L
+  out.title, out.value = M.TileLabel(tile, board), t
+  if not r then
+    add(L["What"], format(L["A number from %s, which is not loaded."], tostring(tile.reading):match("^([^:]+):") or "a pack"), true)
+    return out
+  end
+  add(L["What"], r.description)
+  -- where it comes from
+  local function ctitle(id) local c = id and ns.counters[id]; return c and c.title or id end
+  if r.compute then
+    local ins = {}
+    for _, id in ipairs(r.inputs or {}) do local x = ns.readings[id]; ins[#ins + 1] = x and x.title or id end
+    add(L["Counted from"], #ins > 0 and format(L["Worked out from: %s"], table.concat(ins, ", ")) or L["Worked out by its pack"])
+  elseif r.live or not r.counter then
+    add(L["Counted from"], L["Read from the game, live"])
+  elseif r.minus then
+    add(L["Counted from"], format(L["%s less %s"], ctitle(r.counter), ctitle(r.minus)))
+  else
+    add(L["Counted from"], ctitle(r.counter))
+  end
+  add(L["Whose"], tile.who == "account" and L["the whole account"] or L["this character"])
+  -- over when
+  local w = M.TileWindow(tile, board)
+  local active
+  if w then
+    active = Win.Active(w)
+    add(L["Period"], format(L["the board's timer: since %s, active %s, paused %s"], clockAt(w.start), U.duration(active),
+      U.duration(w.pausedSeconds or 0)))
+  elseif tile.scope == "session" then
+    local s = ns.Session and ns.Session()
+    active = s and Win.Active(s) or nil
+    add(L["Period"], s and format(L["this session: since %s, active %s"], clockAt(s.start), U.duration(active or 0)) or L["this session"])
+  elseif tile.scope == "now" then
+    add(L["Period"], L["now: the latest value"])
+  else
+    add(L["Period"], format(L["%s, from your history"], L[tile.scope] or tostring(tile.scope)))
+  end
+  -- the sum
+  local calc = M.TileCalc(tile)
+  if st and st ~= "stale" then
+    add(L["The number"], format(L["Not shown now: %s"], t or st), true)
+  elseif calc == "perHour" then
+    local tv, tt = M.TileValue(tile, board, "total")
+    if type(tv) == "number" and active and active > 0 then
+      add(L["The number"], format(L["%s over %s active = %s an hour"], tt or "?", U.duration(active), t or "?"))
+    else
+      add(L["The number"], format(L["%s in all; %s an active hour"], tt or "?", t or "?"))
+    end
+  elseif calc == "recent" then
+    add(L["The number"], format(L["%s an hour at your pace now"], t or "?"))
+  elseif calc == "trend" then
+    local _, rt = M.TileValue(tile, board, "recent")
+    local _, pt = M.TileValue(tile, board, "perHour")
+    add(L["The number"], format(L["now %s against %s on average: %s (within 10%% reads 'on pace')"], rt or "?", pt or "?", t or "?"))
+  else
+    add(L["The number"], format(L["%s over the period"], t or "?"))
+  end
+  if tile.arg ~= nil and r.param then add(L["Only"], ns.MemberLabel(r, tile.arg)) end
+  local frac, ptext = M.Progress(tile, board)
+  if frac then add(L["Toward"], format("%s (%d%%)", ptext or "", floor(frac * 100 + 0.5))) end
+  local tv, ts = M.TrendBadge(tile, board)
+  if tv then add(L["Pace"], ns.TrendText(tv) .. (ts == "flat" and "" or "")) end
+  local tr = r.tracker and HC:GetTracker(r.tracker)
+  if tr then
+    add(L["Tracker"], tr.on and format(L["%s: counting, %s history"], tr.title, (tr.history or "no"):lower())
+      or format(L["%s: off, this number is frozen"], tr.title), not tr.on)
+  end
+  -- estimates, said plainly
+  if settled == false and (calc == "perHour" or calc == "recent" or calc == "trend") then
+    add(L["Note"], L["Under 5 active minutes (or too few gains): this rate still swings."], true)
+  end
+  if calc == "recent" then add(L["Note"], L["Recent weighs the last 5 minutes as half of it: a big gain lifts it for about 20 minutes."], true) end
+  local late = M.LateSince(tile, board)
+  if late then add(L["Note"], format(L["Counted since %s, not since the period began."], clockAt(late)), true) end
+  if st == "stale" then
+    add(L["Note"], note and format(L["%s: the last value read before."], note) or L["The game hides this now: it is the last value read."], true)
+  end
+  if tile.who == "account" then
+    add(L["Note"], tile.scope == "now" and L["The sum of what each character last had when it logged out."]
+      or L["Characters without history for this period are not in it."], true)
+  end
+  return out
 end
 
 ---------------------------------------------------------------------------

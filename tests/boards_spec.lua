@@ -128,11 +128,103 @@ describe("boards", function()
     for _, r in ipairs(rows) do kinds[#kinds + 1] = r.kind .. #r.tiles end
     -- the control row first (no tile: drawn by itself), then XP/h+Net, Gold+time to level
     assert.same({ "run0", "hero1", "grid2", "grid2", "splits1" }, kinds)
-    local sum = 2 * M.PAD
+    -- (0.5.0) a header row starts 2 under the top (6 before), and Big is as tall as what it draws
+    local sum = M.PAD_HEAD + M.PAD
     for _, r in ipairs(rows) do sum = sum + r.h end
     assert.are.equal(sum, h)
+    assert.are.equal(20, rows[1].h)
     local _, h2 = M.Layout(b, { compare = { [1] = true } })
-    assert.are.equal(h + M.HEIGHT.heroCompare - M.HEIGHT.hero, h2)
+    assert.are.equal(h + M.HEIGHT.compare, h2)
+  end)
+
+  -- 0.5.0, the user: "Big half-width" and "Line half-width"; DESIGN §17.16 B2
+  it("lay out five sizes: half-width tiles pair whatever their size, Big grows with its extras", function()
+    local env = boot()
+    local M = env.M
+    local b = M.Create(nil, { name = "Five" })
+    local function add(size)
+      local t = M.AddReading(b, "hc:gold")
+      M.SetSize(t, size)
+      return t
+    end
+    add("largeHalf"); add("lineHalf"); add("half"); add("largeHalf"); add("line"); add("lineHalf")
+    local rows, h, top = M.Layout(b)
+    local got = {}
+    for _, r in ipairs(rows) do got[#got + 1] = r.kind .. ":" .. table.concat(r.cells or { r.kind }, "+") .. ":" .. r.h end
+    assert.same({ "run:run:20", "grid:heroHalf+rowHalf:46", "grid:grid+heroHalf:46", "row:row:18", "grid:rowHalf:18" }, got)
+    assert.are.equal(M.PAD_HEAD, top)                                -- a header: 2 above it
+    local sum = M.PAD_HEAD + M.PAD
+    for _, r in ipairs(rows) do sum = sum + r.h end
+    assert.are.equal(sum, h)
+    -- the hero is the first Big of either width
+    assert.are.equal(1, M.HeroIndex(b))
+    -- Big: 46, +15 with a sparkline drawn (a flow), +14 with the comparison
+    local big = M.Create(nil, { name = "Big" })
+    local t = M.AddReading(big, "hc:gold")
+    M.SetSize(t, "large")
+    assert.is_true(M.HasExtra(t, "sparkline"))
+    local r1 = M.Layout(big)
+    local hero
+    for _, r in ipairs(r1) do if r.kind == "hero" then hero = r end end
+    assert.are.equal(M.HEIGHT.hero + (M.DrawsSpark(t) and M.HEIGHT.spark or 0), hero.h)
+    -- Big, half width takes no extras; the trend badge fits any number tile on per hour
+    local th = add("largeHalf")
+    assert.is_nil(rawget(th, "extras"))
+    M.SetCalc(th, "perHour")
+    assert.is_true(M.TrendBadgeFits(th))
+  end)
+
+  it("keep a board's look: opacity, background, colours; a fade is half of the board's opacity, once", function()
+    local env = boot()
+    local M = env.M
+    local b = M.Create("pocket", { shown = true })
+    assert.are.equal(1, M.BoardAlpha(b))
+    M.SetAlpha(b, 0.6)
+    assert.are.equal(0.6, b.alpha)
+    b.show.combat = "fade"
+    b.show.mouseoverFade = true
+    assert.same({ true, 0.3 }, { M.Visibility(b, { combat = true }) })    -- both rules: still half, not a quarter
+    M.SetAlpha(b, 0.05)
+    assert.are.equal(M.ALPHA_MIN, b.alpha)
+    M.SetAlpha(b, 1)
+    assert.is_nil(b.alpha)                                               -- the default is stored as nil
+    M.SetBackground(b, "blue", 0.5)
+    assert.are.same({ 0.03, 0.06, 0.14 }, b.bg)
+    assert.are.equal("blue", M.BgKey(b))
+    assert.are.same({ 0.03, 0.06, 0.14, 0.5 }, { M.BoardBg(b) })
+    M.SetBackground(b, "slate", 0.72)
+    assert.is_nil(b.bg)
+    assert.is_nil(b.bgAlpha)
+    -- a value colour: the tile's own, else the board's, else white
+    local t = b.tiles[1]
+    assert.are.same({ 1, 1, 1 }, { M.TileColor(t, b) })
+    M.SetValueColor(b, "gold")
+    assert.are.same({ 1, 0.82, 0 }, { M.TileColor(t, b) })
+    M.SetTileColor(t, "teal")
+    assert.are.equal("teal", M.TileColorKey(t))
+    assert.are.same({ 0.3, 0.9, 0.8 }, { M.TileColor(t, b) })
+    -- a copy keeps the look; Reset look drops it
+    M.SetAlpha(b, 0.5)
+    local c = M.Duplicate(b, "Copy")
+    assert.are.equal(0.5, c.alpha)
+    assert.are.equal("gold", c.valueColor)
+    assert.are.equal("teal", M.TileColorKey(c.tiles[1]))
+    M.ResetLook(b)
+    assert.is_nil(b.alpha)
+    assert.is_nil(b.valueColor)
+  end)
+
+  it("move a tile to the top or the bottom", function()
+    local env = boot()
+    local M = env.M
+    local b = M.Create("pocket")
+    local first, last = b.tiles[1], b.tiles[#b.tiles]
+    assert.is_true(M.MoveTileTo(b, #b.tiles, "top"))
+    assert.are.equal(last, b.tiles[1])
+    assert.are.equal(first, b.tiles[2])
+    assert.is_true(M.MoveTileTo(b, 1, "bottom"))
+    assert.are.equal(last, b.tiles[#b.tiles])
+    assert.is_false(M.MoveTileTo(b, #b.tiles, "bottom"))
   end)
 
   it("decide visibility: combat, instances, run only, mouse-over fade; edit mode shows everything", function()
@@ -141,7 +233,7 @@ describe("boards", function()
     local b = M.Create("pocket", { shown = true })
     assert.same({ true, 1 }, { M.Visibility(b, {}) })
     b.show.combat = "fade"
-    assert.same({ true, 0.35 }, { M.Visibility(b, { combat = true }) })
+    assert.same({ true, 0.5 }, { M.Visibility(b, { combat = true }) })   -- (0.5.0) half of its opacity
     b.show.combat = "hide"
     assert.same({ false, 1, "combat" }, { M.Visibility(b, { combat = true }) })   -- (HC-68: and why)
     assert.same({ true, 1 }, { M.Visibility(b, { combat = true, editing = true }) })
@@ -151,7 +243,7 @@ describe("boards", function()
     assert.is_false((M.Visibility(b, {})))
     assert.is_true((M.Visibility(b, { runOpen = true })))
     b.show.mouseoverFade = true
-    assert.same({ true, 0.3 }, { M.Visibility(b, { runOpen = true }) })
+    assert.same({ true, 0.5 }, { M.Visibility(b, { runOpen = true }) })
     assert.same({ true, 1 }, { M.Visibility(b, { runOpen = true, mouseOver = true }) })
     b.shown = false
     assert.is_false((M.Visibility(b, { editing = true })))

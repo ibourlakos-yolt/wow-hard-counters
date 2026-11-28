@@ -13,6 +13,40 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
   `/hc tutorial <tab>` starts one tab's (`/hc tour` still works).
 - Right-click opens a menu in more places (the Help button, and more below).
 
+### Boards on your HUD
+- Two new tile sizes: **Big, half width** (a big number in one of two columns) and **Line, half width**. "Half
+  width" is now called **Medium, half width**. Any two half-width tiles next to each other share a row, whatever
+  their size.
+- The board's title row is slimmer (8 px less), on a faint dark strip. A Big tile is only as tall as what it draws:
+  without its small graph or comparison line it no longer leaves a gap.
+- One colour family on every size: labels grey, numbers white (12 pt on Medium and Line tiles, 10 before), gold for
+  the board's name and headings. A Big number too wide for its room steps down a size instead of being cut.
+- The trend badge fits every number tile: an arrow on the smaller sizes, arrow and words on Big.
+- **Look**, in the board's menu: its opacity, background colour and background opacity, the numbers' colour, and its
+  scale. A board that fades (in combat, or until the mouse is over it) now shows at **half of its own opacity**
+  (it was a fixed 35% or 30%).
+- A tile's menu: **Colour** (its own, or the board's) and **Move to top** / **Move to bottom**.
+- Pause, Resume and Reset on a board are **icons** (Options, Boards: "Board buttons as icons" puts the words back).
+- Hovering a board shows **Hide** beside Edit: it takes the board off your HUD (it keeps counting) and says in chat how
+  to bring it back. Right-click Move, Hide or Edit for the board's menu.
+- Menus opened on the HUD no longer say "Only here": "(not on your HUD)", "Take this tile off the HUD".
+
+### How a number is made
+- **Alt+click a number on a board** on your HUD: a tooltip says what it counts, over when, how the number is worked out
+  and anything that is an estimate. Any other click closes it. With Alt held, a right-click opens the tile's menu.
+  The key is in Options, Boards ("Explain a number with").
+- In the window: the **?** on a tile's card in the Boards tab, or "How it's made" in its menu and in the Explorer, opens
+  the same as a small panel; a click outside or Escape closes it. The Explorer's tile details show it too.
+
+### Explorer
+- The list on the left folds like the Auction House's: **Boards** (with Ready-made boards under it), **Tiles** (per
+  board, and Displays), **Readings**, **Trackers**, then one entry per other character. A + opens one; what you open
+  is remembered. Right-click a kind for Open all / Close all.
+- The New board... button left the Explorer (the Boards tab has it; a right-click on Boards in the Explorer too).
+- Details say more: a board's rules are switches you can click (in combat, in instances, faded until hovered), with
+  its look and what it was made from; a ready-made board shows each tile's size and its value now; a reading says
+  what it is counted from, how it can show and which displays fit.
+
 ## 0.4.0-beta2 (2026-11-27)
 
 A beta, **still experimental**. One fix to 0.4.0-beta1.
