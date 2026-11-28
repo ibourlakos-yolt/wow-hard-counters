@@ -191,75 +191,94 @@ describe("Character Stats, phase 1 (live readings)", function()
     assert.is_false(HC:ReadingApplies("hcstats:rap"))
   end)
 
-  it("offers role and class boards made of its readings (2026-11-24, Hard Counters HC-57)", function()
+  it("offers a board per class and role, made of its readings (Hard Counters 0.5.0 E1)", function()
     local env = boot("MAGE")
     local M = env.ns.BoardModel
-    local roles, classes = 0, 0
-    for key, p in pairs(M.PRESETS) do
+    local keys = {}
+    for _, key in ipairs(M.PRESET_ORDER) do
       if key:find("^hcstats:") then
-        if p.category == "role" then roles = roles + 1 elseif p.category == "class" then classes = classes + 1 end
+        keys[#keys + 1] = key
+        local p = M.PRESETS[key]
+        assert.are.equal("class", p.category, key)
+        assert.truthy(M.ROLE_WORD[p.role], key)
+        assert.are.equal(key, "hcstats:" .. p.class:lower() .. "." .. p.role)
+        assert.are.equal(M.ClassWord(p.class) .. " (" .. M.ROLE_WORD[p.role] .. ")", p.name)
+        assert.truthy(p.tip:find(M.ClassWord(p.class):lower(), 1, true), key)
         local b = M.Create(key)
-        assert.are.equal(#p.tiles, #b.tiles)                   -- every reading it names exists
+        assert.are.equal(#p.tiles, #b.tiles, key)              -- every reading it names exists
         assert.are.equal("now", b.tiles[1].scope)
-        if not key:find("^hcstats:schools%.") then
-          assert.are.equal("large", b.tiles[1].size)            -- (CS-11, DESIGN §16.9) a big number first
-        end
+        assert.are.equal("large", b.tiles[1].size)              -- (CS-11, DESIGN §16.9) a big number first
         assert.are.equal("number", b.tiles[1].display)
         assert.is_false(M.UsesTimer(b) and true or false)       -- now tiles: no timer on these boards
       end
     end
-    assert.are.equal(7, roles)
-    assert.are.equal(9 + 8, classes)                            -- a class board each, and a schools board for eight
-    -- the old keys kept: a board remembers the preset it came from
-    assert.are.equal("Tank (physical)", M.PRESETS["hcstats:tank"].name)
-    assert.are.equal("Caster DPS", M.PRESETS["hcstats:caster"].name)
-    assert.are.equal("HUNTER", M.PRESETS["hcstats:hunter"].class)
+    -- 18, by class first (the New board dialog's Other classes follow this order)
+    assert.are.same({ "hcstats:warrior.tank", "hcstats:warrior.melee", "hcstats:paladin.healer", "hcstats:paladin.tank",
+      "hcstats:paladin.melee", "hcstats:hunter.ranged", "hcstats:rogue.melee", "hcstats:priest.healer",
+      "hcstats:priest.caster", "hcstats:shaman.healer", "hcstats:shaman.caster", "hcstats:shaman.melee",
+      "hcstats:mage.caster", "hcstats:warlock.caster", "hcstats:druid.healer", "hcstats:druid.tank",
+      "hcstats:druid.melee", "hcstats:druid.caster" }, keys)
+    -- 0.4's role, class and schools boards are no longer offered (boards made from them keep their tiles)
+    for _, old in ipairs({ "tank", "spelltank", "melee", "ranged", "caster", "healdirect", "healhot", "warrior", "mage",
+      "hunter", "druid", "schools.mage", "schools.rogue" }) do
+      assert.is_nil(M.PRESETS["hcstats:" .. old], old)
+    end
+    assert.are.equal("Paladin (Melee damage)", M.PRESETS["hcstats:paladin.melee"].name)
+    assert.is_true(#"Paladin (Melee damage) 2" <= M.NAME_MAX)  -- the longest, numbered, still fits a board name
     -- your class first
     local by = {}
     for _, g in ipairs(M.PresetGroups()) do by[g.title] = g end
-    assert.are.same({ "hcstats:mage", "hcstats:schools.mage" }, by["Your class"].keys)   -- the class board first
-    assert.are.equal(8 + 7, #by["Other classes"].keys)
-    -- (2026-11-25) the schools board: a damage and a crit tile per school of the class, in its order
-    local sm = M.PRESETS["hcstats:schools.mage"]
-    assert.are.equal("Mage: schools", sm.name)
-    local got = {}
-    for _, tl in ipairs(sm.tiles) do got[#got + 1] = tl.reading:gsub("hcstats:", "") .. (tl.arg and (":" .. tl.arg) or "") end
-    assert.are.same({ "spelldmg:3", "spellcrit:3", "spelldmg:5", "spellcrit:5", "spelldmg:7", "spellcrit:7", "spellhit",
-      "spellpen" }, got)
-    assert.are.equal(8, #M.PRESETS["hcstats:schools.hunter"].tiles)     -- arcane, nature, fire, frost; no spell hit
-    assert.are.equal(2, #M.PRESETS["hcstats:schools.rogue"].tiles)      -- nature (poisons)
-    assert.is_nil(M.PRESETS["hcstats:schools.warrior"])
-    assert.are.equal("Spell damage: Fire", M.TileTitle(M.Create("hcstats:schools.mage").tiles[1]))
-    -- a spell tank's resistances, one school each
-    local st = M.Create("hcstats:spelltank")
-    assert.are.equal("hcstats:resist", st.tiles[2].reading)
-    assert.are.equal(2, st.tiles[2].arg)
-    assert.are.same({ "total" }, env.HC:GetReading("hcstats:armor").calcs)   -- a stat is a stock: total only
-    -- (2026-11-25) casters see their schools side by side, and every board of a class that casts has the
-    -- five-second rule as a bar
-    local function has(key, reading, arg, display)
+    assert.are.same({ "hcstats:mage.caster" }, by["Your class"].keys)
+    assert.are.equal(17, #by["Other classes"].keys)
+    assert.is_nil(by["Roles"])                                  -- (0.5.0) no role boards: no Roles group
+    -- the design's tiles, in order (sizes on a core before 0.5: Big, half width and Line, half width read "half")
+    local function list(key)
+      local out = {}
       for _, t in ipairs(M.PRESETS[key].tiles) do
-        if t.reading == "hcstats:" .. reading and t.arg == arg and (display == nil or t.display == display) then return true end
+        out[#out + 1] = t.reading:gsub("hcstats:", "") .. (t.arg and (":" .. t.arg) or "") .. "/" .. t.size
+          .. (t.display == "bar" and "/bar" or "")
       end
+      return out
+    end
+    assert.are.same({ "armor/large", "health/half", "sta/half", "dodge/half", "parry/half", "block/half", "blockvalue/half",
+      "defense/line/bar", "hit/half", "ap/half" }, list("hcstats:warrior.tank"))
+    assert.are.same({ "spelldmg/large", "spellcrit/half", "spellhit/half", "spelldmg:3/half", "spelldmg:5/half",
+      "spelldmg:7/half", "int/half", "power/half", "mp5cast/half", "fsr/line/bar" }, list("hcstats:mage.caster"))
+    assert.are.same({ "spelldmg:6/large", "spellcrit:6/half", "spellhit/half", "spelldmg:3/half", "spellcrit:3/half",
+      "sta/half", "int/half", "health/half", "spellpen/half", "fsr/line/bar" }, list("hcstats:warlock.caster"))
+    assert.are.same({ "ap/large", "crit/half", "hit/half", "mhdps/half", "ohdps/half", "mhspeed/half", "ohspeed/half",
+      "agi/half", "str/half", "mainskill/line/bar", "offskill/line/bar" }, list("hcstats:rogue.melee"))
+    -- the same tiles, kept apart by class: a shaman should not have to guess the paladin's healer board is theirs
+    assert.are.same(list("hcstats:paladin.healer"), list("hcstats:shaman.healer"))
+    assert.are.equal("Spell damage: Shadow", M.TileTitle(M.Create("hcstats:priest.caster").tiles[1]))
+    assert.are.same({ "total" }, env.HC:GetReading("hcstats:armor").calcs)   -- a stat is a stock: total only
+    -- every board of a class that casts ends with the five-second rule as a bar; none of the others has it
+    local function has(key, reading)
+      for _, t in ipairs(M.PRESETS[key].tiles) do if t.reading == "hcstats:" .. reading then return true end end
       return false
     end
-    for _, k in ipairs({ 6, 3 }) do                             -- shadow and fire
-      assert.is_true(has("hcstats:warlock", "spelldmg", k))
-      assert.is_true(has("hcstats:warlock", "spellcrit", k))
+    for _, key in ipairs(keys) do
+      local p = M.PRESETS[key]
+      local casts = p.role == "healer" or p.role == "caster"
+      assert.are.equal(casts, has(key, "fsr"), key)
     end
-    for _, k in ipairs({ 3, 5, 7 }) do                          -- fire, frost, arcane
-      assert.is_true(has("hcstats:mage", "spelldmg", k))
-      assert.is_true(has("hcstats:mage", "spellcrit", k))
-    end
-    for _, key in ipairs({ "mage", "warlock", "priest", "druid", "shaman", "paladin", "caster", "healdirect", "healhot" }) do
-      assert.is_true(has("hcstats:" .. key, "fsr", nil, "bar"), key)
-    end
-    for _, key in ipairs({ "warrior", "rogue", "hunter", "melee", "tank" }) do
-      assert.is_false(has("hcstats:" .. key, "fsr", nil), key)
-    end
-    for _, key in ipairs({ "priest", "druid", "shaman", "paladin", "healdirect" }) do
-      assert.is_true(has("hcstats:" .. key, "healcrit", nil), key)
-    end
+    assert.is_false(has("hcstats:shaman.melee", "parry"))      -- (PARRY has no shaman yet: a QUEUE row)
+  end)
+
+  it("uses Big, half width and Line, half width on a core that has them (tileSizes5)", function()
+    local env = Env.new()
+    env:load()
+    local HC = env.HC
+    local supports = HC.Supports
+    HC.Supports = function(self, f) if f == "tileSizes5" then return true end return supports(self, f) end
+    local got = {}
+    HC.RegisterBoardPreset = function(_, key, def) got[key] = def end
+    assert(loadfile("HardCounters_CharacterStats/Stats.lua"))("HardCounters_CharacterStats", {})
+    local w = got["hcstats:warrior.melee"]
+    assert.are.equal("largeHalf", w.tiles[2].size)
+    assert.are.equal("lineHalf", got["hcstats:warrior.tank"].tiles[9].size)
+    assert.are.equal("melee", w.role)
+    assert.is_false(supports(HC, "tileSizes5"))                -- (today's core: an unknown feature answers false)
   end)
 
   it("reads regeneration per 5 seconds and per second, from spirit, haste and healing crit (2026-11-25)", function()

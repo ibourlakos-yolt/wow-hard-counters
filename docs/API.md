@@ -326,7 +326,7 @@ survives `/reload`), `HC:IsActive()`, `HC:FormatMoney(c)`, `HC:FormatDuration(s)
 `HC:Phases()`, `HC:CurrentPhase()`, `HC:ToggleRunPanel()`, `HC:ToggleRunList()`.
 
 **Board presets (packs, 2026-11-19).** `HC:RegisterBoardPreset(key, def)` (check `HC:Supports("boardPresets")`): `key`
-namespaced (`"hcstats:caster"`), `def = { name, mini, category, class, tip, tiles = { { reading, scope, calc, display,
+namespaced (`"hcstats:mage.caster"`), `def = { name, mini, category, class, role, tip, tiles = { { reading, scope, calc, display,
 size, extras, arg }, ... } }` (HC-51, DESIGN §16.9): `scope` defaults to `"run"`, the board's timer; `calc` to the reading's default;
 `display` (`"number"`, `"bar"`, `"gauge"`, `"odometer"` for a count or distance total, `"mix"` for a reading with a small `enum` parameter: HC-63) to `"number"`; `size` (`"large"`, `"half"`, `"line"`) to `"line"`; a large
 number gets `extras = { sparkline = true, vsUsual = true }` unless the tile lists its own (`{ "sparkline" }`). Bars and
@@ -336,10 +336,19 @@ both extras, grid = half number, row = line number, bar = line bar, gauge = line
 reading it was merged into. **Categories (HC-57, 2026-11-24):** `category` is one of `"activity"`, `"role"`,
 `"class"` (a list Hard Counters owns; anything else is an error); a class board also names its class, `class =
 "MAGE"` (the class file name; required with `"class"`, an error without it); `tip` is a line shown when the preset is
-hovered. The New board dialog, the Boards tab and the New board menu group the presets: **Activity**, **Roles**,
-**Your class** (the board whose `class` is this character's), **Other classes** (a submenu), then presets with no
-category under their pack's title, then **Your presets**. Also `/hc board new <key>`; tiles whose reading isn't
-registered are left out when a board is made.
+hovered. (0.5.0) A class board may name its `role`: `"tank"`, `"healer"`, `"melee"`, `"caster"` or `"ranged"` (anything
+else is an error); it is stored and shown as a role word ("Melee damage") by the tutorial; nothing sorts by it yet.
+The New board dialog, the Boards tab and the New board menu group the presets: **Activity**, **Your class** (the
+boards whose `class` is this character's), **Other classes** (a submenu, in registration order, a title row per
+class), **Roles** (0.5.0: last, and only when a pack still registers one), then presets with no category under their
+pack's title, then **Your presets**. Also `/hc board new <key>`; tiles whose reading isn't registered are left out
+when a board is made.
+
+**For a pack's own window (0.5.0, check `HC:Supports("packMenus")`).** `HC:ShowMenu(anchor, items)`: Hard Counters'
+popup menu under a frame; `items = { { text, func, disabled, checked, title, tip, sub }, ... }`, the same as its own
+menus. `HC:AddTile(readingId, anchor, arg)`: what the Explorer's `Add tile...` does: a tile of that reading on a
+board (a menu of boards at `anchor` when there are several; the member menu when the reading takes one and `arg` is
+nil). `HC:ShowTracker(trackerId)`: the Explorer on Trackers, that tracker selected.
 
 **Your characters and account-wide values (FM-16).** `HC:IsOwnCharacter(name)`: true for a character of this account
 that has loaded Hard Counters ("Name" on this realm, or "Name-Realm" with the realm's spaces dropped, as mail

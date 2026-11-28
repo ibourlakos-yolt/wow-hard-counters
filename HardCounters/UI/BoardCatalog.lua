@@ -154,8 +154,10 @@ function C.Rows(node, search)
       for _, key in ipairs(g.keys) do
         local p = M.Preset(key)
         if p and matches(search, p.name) then
+          -- (0.5.0) the Group column says the class of a class board
+          local grp = p.class and L[M.ClassWord(p.class)] or L[of[key] or ""]
           out[#out + 1] = { key = "p:" .. key, preset = key, user = M.UserPreset(key) ~= nil,
-            cells = { name = p.name, status = L[of[key] or ""], tiles = tostring(#p.tiles), clock = p.mini and L["mini"] or "" } }
+            cells = { name = p.name, status = grp, tiles = tostring(#p.tiles), clock = p.mini and L["mini"] or "" } }
         end
       end
     end

@@ -739,7 +739,9 @@ M.PRESETS = {
 }
 M.PRESET_ORDER = { "run", "pocket", "leveling" }
 
---- A pack's board preset (Character Stats' Caster, Melee, ...): `key` is namespaced like any id ("hcstats:caster");
+--- A pack's board preset (Character Stats' "Mage (Caster)", ...): `key` is namespaced like any id ("hcstats:mage.caster");
+--- optional category ("activity", "class", "role"), class ("MAGE", with "class"), role ("tank", "healer", "melee",
+--- "caster", "ranged"; 0.5.0, stored, read by nothing yet) and tip;
 --- def = { name, mini (bool), tiles = { { reading = id, scope = "now"|"run"|..., display = "number"|"bar"|"gauge",
 --- size = "large"|"half"|"line", calc = "total"|"perHour", arg }, ... } }. A tile's `style` (before HC-51: hero, grid,
 --- row, bar, gauge) is still read, through M.STYLE_MAP. A large number gets the sparkline and "vs your average here".
@@ -789,16 +791,28 @@ function HC:RegisterBoardPreset(key, def)
     error("HardCounters: RegisterBoardPreset('" .. key .. "'): a class board names its class (\"MAGE\", ...)", 2)
   end
   if def.tip ~= nil and type(def.tip) ~= "string" then error("HardCounters: RegisterBoardPreset('" .. key .. "'): tip must be a string", 2) end
+  if def.role ~= nil and not M.ROLE_WORD[def.role] then
+    error("HardCounters: RegisterBoardPreset('" .. key .. "'): role must be tank, healer, melee, caster or ranged", 2)
+  end
   if not M.PRESETS[key] then M.PRESET_ORDER[#M.PRESET_ORDER + 1] = key end
   M.PRESETS[key] = { name = type(def.name) == "string" and def.name:sub(1, 32) or key, mini = def.mini and true or false,
-    tiles = tiles, pack = U.namespace(key), category = def.category, class = def.class, tip = def.tip }
+    tiles = tiles, pack = U.namespace(key), category = def.category, class = def.class, role = def.role, tip = def.tip }
   return key
 end
 
 --- (HC-57 a, 2026-11-24) The categories of presets Hard Counters owns, in menu order. A preset without one is
---- listed under its pack's title.
-M.CATEGORY_ORDER = { "activity", "role", "class" }
+--- listed under its pack's title. (0.5.0) "role" is still accepted from another author's pack and listed after the
+--- classes; Character Stats' boards are by class and role ("Warrior (Tank)").
+M.CATEGORY_ORDER = { "activity", "class", "role" }
 M.CATEGORY_TITLE = { activity = "Activity", role = "Roles", class = "Classes" }
+--- (0.5.0) A class board's optional role (`def.role`), and its word ("Druid (Melee damage)"). Nothing sorts by it yet.
+M.ROLE_WORD = { tank = "Tank", healer = "Healer", melee = "Melee damage", caster = "Caster", ranged = "Ranged" }
+
+--- A class file name in words: "WARRIOR" -> "Warrior" (the New board dialog's class titles, the tutorial).
+function M.ClassWord(token)
+  if type(token) ~= "string" or token == "" then return "" end
+  return token:sub(1, 1):upper() .. token:sub(2):lower()
+end
 
 --- The character's class file name ("MAGE"), or nil.
 function M.PlayerClass()
@@ -932,9 +946,9 @@ function M.DeletePreset(key)
 end
 
 --- The presets in groups for the Boards tab and the New board dialog (HC-57 a, 2026-11-24): by category, Activity,
---- Roles, "Your class" (this character's class board), "Other classes" (`more = true`: a submenu); then presets
---- with no category under their pack's title; then "Your presets". { { title, keys = { key, ... }, more } }; empty
---- groups left out.
+--- "Your class" (this character's class boards), "Other classes" (`more = true`: a submenu, in registration order),
+--- then Roles (0.5.0: only another author's pack still has them); then presets with no category under their pack's
+--- title; then "Your presets". { { title, keys = { key, ... }, more } }; empty groups left out.
 function M.PresetGroups()
   local groups, byTitle = {}, {}
   local function group(title)
@@ -943,7 +957,7 @@ function M.PresetGroups()
   end
   local myClass = M.PlayerClass()
   -- the fixed groups first, in order (left out below when empty)
-  for _, t in ipairs({ "Activity", "Roles", "Your class", "Other classes" }) do group(t) end
+  for _, t in ipairs({ "Activity", "Your class", "Other classes", "Roles" }) do group(t) end
   byTitle["Other classes"].more = true
   for _, key in ipairs(M.PRESET_ORDER) do
     local p = M.PRESETS[key]

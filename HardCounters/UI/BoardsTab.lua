@@ -531,7 +531,7 @@ local function newFooter(f)
   end)
   p.ready:SetPoint("RIGHT", -12, 0)
   Wd.RichTip(p.ready, function() return { title = L["Ready-made boards"],
-    text = L["The Explorer tab lists every ready-made board by activity, role and class, with its tiles."],
+    text = L["The Explorer tab lists every ready-made board by activity and class, with its tiles."],
     click = L["Click: open the list."] } end)
   p.new = Wd.Button(p, L["New board..."], 104, function() if Bo() then Bo().OpenNewBoard() end end)
   p.new:SetPoint("RIGHT", p.ready, "LEFT", -6, 0)

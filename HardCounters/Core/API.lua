@@ -16,6 +16,7 @@ local FEATURES = {
   counterMembers = true,          -- HC:CounterMembers (2026-11-25: the members a small dimension has counted)
   mixList = true,                 -- reading `mixList` (2026-11-25: a mix tile lists its parts with amounts)
   stints = true,                  -- 0.4.0: HC:StartStint, HC:Stints, ... (the run API in the player's word; Core/Runs.lua)
+  packMenus = true,               -- 0.5.0: HC:ShowMenu, HC:AddTile, HC:ShowTracker (a pack window's right-click menu)
   hist = false, autoRuns = false, journal = false,
 }
 

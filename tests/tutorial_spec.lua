@@ -82,6 +82,53 @@ describe("the tutorial", function()
     end, { newCharacter = true, settings = { global = { tutorialSeen = true } } })
   end)
 
+  it("offers a class with several roles a menu of them, and knows a class board made in 0.4 (0.5.0)", function()
+    UI.with(function(ctx)
+      if not ctx.charstats then return end
+      local ns = ctx.hc
+      local T, BM = ns.Tutorial, ns.BoardModel
+      ns.wow.playerClass = function() return "DRUID" end
+      assert.are.same({ "hcstats:druid.healer", "hcstats:druid.tank", "hcstats:druid.melee", "hcstats:druid.caster" },
+        T.ClassPresets())
+      assert.are.equal("hcstats:druid.healer", (T.ClassPreset()))
+      T.Show(3)
+      local f = ns.TutorialFrame()
+      assert.are.equal("Make my Druid board...", f.act:GetText())
+      for _, s in ipairs({ "by role", "Druid (Healer)", "Druid (Caster)" }) do
+        assert.truthy(f.body:GetText():find(s, 1, true), s)
+      end
+      assert.is_nil(f.body:GetText():find("Roles", 1, true))
+      local before = #BM.Store().list
+      click(f.act)                                             -- a menu of the roles on the button
+      assert.is_true(ns.Menu.IsShown())
+      assert.are.equal(before, #BM.Store().list)
+      local shown = {}
+      local menu = _G.HardCountersMenu1
+      for i = 1, 4 do shown[i] = menu.rows[i].text:GetText() end
+      assert.are.same({ "Healer", "Tank", "Melee damage", "Caster" }, shown)
+      click(menu.rows[2])                                      -- Tank
+      local list = BM.Store().list
+      assert.are.equal(before + 1, #list)
+      assert.are.equal("hcstats:druid.tank", list[#list].preset)
+      assert.are.equal("Show it", f.act:GetText())
+      T.Hide()
+      assert.are.same({}, ctx.env.errors)
+    end, SEEN)
+    -- a 0.4 class board of this class counts: no second one offered
+    UI.with(function(ctx)
+      if not ctx.charstats then return end
+      local ns = ctx.hc
+      local b = ns.BoardModel.Create("pocket", { name = "My mage" })
+      b.preset = "hcstats:mage"
+      ns.Tutorial.Show(3)
+      local f = ns.TutorialFrame()
+      assert.are.equal("Show it", f.act:GetText())
+      assert.truthy(f.body:GetText():find("My mage", 1, true))
+      ns.Tutorial.Hide()
+      assert.are.same({}, ctx.env.errors)
+    end, SEEN)
+  end)
+
   it("a step about the screen moves the window out of the way; closing stops the flashing", function()
     UI.with(function(ctx)
       local ns = ctx.hc

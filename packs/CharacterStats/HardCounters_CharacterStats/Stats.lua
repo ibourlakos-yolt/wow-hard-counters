@@ -785,95 +785,99 @@ if HC.RegisterSource then
 end
 
 ---------------------------------------------------------------------------
--- Board presets (DESIGN §6), offered under New board: by role and by class (the user, 2026-11-24; Hard Counters
--- HC-57). No derived rows yet (CS-7): a tank board shows Defense toward its cap, not "crit immune".
+-- Board presets (DESIGN §6), offered under New board: one per class and role it can play, "Warrior (Tank)",
+-- "Druid (Caster)" (the user, 2026-11-28; Hard Counters 0.5.0 E1). They replace 0.4's seven role boards, nine class
+-- boards and eight schools boards; boards made from those stay as they are (a board holds its own tiles). "Tank
+-- (spell)" has no successor: resistance is a fight's gear set, not a role (the Resistance reading is one + Tile away).
+-- No derived rows yet (CS-7): a tank board shows Defense toward its cap, not "crit immune".
 ---------------------------------------------------------------------------
 
 if HC.RegisterBoardPreset then
   -- (Hard Counters DESIGN §16.9, CS-11) a tile's display and size; every stat is a stock, so the calc is total.
-  -- Default: a half-width number. A skill is a line bar toward its cap.
+  -- Default: a medium, half-width number. A skill or the five-second rule is a line bar toward its target.
   local function tile(stat, size, display, arg)
     return { reading = "hcstats:" .. stat, scope = "now", display = display or "number", size = size or "half", arg = arg }
   end
   local BIG, LINE = "large", "line"
+  -- Big, half width and Line, half width need Hard Counters 0.5; an older core gets a medium half instead
+  local sizes5 = HC.Supports and HC:Supports("tileSizes5")
+  local BH = sizes5 and "largeHalf" or "half"
+  local LH = sizes5 and "lineHalf" or "half"
   local function bar(stat) return tile(stat, LINE, "bar") end
   local function school(stat, k, size) return tile(stat, size, nil, k) end
-  local FIRE, NATURE, FROST, SHADOW, ARCANE = 2, 3, 4, 5, 6             -- (UnitResistance's numbers)
+  local function fsr() return bar("fsr") end
   -- (GetSpellBonusDamage's and GetSpellCritChance's numbers)
-  local S_HOLY, S_FIRE, S_NATURE, S_FROST, S_SHADOW, S_ARCANE = 2, 3, 4, 5, 6, 7
-  -- (2026-11-25) the five-second rule, a bar on every board of a class that casts
-  local function fsr() return tile("fsr", LINE, "bar") end
-  local function role(key, name, tip, tiles)
-    HC:RegisterBoardPreset("hcstats:" .. key, { name = name, category = "role", tip = tip, tiles = tiles })
-  end
-  local CLASS_TIP = "Your class's stats across its roles. Playing one role? Its board under Roles fits better."
-  local function class(key, name, token, tiles)
-    HC:RegisterBoardPreset("hcstats:" .. key, { name = name, category = "class", class = token, tip = CLASS_TIP, tiles = tiles })
+  local HOLY, FIRE, NATURE, FROST, SHADOW, ARCANE = 2, 3, 4, 5, 6, 7
+  local function join(a, b)
+    local out = {}
+    for _, t in ipairs(a) do out[#out + 1] = t end
+    for _, t in ipairs(b) do out[#out + 1] = t end
+    return out
   end
 
-  -- Roles. The old keys stay (boards remember the preset they came from): Tank, Melee and Caster became the first
-  -- of their kind; Hunter became the Hunter class board.
-  role("tank", "Tank (physical)", "Armor, avoidance and Defense: taking hits from monsters that strike.",
-    { tile("armor", BIG), bar("defense"), tile("dodge"), tile("parry"), tile("block"), tile("blockvalue"), tile("health", LINE) })
-  role("spelltank", "Tank (spell)", "Health and every resistance: taking spells, as against a fire or shadow boss.",
-    { tile("health", BIG), school("resist", FIRE), school("resist", FROST), school("resist", NATURE),
-      school("resist", SHADOW), school("resist", ARCANE), tile("sta"), tile("armor", LINE) })
-  role("melee", "Melee DPS", "Attack power, crit, hit and your weapon.",
-    { tile("ap", BIG), tile("crit"), tile("hit"), tile("mhdps"), tile("mhspeed"), tile("str"), tile("agi"), bar("mainskill") })
-  role("ranged", "Ranged DPS", "Ranged attack power, crit, hit and your ranged weapon.",
-    { tile("rap", BIG), tile("rcrit"), tile("hit"), tile("rdps"), tile("agi"), tile("rspeed"), bar("rangedskill") })
-  role("caster", "Caster DPS", "Spell damage, crit and hit, penetration and mana.",
-    { tile("spelldmg", BIG), tile("spellcrit"), tile("spellhit"), tile("int"), tile("spellpen"), tile("mp5cast"), tile("mp5"),
-      tile("power"), fsr() })
-  role("healdirect", "Healer (direct)", "Bonus healing and healing crit: direct heals can crit.",
-    { tile("healing", BIG), tile("healcrit"), tile("int"), tile("power"), tile("mp5cast"), tile("mp5"), fsr() })
-  role("healhot", "Healer (over time)", "Bonus healing, spirit and regen: heals over time don't crit, long fights reward mana.",
-    { tile("healing", BIG), tile("spi"), tile("mp5cast"), tile("mp5"), tile("power"), tile("int"), fsr() })
+  local CLASS_WORD = { WARRIOR = "Warrior", PALADIN = "Paladin", HUNTER = "Hunter", ROGUE = "Rogue", PRIEST = "Priest",
+    SHAMAN = "Shaman", MAGE = "Mage", WARLOCK = "Warlock", DRUID = "Druid" }
+  local ROLE_WORD = { tank = "Tank", healer = "Healer", melee = "Melee damage", caster = "Caster", ranged = "Ranged" }
+  local ROLE_TIP = { tank = "tank", healer = "healer", melee = "melee damage dealer", caster = "caster",
+    ranged = "ranged damage dealer" }
+  local CLASS_TIP = "The stats a %s watches as a %s. Yours to change once made."
+  local function board(token, role, tiles)
+    local word = CLASS_WORD[token]
+    HC:RegisterBoardPreset("hcstats:" .. token:lower() .. "." .. role, { name = word .. " (" .. ROLE_WORD[role] .. ")",
+      category = "class", class = token, role = role, tip = CLASS_TIP:format(word:lower(), ROLE_TIP[role]), tiles = tiles })
+  end
 
-  -- The nine classes.
+  -- Shared by more than one class (the list is by class: a shaman should not have to guess that the paladin's
+  -- healer board is theirs too)
+  local TANK_SHIELD = { tile("armor", BIG), tile("health"), tile("sta"), tile("dodge"), tile("parry"), tile("block"),
+    tile("blockvalue"), bar("defense") }
+  local MELEE_HEAD = { tile("ap", BIG), tile("crit", BH), tile("hit", BH), tile("mhdps"), tile("mhspeed") }
+  local HEAL_DIRECT = { tile("healing", BIG), tile("healcrit", BH), tile("mp5cast", BH), tile("int"), tile("power"), fsr() }
 
-  -- (2026-11-25) casters get their schools side by side (a warlock's shadow and fire, a mage's fire, frost and
-  -- arcane: damage and crit each), healers their healing crit, and every class that casts the five-second rule.
-  class("warrior", "Warrior", "WARRIOR", { tile("ap", BIG), tile("crit"), tile("hit"), bar("mainskill"), tile("armor"),
-    tile("dodge"), tile("parry"), bar("defense") })
-  class("paladin", "Paladin", "PALADIN", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_HOLY), tile("int"),
-    tile("mp5cast"), tile("ap"), tile("crit"), tile("armor"), tile("blockvalue"), fsr() })
-  class("hunter", "Hunter", "HUNTER", { tile("rap", BIG), tile("rcrit"), tile("hit"), tile("rdps"), tile("agi"), tile("mp5"),
-    bar("rangedskill") })
-  class("rogue", "Rogue", "ROGUE", { tile("ap", BIG), tile("crit"), tile("hit"), tile("agi"), tile("mhdps"), tile("dodge"),
-    bar("mainskill"), bar("offskill") })
-  class("priest", "Priest", "PRIEST", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_HOLY),
-    school("spelldmg", S_SHADOW), school("spellcrit", S_SHADOW), tile("int"), tile("spi"), tile("mp5cast"), tile("mp5"),
+  -- In class order (the New board dialog lists the other classes in it): Warrior, Paladin, Hunter, Rogue, Priest,
+  -- Shaman, Mage, Warlock, Druid. Left out on purpose: off-hand tiles on Warrior (Melee damage) (a two-hander would
+  -- show two "n/a"), parry on shamans (PARRY has no shaman yet: a QUEUE row), per-school crit on Mage (the tile's
+  -- menu picks a school).
+  board("WARRIOR", "tank", join(TANK_SHIELD, { tile("hit", LH), tile("ap", LH) }))
+  board("WARRIOR", "melee", join(MELEE_HEAD, { tile("str"), tile("agi"), bar("mainskill") }))
+
+  board("PALADIN", "healer", HEAL_DIRECT)
+  board("PALADIN", "tank", join(TANK_SHIELD, { school("spelldmg", HOLY, LH), tile("power", LH) }))
+  board("PALADIN", "melee", join(MELEE_HEAD, { tile("str"), school("spelldmg", HOLY), tile("power", LH), tile("mp5cast", LH),
+    bar("mainskill") }))
+
+  board("HUNTER", "ranged", { tile("rap", BIG), tile("rcrit", BH), tile("hit", BH), tile("rdps"), tile("rspeed"), tile("agi"),
+    tile("power"), bar("rangedskill") })
+
+  board("ROGUE", "melee", { tile("ap", BIG), tile("crit", BH), tile("hit", BH), tile("mhdps"), tile("ohdps"), tile("mhspeed"),
+    tile("ohspeed"), tile("agi", LH), tile("str", LH), bar("mainskill"), bar("offskill") })
+
+  -- (heals over time don't crit: the druid's healer board puts regeneration first, the priest's crit)
+  board("PRIEST", "healer", { tile("healing", BIG), tile("healcrit", BH), tile("spi", BH), tile("int"), tile("power"),
+    tile("mp5cast"), tile("mp5"), fsr() })
+  board("PRIEST", "caster", { school("spelldmg", SHADOW, BIG), school("spellcrit", SHADOW, BH), tile("spellhit", BH),
+    tile("int"), tile("spi"), tile("mp5cast"), tile("power"), tile("spellpen", LH), school("spelldmg", HOLY, LH), fsr() })
+
+  board("SHAMAN", "healer", HEAL_DIRECT)
+  board("SHAMAN", "caster", { school("spelldmg", NATURE, BIG), school("spellcrit", NATURE, BH), tile("spellhit", BH),
+    school("spelldmg", FIRE), school("spelldmg", FROST), tile("int"), tile("mp5cast"), tile("power", LH), tile("spellpen", LH),
     fsr() })
-  class("shaman", "Shaman", "SHAMAN", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_NATURE),
-    school("spellcrit", S_NATURE), school("spelldmg", S_FIRE), tile("int"), tile("mp5cast"), tile("ap"), tile("crit"), fsr() })
-  class("mage", "Mage", "MAGE", { tile("spelldmg", BIG), school("spelldmg", S_FIRE), school("spellcrit", S_FIRE),
-    school("spelldmg", S_FROST), school("spellcrit", S_FROST), school("spelldmg", S_ARCANE), school("spellcrit", S_ARCANE),
-    tile("spellhit"), tile("int"), tile("power"), tile("mp5cast"), fsr() })
-  class("warlock", "Warlock", "WARLOCK", { school("spelldmg", S_SHADOW, BIG), school("spellcrit", S_SHADOW),
-    school("spelldmg", S_FIRE), school("spellcrit", S_FIRE), tile("spellhit"), tile("spellpen"), tile("sta"), tile("int"),
-    tile("health"), tile("hp5combat"), fsr() })
-  class("druid", "Druid", "DRUID", { tile("healing", BIG), tile("healcrit"), school("spelldmg", S_NATURE),
-    school("spelldmg", S_ARCANE), tile("spellcrit"), tile("ap"), tile("crit"), tile("armor"), tile("dodge"), tile("power"),
+  board("SHAMAN", "melee", join(MELEE_HEAD, { tile("str"), tile("agi"), tile("power", LH), tile("mp5cast", LH),
+    bar("mainskill") }))
+
+  board("MAGE", "caster", { tile("spelldmg", BIG), tile("spellcrit", BH), tile("spellhit", BH), school("spelldmg", FIRE),
+    school("spelldmg", FROST), school("spelldmg", ARCANE), tile("int"), tile("power", LH), tile("mp5cast", LH), fsr() })
+
+  board("WARLOCK", "caster", { school("spelldmg", SHADOW, BIG), school("spellcrit", SHADOW, BH), tile("spellhit", BH),
+    school("spelldmg", FIRE), school("spellcrit", FIRE), tile("sta"), tile("int"), tile("health", LH), tile("spellpen", LH),
     fsr() })
 
-  -- (the user, 2026-11-25) The per-school set: one board per class that has magic-school abilities, a pair of
-  -- tiles per school (damage, crit) in the class's own order, then what the game reports once for every school
-  -- (spell hit, penetration) where the class casts. Offered beside the class board ("Your class").
-  local SCHOOL_NAME = { MAGE = "Mage", WARLOCK = "Warlock", PRIEST = "Priest", PALADIN = "Paladin", SHAMAN = "Shaman",
-    DRUID = "Druid", HUNTER = "Hunter", ROGUE = "Rogue" }
-  local SCHOOLS_TIP = "Spell damage and spell crit for each magic school your class uses, side by side."
-  for _, token in ipairs({ "MAGE", "WARLOCK", "PRIEST", "PALADIN", "SHAMAN", "DRUID", "HUNTER", "ROGUE" }) do
-    local tiles = {}
-    for _, k in ipairs(CLASS_SCHOOLS[token]) do
-      tiles[#tiles + 1] = school("spelldmg", k)
-      tiles[#tiles + 1] = school("spellcrit", k)
-    end
-    if CASTER[token] then
-      tiles[#tiles + 1] = tile("spellhit")
-      tiles[#tiles + 1] = tile("spellpen")
-    end
-    HC:RegisterBoardPreset("hcstats:schools." .. token:lower(), { name = SCHOOL_NAME[token] .. ": schools",
-      category = "class", class = token, tip = SCHOOLS_TIP, tiles = tiles })
-  end
+  board("DRUID", "healer", { tile("healing", BIG), tile("mp5cast", BH), tile("spi", BH), tile("int"), tile("power"),
+    tile("healcrit"), tile("mp5"), fsr() })
+  board("DRUID", "tank", { tile("armor", BIG), tile("health", BH), tile("dodge", BH), tile("sta"), tile("agi"), tile("ap"),
+    tile("crit"), bar("defense") })
+  board("DRUID", "melee", { tile("ap", BIG), tile("crit", BH), tile("hit", BH), tile("agi"), tile("str"), tile("mhdps", LH),
+    tile("health", LH) })
+  board("DRUID", "caster", { tile("spelldmg", BIG), tile("spellcrit", BH), tile("spellhit", BH), school("spelldmg", NATURE),
+    school("spelldmg", ARCANE), tile("int"), tile("mp5cast"), tile("power", LH), tile("spellpen", LH), fsr() })
 end

@@ -127,23 +127,36 @@ describe("merged readings", function()
 end)
 
 describe("presets by category (HC-57)", function()
-  it("groups Activity, Roles, your class, the other classes in a submenu, packs without one by title", function()
+  it("groups Activity, your class, the other classes in a submenu, Roles, packs without one by title", function()
     local env = boot(true)
     local M, HC = env.M, env.HC
     env.ns.wow.playerClass = function() return "MAGE" end
     local tile = { { reading = "t:looted" } }
-    HC:RegisterBoardPreset("t:tank", { name = "Tank", category = "role", tiles = tile })
-    HC:RegisterBoardPreset("t:mage", { name = "Mage", category = "class", class = "MAGE", tiles = tile })
+    local titles, by = {}, {}
+    local function groups()
+      titles, by = {}, {}
+      for _, g in ipairs(M.PresetGroups()) do titles[#titles + 1] = g.title; by[g.title] = g end
+    end
+    HC:RegisterBoardPreset("t:mage", { name = "Mage (Caster)", category = "class", class = "MAGE", role = "caster", tiles = tile })
     HC:RegisterBoardPreset("t:rogue", { name = "Rogue", category = "class", class = "ROGUE", tiles = tile })
     HC:RegisterBoardPreset("t:misc", { name = "Misc", tiles = tile })
-    local titles, by = {}, {}
-    for _, g in ipairs(M.PresetGroups()) do titles[#titles + 1] = g.title; by[g.title] = g end
-    assert.are.same({ "Activity", "Roles", "Your class", "Other classes", "Test" }, titles)
+    groups()
+    assert.are.same({ "Activity", "Your class", "Other classes", "Test" }, titles)   -- (0.5.0) no role boards: no Roles
+    -- another author's role board is still taken, listed after the classes
+    HC:RegisterBoardPreset("t:tank", { name = "Tank", category = "role", tiles = tile })
+    groups()
+    assert.are.same({ "Activity", "Your class", "Other classes", "Roles", "Test" }, titles)
     assert.are.same({ "run", "pocket", "leveling" }, by.Activity.keys)
     assert.are.same({ "t:mage" }, by["Your class"].keys)
     assert.is_true(by["Other classes"].more)
+    assert.are.equal("caster", M.Preset("t:mage").role)          -- (0.5.0) stored; nothing reads it yet
+    assert.are.same({ "activity", "class", "role" }, M.CATEGORY_ORDER)
+    assert.are.equal("Warlock", M.ClassWord("WARLOCK"))
     assert.has_error(function() HC:RegisterBoardPreset("t:x", { name = "X", category = "dungeon", tiles = tile }) end)
     assert.has_error(function() HC:RegisterBoardPreset("t:y", { name = "Y", category = "class", tiles = tile }) end)
+    assert.has_error(function()
+      HC:RegisterBoardPreset("t:z", { name = "Z", category = "class", class = "MAGE", role = "dps", tiles = tile })
+    end)
   end)
 end)
 

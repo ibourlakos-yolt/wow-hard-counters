@@ -43,7 +43,7 @@ end
 local PACK_WORDS = {
   hc = "Gold in and out (by source, if you like), net gold, gold owned, XP gained, XP this level, rested XP, time to level, your level. Always on. The Pocket, Leveling and Farming boards.",
   hcfarm = "What you farm: the money Ledger by source, items looted (all, or one item) and their vendor value, your best drop, reputation gained (all, or one faction), In bags: an item, Standing progress: a faction, and what you fish (each catch, its share, the fish in your bags, your casts, the ones that got away, the catch rate and the wait for a bite). The Fishing basket board.",
-  hcstats = "Your character sheet as readings: attributes, melee, ranged, spell and defense stats, weapon damage, speed and skills, resistances, durability, item level. A board for each role and each class.",
+  hcstats = "Your character sheet as readings: attributes, melee, ranged, spell and defense stats, weapon damage, speed and skills, resistances, durability, item level. A board for each class and role.",
   hctravel = "How you travel: distance on foot, mounted, swimming, by flight and by boat, time moving, average and top speed, speed now, jumps, falls, corpse runs, flights. The Trip and Flight log boards.",
 }
 
@@ -132,7 +132,7 @@ local PAGES = {
       item(format(L["%s puts one on your HUD or takes it off, from the chat line."], gold("/hc board <name>"))),
       head(L["More boards"]),
       item(L["New board... (the Boards and Explorer tabs, a right-click on the minimap button, /hc board new) starts from a ready-made board, an empty one, or a copy. Tick Put it on my HUD there, or leave it for later."]),
-      item(L["Ready-made boards come grouped: Activity (Leveling, Pocket, Farming, Trip...), Roles, Your class, Other classes."]),
+      item(L["Ready-made boards come grouped: Activity (Leveling, Pocket, Farming, Trip...), Your class, Other classes."]),
       item(L["A board you like can be saved as a preset of your own (Explorer tab, a board, More...), to make others from, on any character."]),
       item(L["Each character has its own boards. Explorer tab, Other characters: copy one over."]),
       head(L["Lost a board?"]),
@@ -294,7 +294,7 @@ local PAGES = {
       term("RegisterSource, Emit", L["the game events you listen to, and the call that adds to a counter."]),
       term("RegisterTracker", L["a group of your counters with one on switch and one history choice."]),
       term("RegisterReading", L["one number for boards, with its periods, formatter, optional target and choice."]),
-      term("RegisterBoardPreset", L["a ready-made board of your readings, under Activity, Roles or Classes."]),
+      term("RegisterBoardPreset", L["a ready-made board of your readings, under Activity or Classes."]),
       term("RegisterWindow", L["a tab along the bottom of this window; Hard Counters gives it the frame, Escape, the saved place."]),
       term("Query, Reading", L["read totals back: by period, by member, for a character or the account."]),
       term("StartRun, StopRun, callbacks", L["runs, and events such as HC_RUN_STOPPED or HC_TRACKERS_CHANGED."]),

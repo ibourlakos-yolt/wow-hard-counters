@@ -91,9 +91,15 @@ local function startItems()
         func = function() setChoice({ kind = "preset", key = key }) end }
     end
     if g.more then
-      -- (HC-57, 2026-11-24) a long group, such as the other classes' boards: one submenu
-      local sub = {}
-      for _, key in ipairs(g.keys) do sub[#sub + 1] = entry(key, "") end
+      -- (HC-57, 2026-11-24) a long group, such as the other classes' boards: one submenu. (0.5.0) A class's boards
+      -- under a title row with its name ("Warrior", then Warrior (Tank), Warrior (Melee damage)).
+      local sub, last = {}, nil
+      for _, key in ipairs(g.keys) do
+        local cls = BM().Preset(key).class
+        if cls and cls ~= last then sub[#sub + 1] = { text = L[BM().ClassWord(cls)], title = true } end
+        last = cls
+        sub[#sub + 1] = entry(key, cls and "  " or "")
+      end
       items[#items + 1] = { text = "  " .. L[g.title], sub = sub }
     else
       items[#items + 1] = { text = L[g.title], title = true }

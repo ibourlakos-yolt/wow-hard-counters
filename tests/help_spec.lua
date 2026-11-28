@@ -193,6 +193,93 @@ describe("the Packs tab", function()
     end, SEEN)
   end)
 
+  it("reads through (0.5.0 E3): versions, why a pack can't load, a warning before unticking, a row menu, Tools last", function()
+    UI.with(function(ctx)
+      if not ctx.farmer then return end
+      local ns, HC = ctx.hc, ctx.HC
+      local P = ns.Packs
+      addons(ctx, true)
+      local env = ctx.env
+      env.packAddons[1].version = HC.VERSION
+      env.packAddons[2].version = "0.1.0-alpha1"                -- one of ours, older than Hard Counters
+      env.packAddons[#env.packAddons + 1] = { name = "HardCounters_Diagnostics", title = "Hard Counters: Diagnostics",
+        notes = "The dev console.", enabled = true, loaded = false, version = HC.VERSION }
+      env.packAddons[#env.packAddons + 1] = { name = "HardCounters_Zoo", title = "Hard Counters: Zoo", notes = "Pets.",
+        enabled = true, loaded = false, missing = true, reason = "DEP_MISSING", deps = { "HardCounters", "LibPet" },
+        needs = { "LibPet" }, version = "1.0" }
+      table.sort(env.packAddons, function(a, b) return a.title < b.title end)
+      local list = P.List()
+      assert.are.equal("Diagnostics", list[#list].title)        -- a tool: last, whatever its name
+      assert.is_true(list[#list].tool)
+      assert.are.equal(HC.VERSION, list[1].version)             -- Basic is Hard Counters' own
+      assert.are.equal(1, P.CompareVersions("0.5.0-beta1", "0.4.0-beta2"))
+      assert.are.equal(-1, P.CompareVersions("0.5.0-beta1", "0.5.0"))
+      assert.are.equal(-1, P.CompareVersions("0.5.0-alpha1", "0.5.0-beta1"))
+      assert.are.equal(0, P.CompareVersions("0.4.0-beta2", "0.4.0-beta2"))
+      ns.ShowPacks(true)
+      local f = ns.Windows.Content("packs")
+      f:SetSize(762, 568)
+      P.Refresh()
+      assert.truthy(f.intro:GetText():find("Your ticks are for this character.", 1, true))
+      local byTitle = {}
+      for _, r in ipairs(P.Rows) do if r.pack then byTitle[r.pack.title] = r end end
+      assert.truthy(byTitle["Hard Counters Basic"].state:GetText():find("trackers counting", 1, true))
+      assert.truthy(byTitle.Farmer.state:GetText():find("trackers counting", 1, true))
+      assert.truthy(byTitle.Farmer.title:GetText():find(HC.VERSION, 1, true))
+      assert.is_nil(byTitle.Farmer.title:GetText():find("older", 1, true))
+      assert.truthy(byTitle.Traveler.title:GetText():find("older than Hard Counters", 1, true))
+      assert.is_nil(byTitle.Zoo.title:GetText():find("older", 1, true))        -- another author's: its own version
+      assert.truthy(byTitle.Zoo.state:GetText():find("Can't load: needs LibPet", 1, true))
+      assert.is_true(f.tools:IsShown())
+      -- the row's tooltip has the whole notes and the version
+      _G.GameTooltip.lines = {}
+      _G.GameTooltip.AddLine = function(self, s) self.lines[#self.lines + 1] = s end
+      byTitle.Farmer:GetScript("OnEnter")(byTitle.Farmer)
+      local tip = table.concat(_G.GameTooltip.lines, "\n")
+      assert.truthy(tip:find("Count what you farm.", 1, true))
+      assert.truthy(tip:find("Version " .. HC.VERSION, 1, true))
+      -- its menu: right-click or "..."
+      local items = P.RowItems(byTitle.Farmer.pack)
+      local texts = {}
+      for i, it in ipairs(items) do texts[i] = it.text end
+      assert.are.same({ "Farmer", "Turn off", "Its trackers", "Its ready-made boards" }, texts)
+      assert.is_false(items[3].disabled)
+      assert.is_false(items[4].disabled)                        -- the Fishing basket, under Activity
+      byTitle.Farmer:GetScript("OnMouseUp")(byTitle.Farmer, "RightButton")
+      assert.is_true(ns.Menu.IsShown())
+      ns.Menu.Hide()
+      items[3].func()                                           -- Its trackers: the Explorer, searched by the pack
+      assert.is_true(ns.Windows.IsShown("explorer"))
+      assert.are.equal("trackers", ns.ExplorerBrowser.node)
+      assert.are.equal("farmer", ns.ExplorerBrowser.search)
+      local rows = ns.TrackerCatalog.Rows("trackers", "farmer")
+      assert.is_true(#rows > 0)
+      for _, r in ipairs(rows) do assert.are.equal("Farmer", r.t.packTitle) end
+      items[4].func()
+      assert.are.equal("pg:Activity", ns.ExplorerBrowser.node)
+      local trav = P.RowItems(byTitle.Traveler.pack)            -- not loaded: its trackers and boards greyed
+      assert.is_true(trav[3].disabled)
+      assert.is_true(trav[4].disabled)
+      ns.ShowPacks(true)
+      -- unticking a pack whose readings are on tiles asks first
+      local n0 = P.TilesUsing(byTitle.Farmer.pack)
+      local b = ns.BoardModel.Create(nil, { name = "Loot" })
+      ns.Boards.AddReading(b, "hcfarm:items")
+      local n, space = P.TilesUsing(byTitle.Farmer.pack)
+      assert.are.equal(n0 + 1, n)
+      assert.are.equal("hcfarm", space)
+      local asked, answer
+      ns.Boards.Confirm = function(text, fn) asked, answer = text, fn end
+      click(byTitle.Farmer.check)
+      assert.truthy(asked:find(n .. " tiles on your boards use Farmer", 1, true))
+      assert.truthy(asked:find("'needs hcfarm'", 1, true))
+      assert.is_nil((ctx.env.addonEnabled or {}).HardCounters_Farmer)   -- not yet: the answer decides
+      answer()
+      assert.is_false(ctx.env.addonEnabled.HardCounters_Farmer)
+      assert.are.same({}, ctx.env.errors)
+    end, SEEN)
+  end)
+
   it("after the reload, a pack turned on in the tab is noted loaded; its trackers wait for its tiles (0.4.0)", function()
     UI.with(function(ctx)
       if not ctx.farmer then return end

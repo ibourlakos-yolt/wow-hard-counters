@@ -3,6 +3,42 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+### Class boards
+- **Character Stats' ready-made boards are by class and role now:** Warrior (Tank), Warrior (Melee damage), Paladin
+  (Healer), Paladin (Tank), Paladin (Melee damage), Hunter (Ranged), Rogue (Melee damage), Priest (Healer), Priest
+  (Caster), Shaman (Healer), Shaman (Caster), Shaman (Melee damage), Mage (Caster), Warlock (Caster), Druid (Healer),
+  Druid (Tank), Druid (Melee damage), Druid (Caster). Each holds the stats that class watches in that role.
+- **They replace the role boards** (Tank (physical), Tank (spell), Melee DPS, Ranged DPS, Caster DPS, Healer (direct),
+  Healer (over time)), **the one-per-class boards** and **the schools boards** ("Mage: schools"). Boards you already
+  made from them are kept, tiles and all; they are just no longer offered.
+- **Tank (spell) has no successor:** resistance is a matter of the fight's gear, not of a role. A Resistance tile is
+  still one + Tile away (Character Stats, Resistances).
+- New board... lists them under **Your class** and **Other classes**; in Other classes each class has a title row.
+  The Explorer's Group column shows the class.
+- The tutorial's first-board step names your class's boards. A class with several roles gets a button that asks
+  which one ("Make my Druid board..."). A class board you made in 0.4 counts: the step shows it instead of offering
+  another.
+- Character Stats window: right-click a stat for **Add tile...** (put it on a board) and **Its tracker** (its section
+  in the Explorer).
+
+### Packs tab
+- Hover a pack for its whole description, its state and its version; the version also shows after its name. One of
+  the packs that come with Hard Counters whose version doesn't match says so, in amber.
+- A pack that can't load says what it needs ("Can't load: needs ...").
+- Turning off a pack whose numbers are on your tiles asks first: those tiles read "needs ..." until it is back.
+- "trackers counting" instead of "trackers on": a tracker goes on by itself when you place one of its tiles.
+- The tab says your ticks are for this character.
+- Right-click a pack, or click its **...**: Turn on or off, **Its trackers** (the Explorer, searched by the pack),
+  **Its ready-made boards**.
+- Diagnostics is listed last, under **Tools**: it adds no numbers.
+
+Developer notes: `HC:RegisterBoardPreset` takes an optional `role` ("tank", "healer", "melee", "caster", "ranged");
+`category = "role"` is still accepted and listed under Roles, after the classes. New for a pack's own window
+(`HC:Supports("packMenus")`): `HC:ShowMenu(anchor, items)`, `HC:AddTile(readingId, anchor, arg)`,
+`HC:ShowTracker(trackerId)`.
+
 ## 0.4.0-beta2 (2026-11-27)
 
 A beta, **still experimental**. One fix to 0.4.0-beta1.

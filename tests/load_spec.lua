@@ -108,10 +108,26 @@ describe("load smoke test", function()
       assert.is_true(cs.RefreshWindow() > n)
       _G.SlashCmdList.HARDCOUNTERS("stats")
       local M, B = nsHC.BoardModel, nsHC.Boards
-      for _, key in ipairs({ "hcstats:caster", "hcstats:melee", "hcstats:hunter", "hcstats:tank" }) do
+      for _, key in ipairs({ "hcstats:mage.caster", "hcstats:warrior.melee", "hcstats:hunter.ranged", "hcstats:druid.tank" }) do
         local b = M.Create(key)
         B.Refresh(b.id, true)
       end
+      -- (0.5.0, D0 row 14) a stat's row: right-click for Add tile... and Its tracker
+      local row
+      for _, r in ipairs(cs.ROWS) do if r.tracker == "hcstats:defence" and HC:ReadingApplies(r.id) then row = r; break end end
+      local items = cs.RowMenu(_G.UIParent, row)
+      assert.is_true(nsHC.Menu.IsShown())
+      assert.are.same({ row.title, "Add tile...", "Its tracker" }, { items[1].text, items[2].text, items[3].text })
+      nsHC.Menu.Hide()
+      local before = #M.CollectionTiles()
+      HC:AddTile(row.id, nil, row.arg)                           -- (no anchor: the first board, no picker)
+      assert.are.equal(before + 1, #M.CollectionTiles())
+      items[2].func()                                            -- several boards: the picker opens on the row
+      assert.is_true(nsHC.Menu.IsShown())
+      nsHC.Menu.Hide()
+      items[3].func()
+      assert.is_true(nsHC.Windows.IsShown("explorer"))
+      assert.are.equal(row.tracker, nsHC.ExplorerBrowser.selected)
       assert.are.same({}, ctx.env.errors)
     end)
   end)
