@@ -565,6 +565,18 @@ It has its own SavedVariable, so debug data never mixes with statistics.
   characters. Decoding is unchanged (`tools\decode-report.ps1` takes any file holding the string, a chat paste
   included). Not built from HC-61: the decoder's merge mode across reports and a "Diagnostics report" GitHub issue
   template.
+- **As built (0.5.0, §17.16 F1, F2): the Report a problem tab.** The report window is gone; the report is a tab
+  along the bottom (`report`, `UI/ReportTab.lua`, `bottomOrder` 950: after Options, before Diagnostics), registered
+  by the core so it is there without Diagnostics. Left: an optional one-line note (`What went wrong?`, 200 letters,
+  `body.note`, kept in memory until the next reload, never saved; `shed()` drops it last), the three boxes (reset to
+  class and addon list ticked, name unticked at every show), what is in it, and with Diagnostics loaded `Run the
+  checks first`, `Mark the log now`, `Open Diagnostics` (Diagnostics hands them over through the bridge,
+  `_diag.SetReportTools`); without it a grey line and `Packs`. Right: the text, read-only, selected on show and
+  after every rebuild; `Select all` (also a right-click on the text), the size, `Shortened to fit`.
+  `ns.ShowReportBox(opts)` opens the tab (opts can only tick more) and returns its content frame. Text to copy from
+  a browser (a stint's `Copy as text`, a probe's `Copy`, `Copy all`) shows in the detail pane
+  (`browser:ShowText(title, text)`, `Back to details`, gone when another row or node is chosen); `ns.ShowCopyBox`
+  and the bridge's `ShowCopyBox` stay for other authors. `tools\decode-report.ps1` prints `Note:` first.
 - **Size-capped,** so the paste never freezes the text box.
 - **Feedback channel:**
   - **Now:** friends paste the string back to you (Discord, email…).

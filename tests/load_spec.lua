@@ -136,9 +136,9 @@ describe("load smoke test", function()
     if not ok then error(err, 0) end
   end)
 
-  -- HC-61: with Diagnostics loaded the report carries the probes; the report window says what is in it, starts
-  -- anonymous every time it opens, and rebuilds when a box is ticked
-  it("puts the probes in /hc report; the report window opens with class and addon list ticked, never the name", function()
+  -- HC-61: with Diagnostics loaded the report carries the probes; the report says what is in it, starts with the same
+  -- ticks every time it opens, and rebuilds when a box is ticked. (0.5.0) It is the Report a problem tab now.
+  it("puts the probes in /hc report; the Report a problem tab opens with class and addon list ticked, never the name", function()
     UI.with(function(ctx)
       ctx.diag.RunProbes()
       local s, body = ctx.hc.BuildReport({})
@@ -149,7 +149,10 @@ describe("load smoke test", function()
       assert.truthy(body.diag.strings)
       assert.is_nil(body.who)
       _G.SlashCmdList.HARDCOUNTERS("report")
-      local f = _G.HardCountersReportBox
+      local Win = ctx.hc.Windows
+      local f = Win.Content("report")
+      assert.is_nil(_G.HardCountersReportBox)                -- (0.5.0) the window of its own is gone
+      assert.is_true(Win.IsShown("report"))
       assert.is_true(f:IsShown())
       -- (2026-11-25) class and the addon list start ticked; the name and realm never do; the window says all of it
       assert.is_true(f.opts.class)
@@ -174,16 +177,23 @@ describe("load smoke test", function()
       assert.is_true(f.opts.name)
       assert.truthy(f.summary:GetText():find("Your character:", 1, true))
       -- reopened: the name is off again and the other two are ticked again (nothing is saved)
-      f:Hide()
+      Win.ShowMain(false)
+      assert.is_false(f:IsShown())
       _G.SlashCmdList.HARDCOUNTERS("report")
       assert.is_nil(f.opts.name)
       assert.is_true(f.opts.class)
       assert.is_true(f.opts.addons)
       assert.truthy(f.summary:GetText():find("addon list", 1, true))
-      -- the Diagnostics console's Report button opens the same window
-      f:Hide()
+      -- /hc report again while the tab is open starts over the same way
+      f.checks.name:GetScript("OnClick")(f.checks.name)
+      assert.are.equal(f, ctx.hc.ShowReportBox())
+      assert.is_nil(f.opts.name)
+      -- the Diagnostics console's Report button opens the same tab, from the Diagnostics tab
+      Win.Show("hcdiag:console", true)
+      assert.is_false(f:IsShown())
       ctx.hc.HC._diag.ShowReport({})
       assert.is_true(f:IsShown())
+      assert.are.equal("report", Win.Selected())
     end)
   end)
 
@@ -245,13 +255,19 @@ describe("load smoke test", function()
       for _, b in ipairs(br.actionBtns) do if b:IsShown() then table.insert(acts, 1, b:GetText()) end end
       assert.are.same({ "Run", "Copy", "Clear history" }, acts)
       assert.truthy(br.detail.title:GetText():find("GetMoney", 1, true))
-      -- Copy shows the copy box; Clear history (confirmed) forgets the runs
-      local copied
+      -- Copy shows the text in the detail pane (0.5.0: no copy window); Clear history (confirmed) forgets the runs
       local realCopy, realConfirm = ctx.hc.ShowCopyBox, ctx.hc.Boards.Confirm
-      ctx.hc.ShowCopyBox = function(_, text) copied = text end
+      ctx.hc.ShowCopyBox = function() error("the copy window opened") end
       ctx.hc.Boards.Confirm = function(_, fn) fn() end
       for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Copy" then b:GetScript("OnClick")(b) end end
-      assert.truthy(copied and copied:find("GetMoney", 1, true))
+      assert.is_true(br.textPane:IsShown())
+      assert.truthy(br.textPane.edit:GetText():find("GetMoney", 1, true))
+      assert.are.equal("GetMoney", br.textPane.title:GetText())
+      -- Copy all and the console's own Copy put every probe there; Back to details goes back
+      br.headerBtns[2]:GetScript("OnClick")(br.headerBtns[2])
+      assert.are.equal("Probes", br.textPane.title:GetText())
+      br.textPane.back:GetScript("OnClick")(br.textPane.back)
+      assert.is_false(br.textPane:IsShown())
       for _, b in ipairs(br.actionBtns) do if b:IsShown() and b:GetText() == "Clear history" then b:GetScript("OnClick")(b) end end
       assert.is_nil(_G.HardCountersDiagDB.probes.funcs.GetMoney)
       ctx.hc.ShowCopyBox, ctx.hc.Boards.Confirm = realCopy, realConfirm

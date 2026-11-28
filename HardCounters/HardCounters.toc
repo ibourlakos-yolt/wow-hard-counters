@@ -59,6 +59,7 @@ UI\Explorer.lua
 UI\BoardsTab.lua
 UI\Overview.lua
 UI\OptionsTab.lua
+UI\ReportTab.lua
 UI\BoardDialog.lua
 UI\Packs.lua
 UI\Guide.lua

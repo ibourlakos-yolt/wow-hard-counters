@@ -1,5 +1,6 @@
 # Decode the !HCReport:1! string (and the !GranaryDBReport:1! inside it) in a file offline, in WSL.
 # Usage: tools\decode-report.ps1 "<path to file>"
+# Prints the player's note first ("Note: ..."), then every key of the body, known to this script or not.
 param([Parameter(Mandatory = $true)][string]$Path)
 . (Join-Path $PSScriptRoot '_wsl.ps1')
 $full = (Resolve-Path -LiteralPath $Path).Path

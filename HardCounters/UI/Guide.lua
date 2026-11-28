@@ -75,7 +75,7 @@ local PAGES = {
       item(L["Explorer tab: every board, tile, reading and tracker, by kind on the left (a + opens one); pick one and act on it below."]),
       item(L["Overview tab (along the bottom): where everything stands, and what needs a look."]),
       head(L["Good to know"]),
-      item(L["Nothing leaves your computer: addons have no network access. /hc report only shows text for you to copy. It lists what it holds; your class and your addon list are in it unless you untick them, your character's name and realm only if you tick the box."]),
+      item(L["Nothing leaves your computer: addons have no network access. The Report a problem tab (along the bottom, or /hc report) only shows text for you to copy. It lists what it holds; your class and your addon list are in it unless you untick them, your character's name and realm only if you tick the box."]),
       item(L["In combat the game hides many character stats from addons. Single-value stats keep updating; the rest show their last value, marked in combat, until the fight ends."]),
       item(L["This is a beta: a new version may reset saved data, and its changelog says so when it does."]),
     })
@@ -182,6 +182,7 @@ local PAGES = {
       head(L["Along the bottom"]),
       term(L["Overview"], L["where everything stands for this character, and what needs a look."]),
       term(L["Options"], L["every setting (also /hc options)."]),
+      term(L["Report a problem"], L["the text to copy and paste when something breaks, with what is in it (also /hc report)."]),
       head(L["The packs' tabs (along the bottom too)"]),
       #packs > 0 and item(format(L["Here now: %s."], table.concat(packs, ", "))) or item(grey(L["(none loaded)"])),
       item(L["Options has Tab labels for them: icon and title, title only, or icon only."]),
@@ -248,7 +249,7 @@ local PAGES = {
     add(out, packLines())
     add(out, {
       head(L["Diagnostics"]),
-      item(L["A companion for finding problems: a log, live values, storage use and checks of the game's API. With it loaded, /hc report carries those checks, which helps most in a bug report. Untick it in the Packs tab if you don't want it."]),
+      item(L["A companion for finding problems: a log, live values, storage use and checks of the game's API. With it loaded, the report (the Report a problem tab) carries those checks, which helps most in a bug report. Untick it in the Packs tab if you don't want it."]),
       head(L["What a pack adds"]),
       item(L["Trackers and readings (Explorer tab), ready-made boards (New board...), sometimes a tab along the bottom of this window and a /hc command."]),
       item(L["Tiles from a pack that isn't loaded are left out, not lost: they come back with the pack."]),

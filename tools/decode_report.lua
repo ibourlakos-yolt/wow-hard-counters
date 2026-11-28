@@ -69,6 +69,8 @@ if not body then io.stderr:write(err .. "\n"); os.exit(1) end
 local granary = body.granary
 body.granary = granary and "(decoded below)" or nil
 print("HCReport")
+-- (0.5.0) the player's own words on what went wrong (body.note), first; every other key, known or not, in the dump
+if body.note ~= nil then print("Note: " .. tostring(body.note)) end
 print(dump(body, ""))
 if type(granary) == "string" then
   local g, gerr = decode(granary, "GranaryDBReport")

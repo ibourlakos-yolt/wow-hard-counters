@@ -60,6 +60,19 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
   its look and what it was made from; a ready-made board shows each tile's size and its value now; a reading says
   what it is counted from, how it can show and which displays fit.
 
+### Report a problem
+- A new tab along the bottom of the Hard Counters window, **Report a problem**, always there, with or without
+  Diagnostics. It replaces the separate report window: `/hc report`, the Overview's **Report...** buttons and
+  Diagnostics' **Report** button open it.
+- Write a line on what went wrong (optional): it goes in the report as you wrote it.
+- The same three boxes as before (your class and addon list ticked, your name not), what the report holds, and the
+  text itself, already selected: **Select all** (or a right-click on the text), then Ctrl+C. It says how long the
+  report is and when it had to be shortened.
+- With Diagnostics loaded: **Run the checks first**, **Mark the log now** and **Open Diagnostics** are right there.
+  Without it, the tab says the report is shorter and takes you to the Packs tab.
+- **Copy as text** on a stint, and **Copy** and **Copy all** on Diagnostics' probes, now show the text in the details
+  pane below the list, selected, with **Back to details**; no more separate copy window.
+
 ## 0.4.0-beta2 (2026-11-27)
 
 A beta, **still experimental**. One fix to 0.4.0-beta1.

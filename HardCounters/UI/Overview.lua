@@ -113,7 +113,7 @@ local function entries()
   end
   if ns.db and ns.db:IsReadOnly() then
     warn[#warn + 1] = { label = L["Storage is read-only"], value = L["nothing new is saved this session"],
-      action = { text = L["Report..."], func = function() if ns.ShowReportBox then ns.ShowReportBox() end end, tip = L["Make a report to paste in a bug report."] } }
+      action = { text = L["Report..."], func = function() if ns.ShowReportBox then ns.ShowReportBox() end end, tip = L["The Report a problem tab: a report to paste in a bug report."] } }
   end
   local F = ns.FieldNotes
   if F and F.PreRelease() and not F.DiagnosticsLoaded() then
@@ -215,7 +215,7 @@ local function entries()
   row({ label = L["Automatic field notes"], state = (F and F.Enabled()) and L["on"] or L["off"], on = F and F.Enabled() or false,
     value = format(L["%d noted"], #notes),
     action = { text = L["Report..."], func = function() if ns.ShowReportBox then ns.ShowReportBox() end end,
-      tip = L["/hc report: a text to paste in a bug report. It lists what it holds; nothing leaves your computer by itself."] } })
+      tip = L["The Report a problem tab (/hc report): a text to paste in a bug report. It lists what it holds; nothing leaves your computer by itself."] } })
   return out
 end
 
