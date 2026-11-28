@@ -160,9 +160,10 @@ STEPS = {
         first,
         "",
         L["On your screen a board is locked: clicks go through it to the world."],
-        bullet(format(L["Hover a board: two small tabs show above it. %s, above its left corner, drags it."], gold(L["Move"]))
+        bullet(format(L["Hover a board: small tabs show above it. %s, above its left corner, drags it."], gold(L["Move"]))
           .. (key and (" " .. format(L["So does holding %s and dragging the board itself."], gold(key))) or "")),
-        bullet(format(L["%s, above its right corner, opens it for changes; Done or Escape ends it."], gold(L["Edit"]))),
+        bullet(format(L["%s, above its right corner, opens it for changes; Done or Escape ends it. %s, beside it, takes the board off your HUD."], gold(L["Edit"]), gold(L["Hide"]))),
+        bullet(format(L["%s on a number: how it is made. The same works on the cards of the Boards tab."], gold(((ns.Boards and ns.Boards.InfoKeyWord()) or "Alt") .. "+click"))),
         bullet(format(L["While editing, %s adds a tile, and a right-click on a tile changes it: total or per hour, number, bar or gauge, its size, this character or the whole account."], gold("[+]"))),
         bullet(L["The buttons on a board are its clock. Its tiles count since the clock started: pause it, reset it, or save the stretch as a run."]),
         bullet(L["A right-click on the name bar opens the board's menu: mini mode (one line), when it shows (combat, instances), what period it counts."]))

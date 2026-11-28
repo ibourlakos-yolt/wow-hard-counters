@@ -1177,6 +1177,7 @@ local function infoKeyDown()
   if k == "NONE" then return false end
   return ns.wow.modifierDown and ns.wow.modifierDown(k) or false
 end
+Boards.InfoKeyDown = infoKeyDown          -- (the Boards tab's cards use the same key, 0.5.0-beta2)
 
 local function armInfo(f, on)
   if (f.infoArmed or false) == on then return end
@@ -1206,7 +1207,7 @@ function Boards.InfoClick(f, button)
     if i then Boards.TileMenu(w, f.board, i) else Boards.BoardMenu(w or f, f.board) end
     return true
   end
-  if i and ns.Synopsis then ns.Synopsis.Show(w, f.board.tiles[i], f.board, "tip"); return true end
+  if i and ns.Synopsis then ns.Synopsis.Show(w, f.board.tiles[i], f.board, "tip", true); return true end
   return false
 end
 
@@ -1224,7 +1225,8 @@ function Boards.Hover(elapsed)
   local infoDown = infoKeyDown()
   -- (G3) the HUD's tooltip goes on a click off its board where GLOBAL_MOUSE_DOWN doesn't fire, and when its board goes
   local syn = ns.Synopsis
-  if syn and syn.IsShown("tip") then
+  local fromHud = syn and select(4, syn.Current()) or nil      -- (select: an "and" would keep the first value only)
+  if syn and syn.IsShown("tip") and fromHud then
     local _, tb = syn.Current()
     local tf = tb and frames[tb.id]
     local isDown = rawget(_G, "IsMouseButtonDown")

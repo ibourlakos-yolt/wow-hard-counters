@@ -117,6 +117,8 @@ local PAGES = {
       item(L["Or hold Ctrl and drag the board itself. Options, Boards: choose Shift or Alt instead, or switch the key off."]),
       head(L["Changing a board"]),
       item(L["Hover it and click the gold Edit tab above its right corner (not in combat). Done on its name bar, or Escape, ends it."]),
+      item(L["Hide, beside Edit, takes the board off your HUD; it keeps counting, and the Boards tab puts it back."]),
+      item(L["Alt+click a number, on the HUD or on a card in the Boards tab: a tooltip says how it is made (what it counts, over when, how it is worked out, anything estimated). Any other click closes it. Options, Boards: another key, or off."]),
       item(L["/hc edit edits every board at once. So does ctrl-click on the minimap button, and opening the game's own Edit Mode."]),
       item(L["While editing: drag the name bar to move it, drag its side grip for the width, [+] to add a tile, right-click a tile to change it."]),
       item(L["Right-click the name bar for the board's menu: Scope, Mini mode, Visibility, Rename, Take off the HUD, Delete."]),

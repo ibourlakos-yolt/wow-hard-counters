@@ -3,6 +3,17 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
+## Unreleased
+
+### Changed
+- **Alt+click a card in the Boards tab** shows how its number is made, the same tooltip as Alt+click on the HUD (any
+  other click closes it). The small **?** on the cards is gone; the card's menu still has How it's made. The key is
+  the one in Options, Boards ("Explain a number with").
+- The tutorial's HUD step names the Hide tab and Alt+click; the Guide too.
+
+### Fixed
+- The HUD tooltip's backup close (a click off its board, for a game client without the click event) never ran.
+
 ## 0.5.0-beta1 (2026-11-28)
 
 A beta, **still experimental**. A bigger window with one Help button, boards with a look of their own and two new tile

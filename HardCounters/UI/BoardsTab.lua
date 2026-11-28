@@ -28,6 +28,8 @@ local MIX_COLORS = { { 1, 0.82, 0 }, { 0.3, 0.8, 0.35 }, { 0.35, 0.6, 1 }, { 0.9
 local DASH = "Interface\\AddOns\\HardCounters\\Media\\Dash"    -- 8x8, white where x < 5 and y < 5 (tools/draw-dash.py)
 local content
 local cards, panels = {}, {}
+--- (tests) the cards built so far.
+function ns.BoardsTabCards() return cards end
 local search = ""
 local contentH = MIN_H
 local ticker
@@ -182,28 +184,18 @@ local function newCard(i)
   c.fill:SetPoint("TOPLEFT", c.track, "TOPLEFT", 0, 0)
   c.fill:SetPoint("BOTTOMLEFT", c.track, "BOTTOMLEFT", 0, 0)
   c.parts = {}
-  c:SetScript("OnClick", function(self) if self.entry then cardMenu(self, self.entry) end end)
-  -- (0.5.0, G2) a small "?" at the top right: how the number is made, in a panel beside the card
-  c.why = CreateFrame("Button", nil, c)
-  c.why:SetSize(14, 14)
-  c.why:SetPoint("TOPRIGHT", -4, -4)
-  c.why:SetFrameLevel(c:GetFrameLevel() + 2)
-  c.why.text = c.why:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  c.why.text:SetAllPoints()
-  c.why.text:SetText("?")
-  c.why:SetScript("OnEnter", function(self)
-    self.text:SetTextColor(1, 0.82, 0)
-    if GameTooltip then
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(L["How it's made"], 1, 1, 1)
-      GameTooltip:AddLine(L["What it counts, over when, and how the number is worked out."], 0.8, 0.8, 0.8, true)
-      GameTooltip:Show()
+  -- (0.5.0-beta2, the user: "Alt+click on HUD tiles works fine. Change the off-HUD tile behaviour to match it":
+  -- the card's "?" went) the explain key with a click shows how the number is made, as on the HUD; a plain click is
+  -- the card's menu
+  c:SetScript("OnClick", function(self, button)
+    local e = self.entry
+    if not e then return end
+    if button ~= "RightButton" and Bo() and Bo().InfoKeyDown() and ns.Synopsis then
+      if GameTooltip then GameTooltip:Hide() end
+      ns.Synopsis.Show(self, e.tile, e.board, "tip")
+      return
     end
-  end)
-  c.why:SetScript("OnLeave", function(self) self.text:SetTextColor(0.5, 0.5, 0.5); if GameTooltip then GameTooltip:Hide() end end)
-  c.why:SetScript("OnClick", function(self)
-    local e = self:GetParent().entry
-    if e and ns.Synopsis then ns.Synopsis.Show(self:GetParent(), e.tile, e.board, "panel") end
+    cardMenu(self, e)
   end)
   c:SetScript("OnEnter", function(self)
     local e = self.entry
@@ -217,6 +209,8 @@ local function newCard(i)
       or (e.board.shown and L["Only here: its board is on your HUD, this tile is kept off it."]
         or format(L["Only here: the board %s is not on your HUD."], e.board.name)), 0.6, 0.8, 0.6, true)
     GameTooltip:AddLine(L["Click: edit, on or off the HUD, move, delete."], 0.5, 0.5, 0.5, true)
+    local key = Bo() and Bo().InfoKeyWord()
+    if key then GameTooltip:AddLine(format(L["%s+click: how this number is made."], key), 0.5, 0.5, 0.5, true) end
     GameTooltip:Show()
   end)
   c:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -665,6 +659,7 @@ local _ = ns.Help and ns.Help.Register(ID, {
     "The switch at the right reads {On HUD} (green) or {Only here} (grey): click it to put the whole board on your screen or take it off.",
     "{Pause} or {Start} and {Reset} work the board's clock, as on the board itself (when it counts on its own timer).",
     "Click a card: {Edit} the tile, switch that one tile {On HUD} or off, {Move to board}, {Delete tile}. Click a board's name for every action of that board.",
+    "Alt+click a card (as on the HUD): how its number is made, in a tooltip any other click closes. Its menu has {How it's made} too.",
   },
   effect = "What is {On HUD} is drawn on your screen while you play; what is {Only here} keeps counting but stays in this window. A tile can be kept off the HUD while its board is on it: its card has a dashed border. A bar or a gauge shows its strip here too.",
   tour = {

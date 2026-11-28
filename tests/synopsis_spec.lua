@@ -61,6 +61,18 @@ describe("how a number is made", function()
       f:GetScript("OnMouseUp")(f, "LeftButton")
       assert.is_true(S.IsShown("tip"))
       assert.are.equal(t, (S.Current()))
+      assert.is_true(select(4, S.Current()))                     -- the HUD's: its board's poll may close it
+      -- a mouse button down off its board closes it (clients without GLOBAL_MOUSE_DOWN)
+      local realDown = _G.IsMouseButtonDown
+      _G.IsMouseButtonDown = function() return true end
+      f.IsMouseOver = function() return false end
+      B.Hover(1)
+      assert.is_false(S.IsShown())
+      _G.IsMouseButtonDown = realDown
+      f.IsMouseOver = function() return true end
+      B.Hover(1)                                                 -- back over the board, Alt still held: armed again
+      f:GetScript("OnMouseUp")(f, "LeftButton")
+      assert.is_true(S.IsShown("tip"))
       -- the end of a move is not a click
       S.Hide()
       f.wasDragged = true
@@ -232,6 +244,41 @@ describe("the Options tab's container", function()
       ns.ShowOptionsTab(false)
       assert.is_nil(ns.OptionsContainer())
       assert.is_nil(c.noAutoHeight)                              -- handed back to AceGUI's pool as it was lent
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)
+
+-- 0.5.0-beta2, the user: "Alt+click on HUD tiles works fine. Change the off-HUD tile behaviour to match it"
+describe("a card in the Boards tab", function()
+  it("shows how its number is made on Alt+click, as on the HUD; a plain click is its menu; no ? button", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      local S = ns.Synopsis
+      ns.ShowBoards(true)
+      local content = ns.Windows.Content("boards")
+      content:SetSize(760, 560)
+      ns.RefreshBoards()
+      local card
+      for _, c in ipairs(ns.BoardsTabCards()) do if c.entry and c:IsShown() then card = c; break end end
+      assert.truthy(card, "a card")
+      assert.is_nil(card.why)                                     -- the ? went
+      ns.wow.modifierDown = function(key) return ctx.env.modifier == key end
+      local realShow, menu = ns.Menu.Show, nil
+      ns.Menu.Show = function(_, it) menu = it end
+      ctx.env.modifier = "ALT"
+      card:GetScript("OnClick")(card, "LeftButton")
+      assert.is_true(S.IsShown("tip"))
+      assert.is_nil(select(4, S.Current()))                       -- not the HUD's: the HUD's poll leaves it alone
+      ns.Boards.Hover(1)
+      assert.is_true(S.IsShown("tip"))
+      assert.is_nil(menu)
+      S.Hide()
+      ctx.env.modifier = nil
+      card:GetScript("OnClick")(card, "LeftButton")              -- a plain click: the card's menu
+      ns.Menu.Show = realShow
+      assert.truthy(menu)
+      assert.is_false(S.IsShown())
       assert.are.same({}, ctx.env.errors)
     end)
   end)

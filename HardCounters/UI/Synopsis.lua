@@ -19,7 +19,7 @@ ns.Synopsis = S
 local W, PAD, LABEL_W, LINE_GAP = 340, 10, 92, 3
 local TIP_LIFE = 30                -- a tooltip goes by itself after this many seconds
 local f, catcher, ticker, events
-local cur = { tile = nil, board = nil, mode = nil, anchor = nil, since = 0 }
+local cur = { tile = nil, board = nil, mode = nil, anchor = nil, since = 0, hud = nil }
 
 local function hairEdges(frame, r, g, b, a)
   for i, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
@@ -81,7 +81,7 @@ local function build()
     if catcher then catcher:Hide() end
     if ticker then ticker:Cancel(); ticker = nil end
     if events then pcall(events.UnregisterEvent, events, "GLOBAL_MOUSE_DOWN") end
-    cur.tile, cur.board, cur.mode, cur.anchor = nil, nil, nil, nil
+    cur.tile, cur.board, cur.mode, cur.anchor, cur.hud = nil, nil, nil, nil, nil
   end)
   return f
 end
@@ -119,12 +119,15 @@ local function place(anchor)
   else f:SetPoint("TOPLEFT", anchor or UIParent, anchor and "TOPRIGHT" or "CENTER", 6, 0) end
 end
 
---- Show how tile's number is made. mode "panel" (the window) or "tip" (the HUD).
-function S.Show(anchor, tile, board, mode)
+--- Show how tile's number is made. mode "panel" (a panel with a close button) or "tip" (a tooltip any click
+--- closes: the HUD, and the Boards tab's cards since 0.5.0-beta2). fromHud: anchored to a board on the HUD
+--- (Boards.Hover then also closes it when that board goes).
+function S.Show(anchor, tile, board, mode, fromHud)
   if not (tile and tile.kind == "reading") then return end
   build()
   mode = mode == "tip" and "tip" or "panel"
   cur.tile, cur.board, cur.mode, cur.anchor, cur.since = tile, board, mode, anchor, ns.wow.time()
+  cur.hud = fromHud and true or nil
   f.close:SetShown(mode == "panel")
   f:EnableMouse(mode == "panel")
   if mode == "panel" then
@@ -157,6 +160,8 @@ function S.Show(anchor, tile, board, mode)
   if not ticker then
     ticker = C_Timer.NewTicker(1, function()
       if cur.mode == "tip" and ns.wow.time() - cur.since > TIP_LIFE then S.Hide(); return end
+      -- its card or tile is gone (the window closed, the tab changed): so is it
+      if cur.anchor and cur.anchor.IsVisible and not cur.anchor:IsVisible() then S.Hide(); return end
       draw()
     end)
   end
@@ -164,6 +169,6 @@ end
 
 function S.Hide() if f and f:IsShown() then f:Hide() end end
 function S.IsShown(mode) return f ~= nil and f:IsShown() and (mode == nil or cur.mode == mode) end
-function S.Current() return cur.tile, cur.board, cur.mode end
+function S.Current() return cur.tile, cur.board, cur.mode, cur.hud end
 function S.Frame() return f end
 function S.Redraw() draw() end
