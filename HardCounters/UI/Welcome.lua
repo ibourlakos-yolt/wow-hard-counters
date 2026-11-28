@@ -198,7 +198,7 @@ STEPS = {
         format(L["This is the Hard Counters window. %s opens it; so do the minimap button and the game's AddOns menu."], gold("/hc")),
         "",
         bullet(L["The icon tabs down its right edge are Hard Counters' own: Boards, Explorer, Packs, Stints and Guide. Hover one for its name."]),
-        bullet(L["The tabs along the bottom: Overview (where everything stands), the packs' own tabs, Options, and Diagnostics when it is on."]),
+        bullet(L["The tabs along the bottom: Overview (where everything stands), the packs' own tabs, Options, Report a problem, and Diagnostics when it is on."]),
         bullet(L["Under the title, one line says what the open tab is for."]),
         bullet(format(L["At the top right, on every tab: %s (one page about the open tab), %s (a few steps through it) and %s (this tour)."],
           gold(L["Boards help"]), gold(L["Boards tour"]), gold(L["Grand tour"]))),
@@ -284,7 +284,7 @@ STEPS = {
         "",
         bullet(format(L["%s, at the top of this window on every tab, starts this tour again. So does %s."], gold(L["Grand tour"]), gold("/hc tutorial"))),
         bullet(format(L["The two buttons beside it are about the open tab only: its help page and its own short tour (%s, %s...)."], gold(L["Guide help"]), gold(L["Guide tour"]))),
-        bullet(format(L["%s lists every command; %s makes a report to paste when something breaks."], gold("/hc help"), gold("/hc report"))),
+        bullet(format(L["%s lists every command. When something breaks, the %s tab along the bottom (or %s) makes a report to paste."], gold("/hc help"), gold(L["Report a problem"]), gold("/hc report"))),
         "",
         L["Now play: your boards count while you do."])
     end },

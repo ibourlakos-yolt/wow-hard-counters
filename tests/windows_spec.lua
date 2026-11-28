@@ -349,7 +349,8 @@ describe("windows", function()
       assert.are.same({ "boards", "explorer", "packs", "stints", "guide" }, sideIds())   -- (0.4.0)
       local bottom = bottomTitles()
       assert.are.equal("Overview", bottom[1])                       -- (0.4.0) Hard Counters' summary first
-      assert.are.equal("Options", bottom[#bottom - 1])              -- and Options before Diagnostics
+      assert.are.equal("Options", bottom[#bottom - 2])              -- then Options,
+      assert.are.equal("Report a problem", bottom[#bottom - 1])     -- (0.5.0) Report a problem, there with or without Diagnostics
       assert.are.equal("Diagnostics", bottom[#bottom])              -- Diagnostics always last
       if ctx.farmer then assert.truthy(table.concat(bottom, " "):find("Ledger", 1, true)) end
       -- the open tab's name is in the title (its tab is an icon now)
@@ -360,8 +361,8 @@ describe("windows", function()
       assert.are.same({ "boards", "explorer", "t:ours", "packs", "stints", "guide" }, sideIds())
       bottom = bottomTitles()
       assert.are.equal("Diagnostics", bottom[#bottom])
-      assert.are.equal("Options", bottom[#bottom - 1])
-      assert.are.equal("Pack", bottom[#bottom - 2])                 -- (a pack's window: after the others, before Options)
+      assert.are.equal("Options", bottom[#bottom - 2])
+      assert.are.equal("Pack", bottom[#bottom - 3])                 -- (a pack's window: after the others, before Options)
       assert.are.same(Win.PackWindows()[#Win.PackWindows()], "hcdiag:console")
       local ours = main.sideTabs[3]                        -- (after Boards and Explorer)
       assert.are.equal("LargeSideTabButtonTemplate", ours._template)

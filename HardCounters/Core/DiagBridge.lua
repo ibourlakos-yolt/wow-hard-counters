@@ -15,6 +15,8 @@ D.BuildReport = function(opts) return ns.BuildReport(opts) end
 -- (HC-61) Diagnostics adds its section to /hc report; fn() returns a table of types, counts, statuses and game IDs
 D.SetReportSection = function(fn) ns.reportSection = fn end
 D.ShowReport = function(opts) if ns.ShowReportBox then ns.ShowReportBox(opts) end end
+-- (0.5.0) the Report a problem tab's Diagnostics buttons: tools = { runChecks = fn(), mark = fn(), open = fn() }
+D.SetReportTools = function(tools) ns.reportTools = type(tools) == "table" and tools or nil end
 D.SchedulerStats = function() return ns.SchedulerStats() end
 D.Context = function()
   return { zone = W.zone(), instance = W.instanceType(), combat = W.inCombat(), loading = ns.loadingScreen }

@@ -93,6 +93,11 @@ local STATUS_COLOR = { ok = "|cff60ff60", missing = "|cffff6060", error = "|cfff
 local hideStatus, hideFeature = {}, {}         -- the Filters menu: statuses and features hidden
 local probesBrowser
 
+-- (0.5.0) text to copy shows in the browser's detail pane; the copy window only with a core older than that
+local function copyText(title, text)
+  if probesBrowser and probesBrowser.ShowText then probesBrowser:ShowText(title, text) else B.ShowCopyBox(title, text) end
+end
+
 local function shownRecord(rec, search)
   if hideStatus[rec.status] or hideFeature[rec.feature] then return false end
   if search == "" then return true end
@@ -167,7 +172,7 @@ local probeSpec = {
         func = function() ns.RunProbeRecord(rec); if probesBrowser then probesBrowser:Refresh() end end }
     end
     acts[#acts + 1] = { text = "Copy", tip = "This probe as text, to paste to Claude.",
-      func = function() B.ShowCopyBox(rec.name, ns.ProbeText(rec)) end }
+      func = function() copyText(rec.name, ns.ProbeText(rec)) end }
     acts[#acts + 1] = { text = "Clear history", tip = "Forget what this probe kept (saved at the next /reload).",
       func = function()
         B.Confirm(format("Clear what the probe %s kept?", rec.name), function()
@@ -184,7 +189,7 @@ local probeSpec = {
         if probesBrowser then probesBrowser:Refresh() end
       end)
     end },
-    { text = "Copy all", width = 80, func = function() B.ShowCopyBox("Probes", ns.ProbesText()) end },
+    { text = "Copy all", width = 80, func = function() copyText("Probes", ns.ProbesText()) end },
     { text = "Run all", width = 80, func = function() ns.RunProbes(); if probesBrowser then probesBrowser:Refresh() end end },
   },
   footer = function()
@@ -264,7 +269,7 @@ local function build(f)
   bottom("Refresh", 70, refresh)
   bottom("Snapshot", 80, function() ns.Snapshot(current, textFor(current)); refresh() end)
   bottom("Copy", 60, function()
-    if current == "Probes" and f.probes then B.ShowCopyBox("Probes", ns.ProbesText()) else edit:SetFocus(); edit:HighlightText() end
+    if current == "Probes" and f.probes then copyText("Probes", ns.ProbesText()) else edit:SetFocus(); edit:HighlightText() end
   end)
   bottom("Marker", 70, function() ns.Marker(); refresh() end)
   bottom("Run probes", 90, function() ns.RunProbes(); current = "Probes"; refresh() end)
@@ -341,12 +346,12 @@ if HardCounters.RegisterWindowHelp then
     can = {
       "Switch between {Log}, {Live}, {Storage} and {Probes} with the buttons on top.",
       "In {Probes}: {Run all} runs every check now, {Copy all} gives them as text to paste into a bug report.",
-      "/hc diag mark drops a marker in the log just before you reproduce a problem; /hc report makes the report to paste.",
+      "/hc diag mark drops a marker in the log just before you reproduce a problem; the Report a problem tab (/hc report) makes the report to paste.",
     },
     effect = "You only need this when something looks wrong or someone asks you for a report. It changes nothing about what is counted; turning the pack off in the Packs tab costs you nothing in play.",
     tour = {
       { title = "Four views", text = "{Log} is what happened, newest last. {Live} is the engine's state now. {Storage} is what is saved and how big it is. {Probes} checks which game functions answer on this client." },
-      { title = "When something breaks", text = "Type /hc diag mark, do the thing that goes wrong, then /hc report: it packs the log, your settings' shape and the probes into one string to paste where you report the bug. No names unless you tick them." },
+      { title = "When something breaks", text = "Type /hc diag mark, do the thing that goes wrong, then open the Report a problem tab (/hc report): it packs the log, your settings' shape and the probes into one string to paste where you report the bug. No names unless you tick them." },
     },
   })
 end

@@ -90,4 +90,12 @@ f:SetScript("OnEvent", function(self, _, name)
   if ns.StartProbes then ns.StartProbes() end
   -- (HC-61) the probes ride along in /hc report (Probes.lua loads after this file: looked up at the call)
   if B.SetReportSection then B.SetReportSection(function() return ns.ReportSection and ns.ReportSection() end) end
+  -- (0.5.0) the Report a problem tab's buttons: run the checks, mark the log, open this console
+  if B.SetReportTools then
+    B.SetReportTools({
+      runChecks = function() if ns.RunProbes then ns.RunProbes() end end,
+      mark = function() return ns.Marker() end,
+      open = function() HC:ShowWindow("hcdiag:console", true) end,
+    })
+  end
 end)

@@ -124,11 +124,9 @@ describe("stints", function()
       ns.Boards.AskText = function(_, current, fn) assert.are.equal("Goldshire", current); fn("Westfall loop") end
       acts[1].func()
       assert.are.equal("Westfall loop", HC:GetStintRecord(a).label)
-      local copied
-      ns.ShowCopyBox = function(title, text) copied = { title, text } end
-      br.spec.actions(br:SelectedRow())[2].func()
-      assert.truthy(copied[1]:find("Westfall loop", 1, true))
-      assert.truthy(copied[2]:find("Stint: Westfall loop", 1, true))
+      br.spec.actions(br:SelectedRow())[2].func()                     -- (0.5.0) in the detail pane, not a window
+      assert.truthy(br.textPane.title:GetText():find("Westfall loop", 1, true))
+      assert.truthy(br.textPane.edit:GetText():find("Stint: Westfall loop", 1, true))
       assert.truthy(br.footer:GetText():find("2 stints kept", 1, true))
       ns.Boards.Confirm = function(_, fn) fn() end
       br.spec.actions(br:SelectedRow())[3].func()

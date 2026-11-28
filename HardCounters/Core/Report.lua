@@ -1,9 +1,10 @@
 -- /hc report: the field-feedback string (DESIGN §8.3; HC-61 for the Diagnostics section and the opt-ins).
 --   !HCReport:1!d:<adler32 of the CBOR>:<Base64 of raw Deflate of CBOR>!End:HCReport:1!
 -- Visible and the player's to send: they copy it from a text box; nothing is sent anywhere. Scrubbed: no GUIDs, no
--- other players' data, and no character name or realm unless the player ticks "name" in the report window.
+-- other players' data, and no character name or realm unless the player ticks "name" in the Report a problem tab.
 -- Class and the list of installed addons are in it unless the player unticks them there (since 2026-11-25 those two
 -- boxes start ticked; opts.name, opts.class, opts.addons are read when the report is built, never saved).
+-- (0.5.0) opts.note: the player's own words on what went wrong (one line, REPORT_NOTE_MAX letters), body.note.
 -- With HardCounters_Diagnostics loaded, its probe results ride along (body.diag: types, counts, statuses
 -- and game IDs, never coordinates, names or chat text). Decode offline with tools\decode-report.ps1.
 local ADDON, ns = ...
@@ -12,6 +13,22 @@ local W, HC, U = ns.wow, ns.HC, ns.U
 
 ns.REPORT_PREFIX, ns.REPORT_SUFFIX = "!HCReport:1!", "!End:HCReport:1!"
 ns.REPORT_MAX = 24000   -- characters; keeps the paste from freezing the text box
+ns.REPORT_NOTE_MAX = 200
+
+--- The note as it goes in the report: one line, trimmed, at most REPORT_NOTE_MAX letters; nil when empty.
+function ns.ReportNote(text)
+  if type(text) ~= "string" then return nil end
+  text = text:gsub("[\r\n\t]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if text == "" then return nil end
+  -- letters, not bytes (the box counts letters; an accented one is two bytes): cut between letters
+  local n, cut = 0, nil
+  for pos in text:gmatch("()[^\128-\191]") do
+    n = n + 1
+    if n > ns.REPORT_NOTE_MAX then cut = pos; break end
+  end
+  if cut then text = text:sub(1, cut - 1) end
+  return text
+end
 
 -- (HC-61) the Diagnostics section: a function set by HardCounters_Diagnostics through the private bridge, returning a
 -- table; parts of it are dropped in this order when the report is over its cap, then the whole section
@@ -34,6 +51,7 @@ function ns.ReportBody(opts)
     counters = ns.CounterCount and ns.CounterCount() or 0,
     runs = ns.RunSummary and ns.RunSummary() or nil,
     readOnly = ns.db and (ns.db:IsReadOnly()) or nil,
+    note = ns.ReportNote(opts.note),
   }
   for _, w in ipairs(ns.RecentWarnings(50)) do
     body.warn[#body.warn + 1] = { w.t, w.level, w.origin, w.msg }
@@ -69,7 +87,7 @@ local function wrap(body)
 end
 
 -- the next thing to leave an over-size report: oldest warnings, the addon list, the storage report, then the
--- Diagnostics section's parts (samplers, events, strings) and last the section itself
+-- Diagnostics section's parts (samplers, events, strings), the section itself, and last the player's note
 local function shed(body)
   if #body.warn > 0 then table.remove(body.warn, 1); return true end
   if type(body.field) == "table" and #body.field > 0 then table.remove(body.field, 1); return true end
@@ -81,6 +99,7 @@ local function shed(body)
     end
   end
   if body.diag then body.diag = nil; return true end
+  if body.note then body.note = nil; return true end
   return false
 end
 
@@ -101,10 +120,11 @@ local function count(t)
   return n
 end
 
---- What a report holds, in plain lines for the report window (HC-61: the player sees what they are pasting).
+--- What a report holds, in plain lines for the Report a problem tab (HC-61: the player sees what they are pasting).
 function ns.ReportSummary(body)
   local L = ns.L
   local out = {}
+  if body.note then out[#out + 1] = L["Your note on what went wrong"] end
   local c = body.client or {}
   out[#out + 1] = string.format(L["Versions: Hard Counters %s, game client %s (%s), %s"], tostring(body.hc),
     tostring(c.version), tostring(c.build), tostring(c.locale))

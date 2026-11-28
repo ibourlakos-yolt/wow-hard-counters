@@ -9,6 +9,7 @@
 -- the right and a status pill; an action can be a status pill too, and actions past the bar's room go under More....
 --
 --   local b = ns.Browser.New(contentFrame, spec)   -- then b:Refresh() whenever the data changed
+--   b:ShowText(title, text)                         -- (0.5.0) text to copy, in the detail pane, until Back to details
 --
 -- spec (every function is called at each refresh; the provider owns its data and its filters):
 --   columns    { { key, title, width (nil: the one that takes the rest), align, sort = fn(row) -> value } }, or
@@ -640,7 +641,84 @@ function B:DrawActions()
   if prev then self.footer:SetPoint("RIGHT", prev, "LEFT", -8, 0) end
 end
 
+---------------------------------------------------------------------------
+-- (0.5.0, DESIGN §17.16 F2) Text to copy, in the detail pane: the copy-text window folded into the browser. The
+-- text takes the pane's place, all selected (WoW has no clipboard API: Ctrl+C copies the selection), until Back to
+-- details or another row or node is chosen.   b:ShowText(title, text)
+---------------------------------------------------------------------------
+
+local function textPane(self)
+  local d = self.detail
+  local t = CreateFrame("Frame", nil, d)
+  t:SetAllPoints(d)
+  t:SetFrameLevel((d:GetFrameLevel() or 1) + 20)        -- over the pane's items
+  t:EnableMouse(true)
+  local bg = t:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0.05, 0.05, 0.07, 0.97)
+  t.title = t:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  t.title:SetPoint("TOPLEFT", 8, -6)
+  t.title:SetJustifyH("LEFT")
+  t.title:SetWordWrap(false)
+  t.back = Wd.Button(t, L["Back to details"], 110, function() self:HideText() end)
+  t.back:SetHeight(18)
+  t.back:SetPoint("TOPRIGHT", -6, -4)
+  Wd.FitWidth(t.back, 100, 24)
+  tip(t.back, function() return { title = L["Back to details"], text = L["The selected row's details again."] } end)
+  t.hint = t:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  t.hint:SetPoint("RIGHT", t.back, "LEFT", -8, 0)
+  t.hint:SetText(L["Ctrl+C copies."])
+  t.title:SetPoint("RIGHT", t.hint, "LEFT", -8, 0)
+  local scroll = CreateFrame("ScrollFrame", nil, t, "UIPanelScrollFrameTemplate")
+  scroll:SetPoint("TOPLEFT", 8, -26)
+  scroll:SetPoint("BOTTOMRIGHT", -28, 6)
+  local edit = CreateFrame("EditBox", nil, scroll)
+  edit:SetMultiLine(true)
+  edit:SetMaxLetters(0)
+  edit:SetAutoFocus(false)
+  edit:SetFontObject(ChatFontNormal)
+  edit:SetWidth(max(num(d:GetWidth(), 400) - 44, 100))
+  edit:SetScript("OnEscapePressed", function(e) e:ClearFocus() end)
+  edit:SetScript("OnEditFocusGained", function(e) e:HighlightText() end)
+  edit:SetScript("OnMouseUp", function(e) e:HighlightText() end)
+  -- keep the text as given: typing into the box doesn't change what gets copied
+  edit:SetScript("OnTextChanged", function(e, userInput)
+    if userInput and t.text then e:SetText(t.text); e:HighlightText() end
+  end)
+  scroll:SetScrollChild(edit)
+  t.scroll, t.edit = scroll, edit
+  t:SetScript("OnSizeChanged", function(_, w) edit:SetWidth(max(num(w, 400) - 44, 100)) end)
+  t:Hide()                                        -- (hidden before its OnHide is set: frames are created shown)
+  t:SetScript("OnHide", function() edit:ClearFocus() end)
+  self.textPane = t
+  return t
+end
+
+--- Show text to copy in the detail pane, all selected. Returns the pane (title, edit, text, back).
+function B:ShowText(title, text)
+  local t = self.textPane or textPane(self)
+  t.title:SetText(title or "")
+  t.text = text or ""
+  t.edit:SetWidth(max(num(self.detail:GetWidth(), 400) - 44, 100))
+  t.edit:SetText(t.text)
+  self.textKey, self.textNode = self.selected, self.node
+  t:Show()
+  t.edit:SetFocus()
+  t.edit:HighlightText()
+  return t
+end
+
+--- Back to the details: the text pane goes.
+function B:HideText()
+  if self.textPane then self.textPane:Hide() end
+  self.textKey, self.textNode = nil, nil
+end
+
 function B:Draw()
+  -- the text shown for one row goes when another row or node is chosen
+  if self.textPane and self.textPane:IsShown() and (self.selected ~= self.textKey or self.node ~= self.textNode) then
+    self:HideText()
+  end
   self:DrawTree()
   self:DrawList()
   self:DrawDetail()

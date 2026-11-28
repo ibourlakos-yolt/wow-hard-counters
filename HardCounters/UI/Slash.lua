@@ -63,9 +63,10 @@ function HC:RegisterSlash(name, fn, helpText, owner)
 end
 
 ns.AddSlash("report", function(rest)
-  -- (HC-61) the report window: what it is for, what is in it, the boxes (name; class and addon list, ticked), the string
+  -- (0.5.0) the Report a problem tab (UI/ReportTab.lua): a note, the boxes (name; class and addon list, ticked), the string
   ns.ShowReportBox({ addons = rest == "addons" })
-end, L["a report to copy and paste for bug fixes (your class and addon list are in it unless you untick them; your name only if you tick it)"])
+end, L["the Report a problem tab: a report to copy and paste for bug fixes (your class and addon list are in it unless "
+  .. "you untick them; your name only if you tick it)"])
 
 ns.AddSlash("help", help)
 

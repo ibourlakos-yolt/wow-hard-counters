@@ -378,7 +378,7 @@ local function actions(row)
         askText(L["Stint name"], rec.label or "", function(s) HC:RenameRun(rec.id, s); refresh() end)
       end },
     { text = L["Copy as text"], tip = L["Every number of this stint as plain text, to paste anywhere."],
-      func = function() ns.ShowCopyBox(format(L["Stint: %s"], stintName(rec)), ns.RunSummaryText(rec)) end },
+      func = function() browser:ShowText(format(L["Stint: %s"], stintName(rec)), ns.RunSummaryText(rec)) end },
     { text = L["Delete"], tip = L["Removes this record only: your counters, history and boards don't change."],
       func = function()
         confirm(format(L["Delete the stint %s? Your counts don't change."], stintName(rec)), function()
@@ -513,7 +513,7 @@ local _ = ns.Help and ns.Help.Register(ID, {
   tour = {
     { title = "One row per stint", text = "Each row is a stint: {When} it started, its {Name}, {Where} you spent most of it and how long you were {Active}; the last column is your headline number. A dungeon names its stint after itself." },
     { title = "Where stints come from", text = "Three ways: walk into a dungeon (it records itself and keeps the stint when you leave), a board with a timer of its own (its menu keeps the stretch its clock counted), or {Start stint} here and {Stop and keep} when you are done." },
-    { title = "Look inside one", text = "Click a stint and its numbers fill the bottom of the tab: per hour and totals, what dropped, the best single values, the splits. {Copy as text} puts all of it in a box to paste anywhere." },
+    { title = "Look inside one", text = "Click a stint and its numbers fill the bottom of the tab: per hour and totals, what dropped, the best single values, the splits. {Copy as text} shows all of it there as text, selected, to paste anywhere." },
   },
 })
 -- luacheck: pop
