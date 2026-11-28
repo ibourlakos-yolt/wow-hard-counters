@@ -64,6 +64,11 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
   its look and what it was made from; a ready-made board shows each tile's size and its value now; a reading says
   what it is counted from, how it can show and which displays fit.
 
+### Fixed
+- Opening the **Options** tab froze the Hard Counters window for a while and BugSack logged "insecure scripts exceeded
+  execution limit": the settings panel and its frame kept resizing each other. The panel now takes the tab's size and
+  opens at once.
+
 ### Report a problem
 - A new tab along the bottom of the Hard Counters window, **Report a problem**, always there, with or without
   Diagnostics. It replaces the separate report window: `/hc report`, the Overview's **Report...** buttons and

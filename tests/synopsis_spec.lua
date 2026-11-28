@@ -199,3 +199,40 @@ describe("Ctrl+K in the Hard Counters window (0.5.0, A3)", function()
     end)
   end)
 end)
+
+-- 0.5.0-beta2, the user: opening Options froze the window ("insecure scripts exceeded execution limit")
+describe("the Options tab's container", function()
+  it("keeps the tab's size, never sizes itself from its children, and lays out once per real change", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      assert.is_true(ns.ShowOptionsTab(true))
+      local c = ns.OptionsContainer()
+      assert.truthy(c)
+      assert.is_true(c.noAutoHeight)                             -- its children never resize it
+      assert.are.equal(1, #ctx.aceOpens)
+      local content = ns.Windows.Content("options")
+      local layouts = 0
+      local realLayout = c.DoLayout
+      c.DoLayout = function(self)
+        layouts = layouts + 1
+        -- a layout that resizes the tab while it runs (what AceGUI's LayoutFinished did): no second layout
+        content:GetScript("OnSizeChanged")(content)
+        return realLayout and pcall(realLayout, self)
+      end
+      content:SetSize(701.4, 480.2)
+      content:GetScript("OnSizeChanged")(content)
+      assert.are.equal(1, layouts)
+      assert.are.equal(701, c.hcW)
+      content:SetSize(700.6, 480.4)                              -- the same whole size: nothing to do
+      content:GetScript("OnSizeChanged")(content)
+      assert.are.equal(1, layouts)
+      content:SetSize(760, 480)
+      content:GetScript("OnSizeChanged")(content)
+      assert.are.equal(2, layouts)
+      ns.ShowOptionsTab(false)
+      assert.is_nil(ns.OptionsContainer())
+      assert.is_nil(c.noAutoHeight)                              -- handed back to AceGUI's pool as it was lent
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)

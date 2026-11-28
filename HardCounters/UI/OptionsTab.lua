@@ -9,9 +9,10 @@
 local ADDON, ns = ...
 
 local L = ns.L
+local floor = math.floor
 
 local ID = "options"
-local content, container, pending
+local content, container, pending, sizing
 local MIN_W, MIN_H = 600, 420
 
 local function libs()
@@ -20,12 +21,27 @@ local function libs()
   return LS("AceGUI-3.0", true), LS("AceConfigDialog-3.0", true), LS("AceConfigRegistry-3.0", true)
 end
 
+--- The container takes the tab's size, once per real change. (0.5.0-beta2, the user: opening Options froze the window
+--- and BugSack logged "insecure scripts exceeded execution limit", ten times.) A SimpleGroup sizes itself to its
+--- children (LayoutFinished), which made AceGUI lay the panel out again, which sized the group again: a loop that
+--- never settles once heights come back a fraction off (the window draws at scale 1.08 since 0.5.0, and the pixel grid
+--- rounds). The container now keeps the tab's size (noAutoHeight), whole numbers only, and a size call made while
+--- one runs is dropped.
 local function size()
-  if not (container and content) then return end
+  if sizing or not (container and content) then return end
   local w, h = content:GetWidth(), content:GetHeight()
-  if type(w) == "number" and w > 0 then container:SetWidth(w) end
-  if type(h) == "number" and h > 0 then container:SetHeight(h) end
-  if container.DoLayout then container:DoLayout() end
+  if type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then return end
+  w, h = floor(w + 0.5), floor(h + 0.5)
+  if container.hcW == w and container.hcH == h then return end
+  container.hcW, container.hcH = w, h
+  sizing = true
+  container:SetWidth(w)
+  container:SetHeight(h)
+  if container.DoLayout then
+    local ok, err = pcall(container.DoLayout, container)
+    if not ok and ns.Error then ns.Error(err) end
+  end
+  sizing = false
 end
 
 local function open()
@@ -39,6 +55,9 @@ local function open()
     local ok, g = pcall(GUI.Create, GUI, "SimpleGroup")
     if not ok or type(g) ~= "table" then content.none:Show(); return false end
     container = g
+    -- never sized by its children: the tab sizes it (see size())
+    if container.SetAutoAdjustHeight then container:SetAutoAdjustHeight(false) else container.noAutoHeight = true end
+    container.hcW, container.hcH = nil, nil
     container:SetLayout("Fill")
     container.frame:SetParent(content)
     container.frame:ClearAllPoints()
@@ -53,9 +72,17 @@ end
 
 local function close()
   local GUI = libs()
-  if container and GUI then pcall(GUI.Release, GUI, container) end
+  if container then
+    -- AceGUI pools its widgets for every addon: hand the group back as it was lent
+    container.noAutoHeight, container.hcW, container.hcH = nil, nil, nil
+    if GUI then pcall(GUI.Release, GUI, container) end
+  end
   container = nil
+  sizing = false
 end
+
+--- (tests) the AceGUI container while the tab is shown.
+function ns.OptionsContainer() return container end
 
 local function build(f)
   content = f
