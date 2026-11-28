@@ -9,6 +9,9 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 - **Alt+click a card in the Boards tab** shows how its number is made, the same tooltip as Alt+click on the HUD (any
   other click closes it). The small **?** on the cards is gone; the card's menu still has How it's made. The key is
   the one in Options, Boards ("Explain a number with").
+- **Copy to board** on a tile (its menu on the HUD, its card's menu in the Boards tab, More... in the Explorer): a copy
+  with the same settings on any board, its own included, or on a new board named after it. The original stays.
+- On the HUD, a tile's menu groups its moves under **Move...**: to the top, up, down, to the bottom, to another board.
 - The tutorial's HUD step names the Hide tab and Alt+click; the Guide too.
 
 ### Fixed

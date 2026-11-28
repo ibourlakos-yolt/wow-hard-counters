@@ -1004,3 +1004,35 @@ describe("the tile collection", function()
     assert.are.same({ false, 1, "off" }, { M.Visibility(b, { editing = true }) })   -- /hc edit leaves "Only here" boards alone
   end)
 end)
+
+-- 0.5.0-beta2, the user: "new action for tile reading: copy to board > select board | new board"
+describe("copying a tile", function()
+  it("puts a tile of its own with the same settings on any board or a new one; the original stays", function()
+    local env = boot()
+    local M = env.M
+    local a = M.Create(nil, { name = "Alpha", shown = true })
+    local b = M.Create(nil, { name = "Beta" })
+    local t = M.AddReading(a, "hc:gold", { calc = "perHour" })
+    M.SetSize(t, "largeHalf")
+    M.SetTileColor(t, "teal")
+    t.name = "Mine"
+    local n = #M.CollectionTiles()
+    local c, on = M.CopyTo(a, 1, b)
+    assert.are.equal(b, on)
+    assert.are.equal(1, #a.tiles)                                 -- the original stays
+    assert.are.equal(1, #b.tiles)
+    assert.are.equal(n + 1, #M.CollectionTiles())                 -- a tile of its own
+    assert.are_not.equal(rawget(t, "ref"), rawget(c, "ref"))
+    assert.are.same({ "hc:gold", "perHour", "largeHalf", "teal", "Mine" },
+      { c.reading, c.calc, M.TileSize(c), M.TileColorKey(c), c.name })
+    c.name = "Changed"
+    assert.are.equal("Mine", t.name)                              -- edited apart from the original
+    -- its own board, and a new one named after it (on the HUD when asked, else as its old board)
+    M.CopyTo(a, 1, a)
+    assert.are.equal(2, #a.tiles)
+    local _, nb = M.CopyTo(a, 1, nil, false)
+    assert.are.equal("Mine", nb.name)
+    assert.is_false(nb.shown)
+    assert.are.same({ a, b, nb }, M.CopyTargets(a))
+  end)
+end)

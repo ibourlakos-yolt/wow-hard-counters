@@ -145,6 +145,30 @@ local function moveMenu(anchor, e)
   ns.Menu.Show(anchor, items)
 end
 
+--- (0.5.0-beta2) "Copy to board...": every board (the tile's own first), then a new one, not on the HUD.
+local function copyMenu(anchor, e)
+  local M = BM()
+  local items = { { text = L["Copy to board"], title = true } }
+  local function go(target)
+    return function()
+      local from, i = M.BoardOf(e.tile)
+      if not from then return end
+      local c, now = M.CopyTo(from, i, target, false)
+      Bo().Refresh(from.id, true)
+      if now and now ~= from then Bo().Refresh(now.id, true) end
+      if now and target and c then Bo().Reveal(now, c) end
+      refreshAll()
+    end
+  end
+  for _, b in ipairs(M.CopyTargets(e.board)) do
+    local text = b == e.board and format(L["%s (this board)"], b.name) or (b.shown and b.name or format(L["%s (Only here)"], b.name))
+    items[#items + 1] = { text = text, func = go(b) }
+  end
+  items[#items + 1] = { text = L["New board"], tip = L["A board of its own with the copy, named after the tile; not on your HUD until you put it there."],
+    func = go(nil) }
+  ns.Menu.Show(anchor, items)
+end
+
 local function tileDetail(row)
   local M, e = BM(), row.entry
   local r = ns.readings[e.raw.reading]
@@ -197,6 +221,8 @@ local function tileActions(row)
       tip = { title = L["How it's made"], text = L["What it counts, over when, and how the number is worked out, in a small panel."] } },
     { text = L["Move to board..."], func = function(btn) moveMenu(btn, e) end,
       tip = { title = L["Move to board..."], text = L["Another board, or a new one of its own. It keeps its settings."] } },
+    { text = L["Copy to board..."], more = true, func = function(btn) copyMenu(btn, e) end,
+      tip = L["A copy of this tile, with its settings, on another board or this one. The original stays."] },
     { text = L["Delete tile"], more = true, tip = L["Delete this tile; your counts don't change."], func = function()
       confirm(format(L["Delete the tile %s? Your counts don't change."], label), function()
         local b = e.board

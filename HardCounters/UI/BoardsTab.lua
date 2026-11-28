@@ -89,6 +89,27 @@ local function cardMenu(anchor, e)
       refresh()
     end }
   items[#items + 1] = { text = L["Move to board"], sub = move }
+  -- (0.5.0-beta2) a copy, the original staying: every board (this one first), then a new one (not on the HUD)
+  local copy = {}
+  local function copyTo(target)
+    return function()
+      local from, i = BM.BoardOf(e.tile)
+      if not from then return end
+      local c, now = BM.CopyTo(from, i, target, false)
+      redrawBoard(from)
+      if now and now ~= from then redrawBoard(now) end
+      if now and target and c and Bo() then Bo().Reveal(now, c) end
+      refresh()
+    end
+  end
+  for _, b in ipairs(BM.CopyTargets(e.board)) do
+    local text = b == e.board and format(L["%s (this board)"], b.name) or (b.shown and b.name or format(L["%s (Only here)"], b.name))
+    copy[#copy + 1] = { text = text, func = copyTo(b) }
+  end
+  copy[#copy + 1] = { text = L["New board"], tip = L["A board of its own with the copy, named after the tile; not on your HUD until you put it there."],
+    func = copyTo(nil) }
+  items[#items + 1] = { text = L["Copy to board"], sub = copy,
+    tip = L["A copy of this tile, with its settings, on another board or this one. The original stays."] }
   items[#items + 1] = { text = L["Delete tile"], func = function()
     confirm(format(L["Delete the tile %s? Your counts don't change."], label), function()
       local b = e.board
@@ -658,7 +679,7 @@ local _ = ns.Help and ns.Help.Register(ID, {
     "{+ Tile} on a board's panel: pick a number by tracker; it is added to that board at once, and its tracker starts counting.",
     "The switch at the right reads {On HUD} (green) or {Only here} (grey): click it to put the whole board on your screen or take it off.",
     "{Pause} or {Start} and {Reset} work the board's clock, as on the board itself (when it counts on its own timer).",
-    "Click a card: {Edit} the tile, switch that one tile {On HUD} or off, {Move to board}, {Delete tile}. Click a board's name for every action of that board.",
+    "Click a card: {Edit} the tile, switch that one tile {On HUD} or off, {Move to board}, {Copy to board} (a copy with its settings, the original staying), {Delete tile}. Click a board's name for every action of that board.",
     "Alt+click a card (as on the HUD): how its number is made, in a tooltip any other click closes. Its menu has {How it's made} too.",
   },
   effect = "What is {On HUD} is drawn on your screen while you play; what is {Only here} keeps counting but stays in this window. A tile can be kept off the HUD while its board is on it: its card has a dashed border. A bar or a gauge shows its strip here too.",

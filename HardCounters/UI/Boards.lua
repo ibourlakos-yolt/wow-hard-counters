@@ -1866,6 +1866,28 @@ local function moveItems(board, i)
   return sub
 end
 
+--- (0.5.0-beta2) "Copy to board": every board (this one first), then a new one. The original stays where it is.
+local function copyItems(board, i)
+  local sub = {}
+  local function go(target)
+    return function()
+      local c, now = M.CopyTo(board, i, target)
+      Boards.Refresh(board.id, true)
+      if now and now ~= board then Boards.Refresh(now.id, true) end
+      if now and c then Boards.Reveal(now, c) end
+      if ns.RefreshBoards then ns.RefreshBoards() end
+    end
+  end
+  for _, b in ipairs(M.CopyTargets(board)) do
+    local note = b == board and ("  |cff808080" .. L["(this board)"] .. "|r")
+      or (b.shown and "" or ("  |cff808080" .. L["(not on your HUD)"] .. "|r"))
+    sub[#sub + 1] = { text = b.name .. note, func = go(b) }
+  end
+  sub[#sub + 1] = { text = L["New board"], tip = L["A board of its own with the copy, named after the tile."], func = go(nil) }
+  return sub
+end
+Boards.CopyItems = copyItems
+
 -- The words of the tile menu's Show as, Display and Size (HC-51; the names are the user's call in HC-39(e))
 local CALC_NAME = { total = "Total", perHour = "Per hour", recent = "Recent", trend = "Trend" }
 local CALC_TIP = { total = "Everything counted over the period.", perHour = "The total divided by your active hours in the period (AFK doesn't count).",
@@ -2051,14 +2073,19 @@ function Boards.TileMenu(anchor, board, i)
       askText(L["Heading text"], tile.text or "", function(s) tile.text = s:sub(1, 40); Boards.Refresh(board.id, true) end)
     end }
   end
-  items[#items + 1] = { text = L["Move to top"], disabled = i == 1,
-    func = function() M.MoveTileTo(board, i, "top"); Boards.Refresh(board.id, true) end }
-  items[#items + 1] = { text = L["Move up"], disabled = i == 1, func = function() M.MoveTile(board, i, -1); Boards.Refresh(board.id, true) end }
-  items[#items + 1] = { text = L["Move down"], disabled = i == #board.tiles,
-    func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end }
-  items[#items + 1] = { text = L["Move to bottom"], disabled = i == #board.tiles,
-    func = function() M.MoveTileTo(board, i, "bottom"); Boards.Refresh(board.id, true) end }
-  items[#items + 1] = { text = L["Move to"], sub = moveItems(board, i) }
+  -- (0.5.0-beta2, the user: "for on HUD tiles group move actions in the context menu in a Move... submenu")
+  items[#items + 1] = { text = L["Move..."], sub = {
+    { text = L["Move to top"], disabled = i == 1,
+      func = function() M.MoveTileTo(board, i, "top"); Boards.Refresh(board.id, true) end },
+    { text = L["Move up"], disabled = i == 1, func = function() M.MoveTile(board, i, -1); Boards.Refresh(board.id, true) end },
+    { text = L["Move down"], disabled = i == #board.tiles,
+      func = function() M.MoveTile(board, i, 1); Boards.Refresh(board.id, true) end },
+    { text = L["Move to bottom"], disabled = i == #board.tiles,
+      func = function() M.MoveTileTo(board, i, "bottom"); Boards.Refresh(board.id, true) end },
+    { text = L["Move to"], sub = moveItems(board, i), tip = L["Another board, or a new one of its own. It keeps its settings."] },
+  } }
+  items[#items + 1] = { text = L["Copy to board"], sub = copyItems(board, i),
+    tip = L["A copy of this tile, with its settings, on another board or this one. The original stays."] }
   -- (v8) a reading tile is taken off the HUD (it stays on this board in the Boards tab, counting) or deleted
   local reading = tile.kind == "reading"
   if reading then

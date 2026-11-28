@@ -165,12 +165,14 @@ describe("a HUD board in 0.5.0", function()
       colour.sub[3].func()                                          -- Gold
       assert.are.equal("gold", M.TileColorKey(b.tiles[2]))
       B.TileMenu(B.Frame(b.id), b, 2)
-      pick(items, "Move to top").func()
+      local move = pick(items, "Move...")                         -- (0.5.0-beta2) the moves in one submenu
+      assert.is_nil(pick(items, "Move to top"))
+      pick(move.sub, "Move to top").func()
       assert.are.equal("hc:xpgained", b.tiles[1].reading)
       B.TileMenu(B.Frame(b.id), b, 1)
       assert.truthy(pick(items, "Take this tile off the HUD"))
       assert.is_nil(pick(items, "Hide from HUD"))
-      local moveTo = pick(items, "Move to")
+      local moveTo = pick(pick(items, "Move...").sub, "Move to")
       local spareItem
       for _, it in ipairs(moveTo.sub) do if it.text:find("Spare", 1, true) then spareItem = it end end
       assert.truthy(spareItem.text:find("not on your HUD", 1, true))

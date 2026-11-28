@@ -1434,6 +1434,45 @@ function M.MoveTo(board, i, target)
   return tile, target
 end
 
+--- (0.5.0-beta2, the user: "copy to board > select board | new board") a copy of tile i of `board` at the end of
+--- `target` (its own board too; nil: a new board named after the tile, on the HUD when `shown`, else when its old
+--- board is). The copy is a tile of its own in the collection: same reading, scope, calc, display, size, colour,
+--- target and name, edited apart from the original from then on. Returns the copy and the board it is on.
+function M.CopyTo(board, i, target, shown)
+  local tile = board.tiles[i]
+  if not tile then return nil end
+  if not target then
+    local name = tile.kind == "reading" and M.TileTitle(tile) or tile.text or "Board"
+    if shown == nil then shown = board.shown end
+    target = M.Create(nil, { name = name:sub(1, 32), shown = shown })
+  end
+  local c
+  if tile.kind == "reading" then
+    local raw = M.TileOf(tile)
+    if type(raw) ~= "table" then return nil end
+    c = U.deepcopy(raw)
+    c.id, c.lastSize, c.section, c.wid = nil, nil, nil, nil
+    if M.IsPlacement(tile) then c.size, c.color = rawget(tile, "size"), rawget(tile, "color") end
+    c = adopt(M.Store(), c)
+  else
+    c = U.deepcopy(tile)
+  end
+  target.tiles[#target.tiles + 1] = c
+  if c.kind == "reading" then
+    if c.scope == "run" and M.BoardScope(target) ~= "run" then c.follow = true end
+    follow(c, target)
+    if ns.ready and M.TileWindow(c, target) then watchTiles(target) end
+  end
+  return c, target
+end
+
+--- The boards a tile of `board` can be copied to: every board, its own first.
+function M.CopyTargets(board)
+  local out = { board }
+  for _, b in ipairs(M.Store().list) do if b ~= board then out[#out + 1] = b end end
+  return out
+end
+
 --- Change a tile's scope ("run" is the board's timer). The board's own scope makes the tile follow the board
 --- (HC-55); any other is the tile's own.
 function M.SetScope(tile, scope, board)
