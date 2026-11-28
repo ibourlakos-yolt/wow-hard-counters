@@ -784,7 +784,37 @@ local function ensureMain()
   buildHeader()
   layoutMain()
   refreshTabs()
+  -- (0.5.0, A3; the user: "when ctrl+k is entered the control should jump to search box") the window listens to keys
+  -- and passes every one on to the game, except Ctrl+K when the open tab has a search box. Out of combat only: the
+  -- game refuses to change a frame's key passing in a fight, so in combat Ctrl+K is the game's.
+  if main.EnableKeyboard and main.SetPropagateKeyboardInput then
+    pcall(main.EnableKeyboard, main, true)
+    pcall(main.SetPropagateKeyboardInput, main, true)
+    main:SetScript("OnKeyDown", function(self, key) Win.OnKey(self, key) end)
+  end
   return main
+end
+
+--- The open tab's search box, or nil.
+local function searchBox()
+  local sel = conf(MAIN).selected
+  local b = sel and ns.Browser and ns.Browser.For(Win.Content(sel))
+  return b and b.searchBox or nil
+end
+
+--- A key pressed while the window is shown (A3): Ctrl+K puts the cursor in the open tab's search box.
+function Win.OnKey(self, key)
+  local ctrl = rawget(_G, "IsControlKeyDown")
+  if key ~= "K" or not (ctrl and ctrl()) or not (ns.Browser and ns.Browser.SearchKeyOn()) or ns.wow.inCombat() then return end
+  local box = searchBox()
+  if not (box and box:IsShown()) then return end
+  -- keep this one key from the game, then pass keys on again at once
+  if pcall(self.SetPropagateKeyboardInput, self, false) then
+    C_Timer.After(0, function() if not ns.wow.inCombat() then pcall(self.SetPropagateKeyboardInput, self, true) end end)
+  end
+  box:SetFocus()
+  if box.HighlightText then box:HighlightText() end
+  return true
 end
 
 ---------------------------------------------------------------------------
@@ -1005,6 +1035,10 @@ ns.AddOptions("windows", function()
     values = { both = L["Icon and title"], title = L["Title only"], icon = L["Icon only"] },
     get = function() return labelMode() end,
     set = function(_, v) ns.settings.tabLabels = v; refreshTabs() end }
+  args.searchKey = { type = "toggle", order = 85, width = "full", name = L["Ctrl+K jumps to the search box"],
+    desc = L["While the Hard Counters window is open, Ctrl+K puts the cursor in the open tab's search box (the Explorer, Stints, Diagnostics). Not in combat: there it is the game's key."],
+    get = function() return ns.Browser and ns.Browser.SearchKeyOn() end,
+    set = function(_, v) if v then ns.settings.searchKey = nil else ns.settings.searchKey = false end end }
   args.scale = { type = "range", order = 90, name = L["Scale of the Hard Counters window"], min = 0.5, max = 2, step = 0.05,
     get = function() return (main and main:GetScale()) or conf(MAIN).scale or 1 end,
     set = function(_, v) conf(MAIN).scale = v; if main then main:SetScale(v); layoutMain() end end }

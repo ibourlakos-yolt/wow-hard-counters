@@ -11,6 +11,8 @@ so at the top. Developer notes (pack API changes) are at the end of an entry.
 - One **Help** button at the top right replaces the three (help, tour, Grand tour). Its menu: Help for the open
   tab, Tutorial for the open tab, the Full tutorial, and the Guide. Tours are called tutorials now;
   `/hc tutorial <tab>` starts one tab's (`/hc tour` still works).
+- **Ctrl+K** puts the cursor in the open tab's search box (the Explorer, Stints, Diagnostics). Out of combat only;
+  Options, Windows turns it off.
 - Right-click opens a menu in more places (the Help button, and more below).
 
 ### Boards on your HUD

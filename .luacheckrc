@@ -50,7 +50,7 @@ files["HardCounters/UI/Slash.lua"] = {
 files["HardCounters/UI/Options.lua"] = { read_globals = AL }
 files["HardCounters/UI/RunCommands.lua"] = { read_globals = { "StaticPopup_Show" }, globals = { "StaticPopupDialogs" } }
 files["HardCounters/UI/Widgets.lua"] = { read_globals = { "CreateFrame", "UIParent", "GameTooltip" } }
-files["HardCounters/UI/Windows.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip" } }
+files["HardCounters/UI/Windows.lua"] = { read_globals = { "CreateFrame", "UIParent", "UISpecialFrames", "tinsert", "GameTooltip", "C_Timer" } }
 files["HardCounters/UI/Stints.lua"] = { read_globals = { "C_Item", "GetItemInfo" } }
 files["HardCounters/UI/Broker.lua"] = {
   read_globals = { "LibStub", "IsShiftKeyDown", "IsControlKeyDown", "CreateFrame", "UIParent", "GetCursorPosition" },

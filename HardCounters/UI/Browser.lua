@@ -40,6 +40,13 @@ local floor, max, min = math.floor, math.max, math.min
 
 local Browser = {}
 ns.Browser = Browser
+local byParent = setmetatable({}, { __mode = "k" })     -- content frame -> its browser (Ctrl+K finds the search box)
+
+--- The browser drawn in this content frame, or nil.
+function Browser.For(frame) return frame and byParent[frame] or nil end
+
+--- (0.5.0, A3) Is Ctrl+K on? (Options, Windows; on by default.)
+function Browser.SearchKeyOn() return not (ns.settings and ns.settings.searchKey == false) end
 
 local TOP_H, TREE_W, ROW_H, HEAD_H, BAR_H, SB_W, GAP = 30, 170, 18, 18, 26, 12, 6
 local NODE_H = 20                     -- (0.5.0) a tree row, like the AH's category buttons
@@ -108,7 +115,7 @@ function Browser.New(parent, spec)
   s:SetAutoFocus(false)
   s.hint = s:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   s.hint:SetPoint("LEFT", 2, 0)
-  s.hint:SetText(L["Search"])
+  s.hint:SetText(Browser.SearchKeyOn() and L["Search (Ctrl+K)"] or L["Search"])
   s:SetScript("OnTextChanged", function(self)
     local text = (self:GetText() or "")
     self.hint:SetShown(text == "")
@@ -119,6 +126,7 @@ function Browser.New(parent, spec)
   s:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   s:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   b.searchBox = s
+  byParent[parent] = b
 
   if spec.filters then
     b.filterBtn = Wd.Button(parent, L["Filters"], 80, function(self)

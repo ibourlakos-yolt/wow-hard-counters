@@ -169,3 +169,33 @@ describe("a HUD board in 0.5.0", function()
     end)
   end)
 end)
+
+describe("Ctrl+K in the Hard Counters window (0.5.0, A3)", function()
+  it("puts the cursor in the open tab's search box, out of combat, when the option is on", function()
+    UI.with(function(ctx)
+      local ns = ctx.hc
+      ns.ShowExplorer(true, "readings")
+      local main = ns.Windows.Host("_main")
+      local box = ns.ExplorerBrowser.searchBox
+      local focused, passing = 0, nil
+      box.SetFocus = function() focused = focused + 1 end
+      main.SetPropagateKeyboardInput = function(_, v) passing = v end
+      _G.IsControlKeyDown = function() return true end
+      assert.truthy(main:GetScript("OnKeyDown"))
+      main:GetScript("OnKeyDown")(main, "K")
+      assert.are.equal(1, focused)
+      assert.is_false(passing)                                     -- this key kept from the game
+      main:GetScript("OnKeyDown")(main, "J")                       -- any other key: untouched
+      assert.are.equal(1, focused)
+      ns.settings.searchKey = false
+      main:GetScript("OnKeyDown")(main, "K")
+      assert.are.equal(1, focused)
+      ns.settings.searchKey = nil
+      ns.wow.inCombat = function() return true end                 -- in combat it is the game's
+      main:GetScript("OnKeyDown")(main, "K")
+      assert.are.equal(1, focused)
+      _G.IsControlKeyDown = nil
+      assert.are.same({}, ctx.env.errors)
+    end)
+  end)
+end)

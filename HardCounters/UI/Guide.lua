@@ -188,6 +188,7 @@ local PAGES = {
       head(L["The top of the window"]),
       item(L["Under the title, one line says what the open tab is for."]),
       item(L["Help, at the top right: Help for the open tab (one page: what it is, what you can do there, how it changes your play), Tutorial for the open tab (a few steps through it alone), the Full tutorial of all of Hard Counters, and this Guide. /hc tutorial <tab> starts a tab's tutorial from chat."]),
+      item(L["Ctrl+K puts the cursor in the open tab's search box (Options, Windows, turns it off; in combat the key stays the game's)."]),
       head(L["Buttons and switches"]),
       item(L["A red-and-gold button does something (New board..., Reset, Delete). A dark pill with a lamp is a switch that shows a state: green on, grey off, amber needs a look; click it to change it (On HUD / Only here, Counting / Not counting)."]),
       head(L["The minimap button"]),
