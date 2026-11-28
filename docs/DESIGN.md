@@ -2114,3 +2114,50 @@ call by the user (G3's key). Written before building; "As built" notes follow wh
 - **H2.** The Runs tab finds runs with dropdowns over the list (Who, Where, When, Length, From, Counted), not a
   tree. New runs record where they came from (`src`, `board`, `boardId`, `atReset`); older ones read Unknown.
 - **D0. Right-click** opens the same actions wherever there are actions (`Widgets.RightMenu`).
+
+**As built (0.5.0, 2026-11-28; nothing seen in game).**
+
+- **A1** (`UI/Windows.lua`): `MAIN_W, MAIN_H = 820, 660`, drawn at `MAIN_SCALE = 1.08` unless the player chose a
+  scale; a 0.4 scale left at 1 takes 1.08 once (`windows._main.sizeV = 1`). Fonts grow through the scale, so
+  nothing inside re-wraps or crops differently. The Help page and the tutorial (their own frames) are not scaled.
+- **A2:** `main.help` opens `Win.HelpItems()` (left or right click). `/hc tutorial <tab>` (`Help.TutorialByName`);
+  `/hc tour` is an unlisted alias. Player text says "tutorial"; `def.tour`, `Help.Tour` stay.
+- **A3:** the shared frame has `EnableKeyboard` and passes every key on (`SetPropagateKeyboardInput(true)`), except
+  Ctrl+K out of combat when the open tab has a search box (`Browser.For(content).searchBox`, or `content.searchBox`
+  for the Boards tab): one key kept, passing back on the next frame. `settings.searchKey = false` turns it off.
+  Unseen: whether `SetPropagateKeyboardInput` is refused out of combat on Forever.
+- **B1, B2** (`UI/BoardModel.lua`, `UI/Boards.lua`): `M.PAD_HEAD = 2`, `M.HEIGHT.run = 20`; `M.Layout` returns the top
+  padding as a third value. Half-width rows keep `kind = "grid"` and carry `cells = { foot, foot }`; `buildRow`
+  makes each cell by its footprint (`heroHalf`, `grid`, `rowHalf`); `drawCell` draws it and its badge arrow. The
+  column gutter is 8. `fitValue` steps a Big value down (`GameFontNormalHuge` → `Large` → `Highlight`) only when its
+  length or room changed. Row heights for Big use `row.spark` and `row.compare` from the layout.
+- **B3 to B5:** `M.BoardAlpha`, `M.BoardBg`, `M.SetAlpha`, `M.SetBackground` (key or rgb), `M.BgKey`,
+  `M.SetValueColor`, `M.SetTileColor`, `M.TileColorKey`, `M.TileColor`, `M.ResetLook`, `M.CopyLook` (Duplicate, Save
+  as preset, presets). A tile's colour is its placement's (`PLACED` in the placement metatable, like its size).
+  `Boards.LookItems(board)` is the Look submenu (the board's menu, the strip's, the Explorer's More..., the board's
+  details); choices close the menu (the menu keeps only level-1 menus open).
+- **C1:** `ICON_PLAY` (spellbook next page), `ICON_PAUSE`/`ICON_RESET` (`Interface\TimeManager\`, unseen on Forever;
+  `ICON_FALLBACK` swaps in two bars and the dressing room's turn arrow). An icon button answers `GetText()` with its
+  action word. `settings.boardButtonIcons = false`: words.
+- **C2:** `f.hideHandle` left of Edit; `Boards.TakeOff(board, quiet)`. Right-click on any of the three tabs:
+  `Boards.BoardMenuItems`.
+- **D1, D2:** `Browser` spec `foldKey`, `foldDefault`, `nodeMenu`; nodes take `level` (or `indent`); `B:BuildTree`,
+  `B:IsFolded` (false = opened, nil = default), `B:Fold`, `B:FoldAll`, `B:OpenTo` (a node chosen from code opens with
+  its ancestors). The AH art (`UI-AuctionFrame-FilterBg`) sits over a flat amber strip, so a missing texture still
+  reads as a category. Explorer keys: `boards`, `presets`, `pg:*`, `tiles`, `tb:<board id>`, `displays`, `readings`,
+  `rc:*`, `trackers`, `tc:*`, `unloaded`, `oc:*` (`others` still answers for old callers).
+- **G1:** board details: rules as pills that cycle (combat show → fade → hide), Look with a Change button, tile sizes,
+  Made from. Ready-made: size and session value per tile, the preset's tip, how many need a missing pack. Reading:
+  Counted from, Can show as, Fits, This session. Run and probe details: below (H, F).
+- **G2, G3:** `M.Explain(tile, board, out)` → `{ label, text, warn }` lines plus `out.title`, `out.value`.
+  `UI/Synopsis.lua` (new TOC file): `Show(anchor, tile, board, "panel" | "tip")`. Panel: DIALOG strata, a click
+  catcher, Escape. Tip: TOOLTIP strata, no mouse, closed by `GLOBAL_MOUSE_DOWN` (pcall), by `Boards.Hover`'s poll (a
+  button down off its board), when its board hides, at combat start, after 30 s. The HUD: `settings.boardInfoKey`
+  (ALT by default; SHIFT, CTRL, NONE); held over a full board it arms the board for clicks (`armInfo`), and the
+  board's `OnMouseUp` finds the row under the cursor (`w.tileAt`); the end of a drag is not a click (`wasDragged`).
+- **H2:** records gain `src` (`board`, `hand`, `instance`), `board`, `boardId`, `atReset`. `Browser` spec `noTree`,
+  `filterBar`, `filterClear`; the Stints tab's filter state is `ns.StintFilters` (session only). Counted caches a
+  record's readings in a weak table.
+- **D0:** `Widgets.RightMenu(frame, itemsFn)` (OnMouseUp, so a button's OnClick is never touched); status pills,
+  column headings, tabs (`Win.TabMenuItems`), tree nodes, Overview rows, the Boards tab's clock buttons, strip and
+  footer, the HUD's tabs and Alt+right-click. `Widgets.rightMenus` counts them.
