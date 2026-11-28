@@ -3,7 +3,13 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.5.0-beta2 (2026-11-28)
+
+A beta, **still experimental**. Fixes errors in combat on boards with Character Stats numbers, and adds Copy to board,
+Alt+click on the Boards tab's cards, and a Move... submenu on the HUD.
+
+**Saved data:** kept. **Updating:** `/reload` is enough after 0.5.0-beta1 (no new addon files); from an older version,
+restart the game client.
 
 ### Changed
 - **Alt+click a card in the Boards tab** shows how its number is made, the same tooltip as Alt+click on the HUD (any
