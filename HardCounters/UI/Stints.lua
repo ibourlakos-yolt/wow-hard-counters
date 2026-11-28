@@ -653,6 +653,19 @@ local function build(f)
     noSelection = L["Click a run for its numbers: totals, per hour, what dropped, its best and its splits."],
   })
   ns.StintsBrowser = browser
+  -- (D0) right-click Start run / Stop and keep: every action on the open run
+  if browser.headerBtns[1] then
+    Wd.RightMenu(browser.headerBtns[1], function()
+      local open = HC:GetRunClock() ~= nil
+      local function go(fn) return function() fn(HC); refresh() end end
+      return {
+        { text = L["Start run"], disabled = open, func = go(HC.StartRun) },
+        { text = L["Stop and keep"], disabled = not open, func = go(HC.StopRun) },
+        { text = L["Stop and discard"], disabled = not open, func = go(HC.DiscardRun) },
+        { text = L["Split"], disabled = not open, func = go(HC.SplitRun) },
+      }
+    end)
+  end
 end
 
 Win.Register(ID, {
