@@ -446,7 +446,15 @@ local function numberItems(rec, items)
     local r = ns.readings[id]
     local v, text = Wd.RecordReading(r, rec)
     -- (every run reading of every tracker is in the order: only the ones this stint gave a number say anything)
-    if type(v) == "number" and v ~= 0 then items[#items + 1] = item("  " .. r.title, text) end
+    if type(v) == "number" and v ~= 0 then
+      -- (0.5.0, G1) the total and, for a flow, its per hour beside it
+      local ph
+      if r.per == nil and ns.CalcAllowed and ns.CalcAllowed(r, "perHour") and (rec.activeSeconds or 0) >= 60 then
+        local pv, pt = Wd.RecordReading(r, rec, "perHour")
+        if type(pv) == "number" and pt then ph = pt end
+      end
+      items[#items + 1] = item("  " .. r.title, ph and (text .. DOT .. ph) or text)
+    end
   end
   if #items == n + 1 then items[#items] = nil end
 end
@@ -525,7 +533,23 @@ local function detail(row)
     lines[#lines + 1] = GREY .. L["Kept from tiles that watched some counters only: the others have no number here."]
       .. "|r"
   end
-  local items = {}
+  -- (0.5.0, G1) "how did that stint go, against my others?": when, where, where it came from, then the numbers
+  local items = {
+    { text = L["When"], value = rangeText(rec) },
+    { text = L["From"], value = fromWord(rec) ~= "" and (fromWord(rec) .. (rec.atReset and ("  " .. L["(at its Reset)"]) or ""))
+      or L["Unknown (before 0.5)"], grey = rec.src == nil },
+  }
+  local r = headline()
+  local BM = ns.BoardModel
+  if r and rec.mainZone ~= nil and BM and BM.ZoneAverage then
+    local avg, cnt = BM.ZoneAverage(r.id, rec.mainZone, nil, nil)
+    local v = Wd.RecordReading(r, rec)
+    local cmp = avg and BM.CompareText(v, avg)
+    if cmp then
+      items[#items + 1] = { text = format(L["%s against your average there"], r.title),
+        value = cmp:gsub(" vs your average here", "") .. "  " .. GREY .. format(L["(%d stints)"], cnt) .. "|r" }
+    end
+  end
   numberItems(rec, items)
   countItems(rec, items)
   liveItems(rec, items)
