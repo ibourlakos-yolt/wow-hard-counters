@@ -50,11 +50,34 @@ local function line(i)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(self.tipTitle or "", 1, 1, 1)
     GameTooltip:AddLine(self.tip, 0.8, 0.8, 0.8, true)
+    if self.row and HC:Supports("packMenus") then
+      GameTooltip:AddLine("Right-click: Add tile..., Its tracker.", 0.5, 0.5, 0.5, true)
+    end
     GameTooltip:Show()
   end)
   l:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- (Hard Counters 0.5.0, D0 row 14) a stat's row: right-click for Add tile... and Its tracker
+  l:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  l:SetScript("OnClick", function(self, button)
+    if button == "RightButton" and self.row then ns.RowMenu(self, self.row) end
+  end)
   lines[i] = l
   return l
+end
+
+--- The menu of a stat's row: a tile of it on a board (as the Explorer's Add tile... does), or its tracker in the
+--- Explorer. Needs Hard Counters 0.5 (HC:Supports("packMenus")); returns the items it showed (tests).
+function ns.RowMenu(anchor, row)
+  if not (HC.Supports and HC:Supports("packMenus")) then return nil end
+  local items = {
+    { text = row.title, title = true },
+    { text = "Add tile...", tip = "Put this stat on a board (you pick the board when you have several).",
+      func = function() HC:AddTile(row.id, anchor, row.arg) end },
+    { text = "Its tracker", tip = "The Explorer on Trackers, with this stat's section selected.",
+      func = function() HC:ShowTracker(row.tracker) end },
+  }
+  HC:ShowMenu(anchor, items)
+  return items
 end
 
 local function place(l, y, indent)
@@ -83,6 +106,7 @@ local function refresh()
       if HC.RelayoutWindow then HC:RelayoutWindow(WINDOW) end      -- (its rows need room now)
     end)
     h.tip, h.tipTitle = t.description, t.title
+    h.row = nil                                                -- (a section heading has no menu)
     h:Show()
     y = y - HEAD_H
     if on then
@@ -110,6 +134,7 @@ local function refresh()
             if stale then l.value:SetTextColor(0.5, 0.5, 0.5) else l.value:SetTextColor(1, 1, 1) end
           end
           l.tip, l.tipTitle = row.tip, row.title
+          l.row = row
           l:Show()
           y = y - ROW_H
         end
@@ -158,8 +183,9 @@ if HC.RegisterWindowHelp then
       "Read every stat this character uses, section by section; stats your class has no use for are left out.",
       "{Turn on} a section that is off: its stats start reading, here and on your boards.",
       "Hover a stat for what it means and where the number comes from.",
+      "Right-click a stat: Add tile... puts it on a board; Its tracker shows its section in the Explorer.",
     },
-    effect = "A section that is on can go on any board (Overview, + Tile, or the ready-made role and class boards). In combat the game hides some stats from addons: those grey out here with \"in combat\" and come back after the fight; most single values keep updating on boards.",
+    effect = "A section that is on can go on any board (Overview, + Tile, or the ready-made class boards, one for each role a class can play). In combat the game hides some stats from addons: those grey out here with \"in combat\" and come back after the fight; most single values keep updating on boards.",
     tour = {
       { title = "Sections", text = "The sheet is cut into sections: Attributes, Melee, Ranged, Spell, Defense, Resistances, Gear. Each is a tracker; one that is off shows {Turn on} instead of numbers." },
       { title = "From the sheet to your screen", text = "Every row here is a reading. To keep one in sight while you play, go to Overview, {+ Tile} on a board, and pick it under its section; or make your class board with New board..." },

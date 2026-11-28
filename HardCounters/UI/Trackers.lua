@@ -179,7 +179,7 @@ local function listTitle(r) return (r.title:gsub("%%s", "...")) end
 --- the HUD first, then "New board"; with none it makes one. The tile goes on the board; the board goes on the HUD
 --- only by the player's own switch (v8: a board that is "Only here" stays so, and the chat line says where the tile
 --- is). getBoard is called only when the tile is really added (a cancelled pick leaves no empty board behind).
-local function addToBoard(readingId, anchor)
+local function addToBoard(readingId, anchor, given)
   if not (ns.BoardModel and ns.Boards) then return end
   local BM = ns.BoardModel
   local r = ns.readings[readingId]
@@ -198,8 +198,9 @@ local function addToBoard(readingId, anchor)
         end
       end)
     end
-    -- a reading with a parameter (DESIGN 16.4): pick the member first
-    if ns.NeedsArg(r) and anchor then ns.Boards.MemberMenu(anchor, readingId, add) else add() end
+    -- a reading with a parameter (DESIGN 16.4): pick the member first, unless the caller named it (HC:AddTile)
+    if given ~= nil then add(given)
+    elseif ns.NeedsArg(r) and anchor then ns.Boards.MemberMenu(anchor, readingId, add) else add() end
   end
   local targets = BM.AddTargets()
   if #targets == 0 then return addTo(newBoard) end
@@ -267,7 +268,8 @@ end
 local function searchHit(search, t, readings)
   if search == "" then return true end
   local function has(s) return type(s) == "string" and s:lower():find(search, 1, true) ~= nil end
-  if has(t.title) or has(t.description) then return true end
+  -- (0.5.0) and its pack's title: the Packs tab's "Its trackers" searches by it
+  if has(t.title) or has(t.description) or has(t.packTitle) then return true end
   for _, r in ipairs(readings) do if has(listTitle(r)) then return true end end
   return false
 end
@@ -499,6 +501,23 @@ function ns.ShowTrackers(show)
   if ns.ShowExplorer then ns.ShowExplorer(show, "trackers") end
 end
 function HC:ToggleTrackers() ns.ShowTrackers(nil) end
+
+--- (0.5.0, public) The Explorer on Trackers, one tracker selected (a pack window's "Its tracker"; the Packs tab).
+--- A search, when given, filters the list instead (the Packs tab: a pack's title).
+function ns.ShowTracker(id, search)
+  ns.ShowTrackers(true)
+  local b = ns.ExplorerBrowser
+  if not b then return end
+  if b.SetSearch then b:SetSearch(search or "") end
+  if id and b.Select then b:Select(id, "trackers") end
+end
+function HC:ShowTracker(id) ns.ShowTracker(id) end
+
+--- (0.5.0, public) A tile of a reading on a board, as the Explorer's Add tile... does (docs/API.md §7).
+function HC:AddTile(readingId, anchor, arg)
+  if type(readingId) ~= "string" or not ns.readings[readingId] then return end
+  addToBoard(readingId, anchor, arg)
+end
 
 ns.AddSlash("trackers", function() ns.ShowTrackers(true) end, L["what Hard Counters counts and how much history it keeps (in the Explorer tab)"])
 

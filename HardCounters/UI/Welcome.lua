@@ -1,6 +1,6 @@
 -- The tutorial (the user, 2026-11-24; it replaces HC-74's one-page welcome window). A small window of steps, Back
 -- and Next, that walks through Hard Counters where it is: the boards on screen (the first one flashes), a first
--- board for the character's class (one click makes it, from Character Stats' class preset), then the Hard Counters
+-- board for the character's class (one click makes it, from Character Stats' class presets: a menu of roles when the class has several), then the Hard Counters
 -- window, opened by the tour on each of its tabs in turn (0.4.0: Boards, Explorer, Packs, Stints, Overview and Options,
 -- the packs' tabs, Guide). Since 2026-11-25 nothing is on the HUD at a first setup: the boards step says so, the class-board step
 -- puts that one board on screen (the player's click), and the Packs step is where a new player chooses packs.
@@ -57,30 +57,48 @@ local function firstBoard()
   return list[1]
 end
 
---- This character's class board among the presets (Character Stats registers one per class): key, preset; or nil.
-function Tutorial.ClassPreset()
+--- This character's class boards among the presets (0.5.0: Character Stats registers one per class and role, 1 to
+--- 4 for a class), in their order: { key, ... }.
+function Tutorial.ClassPresets()
   local M = BM()
   local class = M and M.PlayerClass()
-  if not class then return nil end
+  local out = {}
+  if not class then return out end
   for _, key in ipairs(M.PRESET_ORDER) do
     local p = M.PRESETS[key]
-    if p.category == "class" and p.class == class then return key, p end
+    if p.category == "class" and p.class == class then out[#out + 1] = key end
   end
-  return nil
+  return out
 end
 
---- The board this character already has from that preset (the tour's own first).
-local function classBoard(key)
+--- The first of them: key, preset; or nil.
+function Tutorial.ClassPreset()
+  local key = Tutorial.ClassPresets()[1]
+  if not key then return nil end
+  return key, BM().PRESETS[key]
+end
+
+--- The class board this character already has (the tour's own first): one made from any of its class presets, or
+--- (0.5.0) from 0.4's class or schools board of its class, so a player from 0.4 is not told to make a second one.
+local function classBoard()
   local M = BM()
   local b = made and M.Get(made) or nil
   if b then return b end
-  for _, x in ipairs(M.Store().list) do if x.preset == key then return x end end
+  local want = {}
+  for _, key in ipairs(Tutorial.ClassPresets()) do want[key] = true end
+  local class = M.PlayerClass()
+  if class then
+    want["hcstats:" .. class:lower()] = true
+    want["hcstats:schools." .. class:lower()] = true
+  end
+  for _, x in ipairs(M.Store().list) do if x.preset and want[x.preset] then return x end end
   return nil
 end
 
---- Make the class board, left of the tour, flashing. Returns it (nil without a class preset).
-function Tutorial.MakeClassBoard()
-  local key = Tutorial.ClassPreset()
+--- Make a class board (key; the first of this class's when nil), left of the tour, flashing. Returns it (nil
+--- without a class preset).
+function Tutorial.MakeClassBoard(key)
+  key = key or Tutorial.ClassPreset()
   if not key then return nil end
   local b = BM().Create(key, { shown = true })      -- (the player's click: "makes it and puts it on your HUD")
   b.pos = ns.U.copy(CLASS_POS)
@@ -152,44 +170,59 @@ STEPS = {
 
   { title = L["Your first board"], hud = true,
     board = function()
-      local key = Tutorial.ClassPreset()
-      return key and classBoard(key) or nil
+      return Tutorial.ClassPreset() and classBoard() or nil
     end,
     text = function()
-      local key, p = Tutorial.ClassPreset()
-      if not key then
+      local keys = Tutorial.ClassPresets()
+      if #keys == 0 then
         return lines(
-          L["Hard Counters has ready-made boards: Leveling, Pocket and Farming for gold and XP, and with the Character Stats pack one for each role and each class."],
+          L["Hard Counters has ready-made boards: Leveling, Pocket and Farming for gold and XP, and with the Character Stats pack boards for every class, one for each role it can play."],
           "",
           L["Character Stats isn't loaded on this character (the Packs tab turns it on), so there is no class board to offer. New board... lists the ready-made boards you do have, or starts an empty one."])
       end
-      local b = classBoard(key)
+      local b = classBoard()
       if b then
         return lines(
           format(L["This character has its class board: %s, flashing now. Its stats are live, and most keep updating in combat."], gold(b.name)),
           "",
-          L["Try what the last step said: hover it, drag it by its Move tab, click Edit, right-click a tile."],
-          "",
-          L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
+          L["Try what the last step said: hover it, drag it by its Move tab, click Edit, right-click a tile."])
       end
+      local names = {}
+      for i, key in ipairs(keys) do names[i] = gold(BM().PRESETS[key].name) end
       return lines(
-        format(L["Hard Counters has a ready-made board for every class. Yours is %s: the stats this class uses, live."], gold(p.name)),
+        format(L["Hard Counters has ready-made boards for every class, by role. For this character: %s."], table.concat(names, ", ")),
         "",
-        L["The button below makes it and puts it on your HUD, left of this window. It is yours to change: move it, drop tiles you don't want, add others, or take it off the screen again."],
-        "",
-        L["Playing one role? New board... has a closer fit under Roles (tank, healer, melee, ranged, caster)."])
+        #keys == 1 and L["The button below makes it and puts it on your HUD, left of this window. It is yours to change: move it, drop tiles you don't want, add others, or take it off the screen again."]
+          or L["The button below asks which role, then makes that board and puts it on your HUD, left of this window. It is yours to change: move it, drop tiles you don't want, add others, or take it off the screen again."])
     end,
     action = function()
-      local key, p = Tutorial.ClassPreset()
+      local keys = Tutorial.ClassPresets()
       local B = Bo()
-      if not key then
+      if #keys == 0 then
         return { text = L["New board..."], func = function() if B then B.OpenNewBoard() end end }
       end
-      local b = classBoard(key)
+      local b = classBoard()
       if b then
         return { text = L["Show it"], func = function() if B then B.ShowNow(b.id, 8) end end }
       end
-      return { text = format(L["Make my %s board"], p.name), func = function() Tutorial.MakeClassBoard() end }
+      local M = BM()
+      if #keys == 1 then
+        return { text = format(L["Make my %s board"], M.PRESETS[keys[1]].name), func = function() Tutorial.MakeClassBoard(keys[1]) end }
+      end
+      -- (0.5.0) several roles: a menu on the button, one entry per role ("Healer", "Tank", ...)
+      return { text = format(L["Make my %s board..."], L[M.ClassWord(M.PlayerClass())]),
+        func = function(button)
+          local items = {}
+          for _, key in ipairs(keys) do
+            local p = M.PRESETS[key]
+            items[#items + 1] = { text = L[M.ROLE_WORD[p.role] or p.name], tip = p.tip and L[p.tip] or nil,
+              func = function()
+                Tutorial.MakeClassBoard(key)
+                if f and f:IsShown() then Tutorial.Go(step) end
+              end }
+          end
+          if ns.Menu then ns.Menu.Show(button, items) end
+        end }
     end },
 
   { title = L["The Hard Counters window"], tab = "boards",
@@ -368,8 +401,8 @@ local function build()
   f.body:SetJustifyH("LEFT")
   f.body:SetJustifyV("TOP")
   f.body:SetSpacing(2)
-  f.act = Wd.Button(f, "", 160, function()
-    if f.actFunc then f.actFunc() end
+  f.act = Wd.Button(f, "", 160, function(self)
+    if f.actFunc then f.actFunc(self) end                      -- (the button: a step may open a menu on it)
     render()                                                   -- (the step's text and button follow what it did)
   end)
   f.act:SetHeight(24)

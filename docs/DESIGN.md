@@ -2109,6 +2109,12 @@ call by the user (G3's key). Written before building; "As built" notes follow wh
   classes. The tutorial's class step offers the character's roles.
 - **E3.** The Packs tab: whole notes in a tip, why a pack can't load, a warning before unticking a pack whose
   readings are on boards, "trackers counting", "for this character", versions, a row menu, Diagnostics under Tools.
+  *As built (E1 to E3):* the tip is "The stats a warrior watches as a tank" with a noun for the role ("melee damage
+  dealer"); class words are `BoardModel.ClassWord(token)`, role words `BoardModel.ROLE_WORD`. The version flag names
+  only the packs of Hard Counters' own download, and says "newer" when it is. "Its ready-made boards" opens the
+  first group holding the pack's presets (every pack's are categorised, so there is no `pg:<pack>`). Character
+  Stats' row menu needed public API: `HC:ShowMenu`, `HC:AddTile`, `HC:ShowTracker` (`Supports("packMenus")`); a
+  tracker search also matches its pack's title.
 - **F1. Report a problem** is a bottom tab, always there: a note box, the three ticks, what is in it, the text to
   copy; the checks and the log marker when Diagnostics is loaded. The report window goes.
 - **F2.** The copy-text window folds into the browser's detail pane. Help, the tutorial, the New board dialog and

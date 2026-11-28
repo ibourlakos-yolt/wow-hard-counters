@@ -18,6 +18,7 @@ local FEATURES = {
   stints = true,                  -- 0.4.0: HC:StartStint, HC:Stints, ... (the run API in the player's word; Core/Runs.lua)
   tileSizes5 = true,              -- 0.5.0: tile sizes largeHalf and lineHalf (RegisterBoardPreset)
   boardLook = true,               -- 0.5.0: a preset's valueColor, alpha, bg, bgAlpha; a tile's color
+  packMenus = true,               -- 0.5.0: HC:ShowMenu, HC:AddTile, HC:ShowTracker (a pack window's right-click menu)
   hist = false, autoRuns = false, journal = false,
 }
 

@@ -155,8 +155,10 @@ function W.addonLoaded(name)
 end
 
 --- The addons that belong to Hard Counters (TOC `## Group: HardCounters`, every pack's and Diagnostics'; not Hard
---- Counters itself): { { name (folder), title, notes, enabled (for this character at the next load), loaded,
---- missing (can't load: a dependency is absent) } }, by title. Reads the AddOn list; nothing is changed.
+--- Counters itself): { { name (folder), title, notes, version (its TOC's), enabled (for this character at the next
+--- load), loaded, missing (can't load: a dependency is absent), reason (the game's word for why it can't load, or
+--- nil), deps (its TOC's dependencies), needs (those of them that are not installed) } }, by title. Reads the AddOn
+--- list; nothing is changed.
 function W.packAddons()
   local A = rawget(_G, "C_AddOns")
   local num = (type(A) == "table" and A.GetNumAddOns) or rawget(_G, "GetNumAddOns")
@@ -164,6 +166,24 @@ function W.packAddons()
   local meta = (type(A) == "table" and A.GetAddOnMetadata) or rawget(_G, "GetAddOnMetadata")
   local isLoaded = (type(A) == "table" and A.IsAddOnLoaded) or rawget(_G, "IsAddOnLoaded")
   local state = (type(A) == "table" and A.GetAddOnEnableState) or rawget(_G, "GetAddOnEnableState")
+  local depsOf = (type(A) == "table" and A.GetAddOnDependencies) or rawget(_G, "GetAddOnDependencies")
+  -- (0.5.0) the dependencies a pack lists, and which of them are not installed ("Can't load: needs ...")
+  local function dependencies(i)
+    local deps, needs = {}, {}
+    if type(depsOf) ~= "function" then return deps, needs end
+    local got = { pcall(depsOf, i) }
+    if not got[1] then return deps, needs end
+    for k = 2, #got do
+      local d = got[k]
+      if type(d) == "string" and d ~= "" then
+        deps[#deps + 1] = d
+        local okI, dName, _, _, _, dReason = pcall(info, d)
+        -- (an addon that isn't installed: no name back, "MISSING", or an error from the newer API)
+        if not okI or dName == nil or dReason == "MISSING" then needs[#needs + 1] = d end
+      end
+    end
+    return deps, needs
+  end
   local out = {}
   if type(num) ~= "function" or type(info) ~= "function" or type(meta) ~= "function" then return out end
   local okN, n = pcall(num)
@@ -183,9 +203,13 @@ function W.packAddons()
           if okS and type(st) == "number" then enabled = st > 0 end
         end
         local okL, loaded = pcall(isLoaded or function() return false end, name)
+        local okV, version = pcall(meta, i, "Version")
+        local deps, needs = dependencies(i)
         out[#out + 1] = { name = name, title = type(title) == "string" and title or name,
           notes = type(notes) == "string" and notes or nil, enabled = enabled,
-          loaded = okL and loaded and true or false, missing = reason == "MISSING" or reason == "DEP_MISSING" }
+          loaded = okL and loaded and true or false, missing = reason == "MISSING" or reason == "DEP_MISSING",
+          reason = type(reason) == "string" and reason or nil, version = okV and type(version) == "string" and version or nil,
+          deps = deps, needs = needs }
       end
     end
   end

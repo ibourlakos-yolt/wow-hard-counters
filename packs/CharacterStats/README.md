@@ -1,7 +1,7 @@
 # Hard Counters: Character Stats
 
 A Hard Counters pack for the character sheet: attributes, melee, ranged, spell, defense, resistances, health and
-mana, gear. Ready-made boards for seven roles and the nine classes. Any stat on a board, records with the buffs that made them, and, with history on, each stat level by
+mana, gear. Ready-made boards for every class and role it can play (18, from Warrior (Tank) to Druid (Caster)). Any stat on a board, records with the buffs that made them, and, with history on, each stat level by
 level. Built only on Hard Counters' public API.
 
 - Design: [docs/DESIGN.md](docs/DESIGN.md)

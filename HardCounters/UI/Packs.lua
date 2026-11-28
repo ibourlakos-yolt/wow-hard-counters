@@ -11,6 +11,10 @@
 -- Unverified in game (2026-11-25): EnableAddOn / DisableAddOn by folder name for one character, and ReloadUI from
 -- our own button's click. Both are wrapped (Core/WoW.lua): a refused call leaves the row saying "use the game's
 -- AddOns list".
+-- (0.5.0, E3 "read through") A row's whole notes and version in its tooltip; why a pack can't load ("needs ...");
+-- a warning before unticking a pack whose readings are on your tiles; "trackers counting"; the ticks are for this
+-- character; the version after the title, amber when one of our packs doesn't match Hard Counters; a row menu
+-- (right-click, or its "..."): Turn on or off, Its trackers, Its ready-made boards; Diagnostics last, under Tools.
 -- luacheck: no max line length (prose)
 local ADDON, ns = ...
 
@@ -18,8 +22,14 @@ local HC, L, Wd = ns.HC, ns.L, ns.Widgets
 local format = string.format
 
 local ID = "packs"
-local ROW_H, TOP_H, PAD = 46, 54, 12
+local ROW_H, TOP_H, PAD, CAPTION_H = 46, 54, 12, 20
 local MIN_W, MIN_H = 600, 360
+
+-- The packs that come in Hard Counters' own download: their version should be Hard Counters' own
+local OURS = { HardCounters_Farmer = true, HardCounters_CharacterStats = true, HardCounters_Traveler = true,
+  HardCounters_Diagnostics = true }
+-- Listed last, under "Tools": it adds no numbers
+local TOOLS = { HardCounters_Diagnostics = true }
 
 local Packs = {}
 ns.Packs = Packs
@@ -32,6 +42,32 @@ local refresh
 
 local function G() return ns.globalSettings or {} end
 
+--- A small right-click helper (a shared one comes with Widgets later): itemsFn() -> the menu's items.
+local function rightMenu(frame, itemsFn)
+  frame:EnableMouse(true)
+  frame:SetScript("OnMouseUp", function(self, button)
+    if button == "RightButton" and ns.Menu then ns.Menu.Show(self, itemsFn(self)) end
+  end)
+end
+
+--- "0.4.0-beta2" against "0.5.0-beta1": -1, 0 or 1 (numbers first, then a release beats a test build, then
+--- alpha < beta < rc by name). nil when either isn't a version.
+local function compareVersions(a, b)
+  local function parts(v)
+    local x, y, z, rest = tostring(v or ""):match("^v?(%d+)%.(%d+)%.?(%d*)%-?(.*)$")
+    if not x then return nil end
+    return { tonumber(x), tonumber(y), tonumber(z) or 0 }, rest
+  end
+  local pa, ra = parts(a)
+  local pb, rb = parts(b)
+  if not (pa and pb) then return nil end
+  for i = 1, 3 do if pa[i] ~= pb[i] then return pa[i] < pb[i] and -1 or 1 end end
+  if ra == rb then return 0 end
+  if ra == "" then return 1 elseif rb == "" then return -1 end
+  return ra < rb and -1 or 1
+end
+Packs.CompareVersions = compareVersions                       -- (tests)
+
 --- The trackers a pack's addon brought: by the pack's name ("HardCounters_Farmer" registers the pack "Farmer").
 local function trackersOf(folder)
   local out = {}
@@ -41,20 +77,21 @@ local function trackersOf(folder)
   return out
 end
 
---- The packs: Hard Counters Basic first (built in), then the group's addons by title.
---- { { name (folder; nil for Basic), title, notes, enabled, loaded, builtin, missing, trackers = { tracker, ... },
----     on = how many of them are on } }
+--- The packs: Hard Counters Basic first (built in), then the group's addons by title, then (0.5.0) the tools
+--- (Diagnostics). { { name (folder; nil for Basic), title, notes, version, enabled, loaded, builtin, missing, needs
+---     (the dependencies that are not installed), tool, trackers = { tracker, ... }, on = how many of them are on } }
 function Packs.List()
-  local out = {}
+  local out, tools = {}, {}
   local basic = { title = "Hard Counters Basic", notes = "Gold and experience: in, out, per hour, time to level. Built in, always on.",
-    enabled = true, loaded = true, builtin = true, trackers = {} }
+    version = HC.VERSION, enabled = true, loaded = true, builtin = true, trackers = {} }
   for _, t in ipairs(HC:Trackers()) do if t.pack == "Basic" or t.pack == nil then basic.trackers[#basic.trackers + 1] = t end end
   out[1] = basic
   for _, a in ipairs(ns.wow.packAddons and ns.wow.packAddons() or {}) do
     a.title = (a.title or a.name):gsub("^Hard Counters:%s*", "")
     a.trackers = a.loaded and trackersOf(a.name) or {}
-    out[#out + 1] = a
+    if TOOLS[a.name] then a.tool = true; tools[#tools + 1] = a else out[#out + 1] = a end
   end
+  for _, a in ipairs(tools) do out[#out + 1] = a end
   for _, p in ipairs(out) do
     p.on = 0
     for _, t in ipairs(p.trackers) do if t.on then p.on = p.on + 1 end end
@@ -62,20 +99,45 @@ function Packs.List()
   return out
 end
 
---- Switch on the trackers of a loaded pack that the player never switched themselves (`chosen` is nil), with
---- history as it is (off unless they chose otherwise). Returns how many it switched on.
-function Packs.TrackersOn(folder)
+--- (0.5.0) The pack a folder registered (loaded packs only): "HardCounters_Farmer" -> the pack "Farmer".
+local function packOf(p)
+  if not (p and p.name and ns.packs) then return nil end
+  return ns.packs[(p.name:gsub("^HardCounters_", ""))]
+end
+
+--- (0.5.0) How many of this character's tiles read a pack's readings (they read "needs <namespace>" once it is
+--- unloaded). Returns the count and the pack's namespace (nil when it isn't loaded).
+function Packs.TilesUsing(p)
+  local pk = packOf(p)
+  local space = pk and pk.namespace
+  local M = ns.BoardModel
+  if not (space and M) then return 0, space end
   local n = 0
-  for _, t in ipairs(trackersOf(folder)) do
-    if not t.on and not t.chosen then
-      HC:SetTrackerOn(t.id, true)
+  for _, e in ipairs(M.CollectionTiles()) do
+    local t = e.raw
+    if type(t) == "table" and t.kind == "reading" and type(t.reading) == "string" and ns.U.namespace(t.reading) == space then
       n = n + 1
     end
   end
-  return n
+  return n, space
 end
 
---- Apply a choice: want = { [folder] = true|false } (a pack left out keeps its state). Returns
+--- (0.5.0) The ready-made boards group that holds a pack's presets (the first, in the New board order), or nil.
+function Packs.PresetGroup(p)
+  local space = p and p.builtin and "hc" or (packOf(p) or {}).namespace
+  local M = ns.BoardModel
+  if not (space and M) then return nil end
+  for _, g in ipairs(M.PresetGroups()) do
+    for _, key in ipairs(g.keys) do
+      local pr = M.Preset(key)
+      if pr and pr.pack == space then return g.title end
+    end
+  end
+  return nil
+end
+
+--- Apply a choice (0.4.0: called by Packs.Use and tests only; the tab applies each tick as it is clicked):
+--- want = { [folder] = true|false } (a pack left out keeps its state). Returns
 --- { on = 0 (0.4.0: trackers go on with their tiles, ns.ActivateTracker), reload = true when the game must reload for it, failed = { folder, ... } }.
 function Packs.Apply(want)
   local g = G()
@@ -120,7 +182,6 @@ function Packs.SetWanted(p, want)
     g.packsPending[p.name] = (want and not p.loaded) and true or nil
   end
   if content then
-    content.applied = true
     content.message = (not ok) and format(L["The game refused for %s: use its AddOns list (Escape, AddOns) instead."], p.title)
       or ((want ~= p.loaded) and L["Reload to finish: the game loads or unloads packs only then."] or nil)
   end
@@ -150,7 +211,7 @@ function Packs.Chosen() return G().packsChosen == true or Packs.LoadedCount() > 
 function Packs.LoadedCount()
   local n = 0
   for _, p in ipairs(Packs.List()) do
-    if not p.builtin and p.loaded and p.name ~= "HardCounters_Diagnostics" then n = n + 1 end
+    if not p.builtin and p.loaded and not p.tool then n = n + 1 end
   end
   return n
 end
@@ -169,12 +230,18 @@ local function wanted(p)
 end
 
 local function stateText(p)
-  if p.builtin then return format(L["Always on \194\183 %d of %d trackers on"], p.on, #p.trackers) end
-  if p.missing then return "|cffff6060" .. L["Can't load (something it needs is missing)"] .. "|r" end
+  -- (0.5.0) "counting", not "on": since 0.4 a tracker goes on with its tiles, so "3 of 7 on" read as a to-do
+  if p.builtin then return format(L["Always on \194\183 %d of %d trackers counting"], p.on, #p.trackers) end
+  if p.missing then
+    if type(p.needs) == "table" and #p.needs > 0 then
+      return "|cffff6060" .. format(L["Can't load: needs %s"], table.concat(p.needs, ", ")) .. "|r"
+    end
+    return "|cffff6060" .. L["Can't load (something it needs is missing)"] .. "|r"
+  end
   local w = wanted(p)
   if p.loaded and w then
     if #p.trackers == 0 then return "|cff60ff60" .. L["On"] .. "|r" end
-    return "|cff60ff60" .. L["On"] .. "|r \194\183 " .. format(L["%d of %d trackers on"], p.on, #p.trackers)
+    return "|cff60ff60" .. L["On"] .. "|r \194\183 " .. format(L["%d of %d trackers counting"], p.on, #p.trackers)
   end
   if p.loaded and not w then return "|cffffd200" .. L["On now; off after a reload"] .. "|r" end
   if not p.loaded and w then
@@ -190,6 +257,65 @@ local function needsReload(list)
   end
   return false
 end
+
+--- (0.5.0) Our own pack whose version isn't Hard Counters' (a partial update): the amber words, or nil.
+local function versionWarning(p)
+  if p.builtin or not (p.name and OURS[p.name] and p.version) or p.version == HC.VERSION then return nil end
+  local c = compareVersions(p.version, HC.VERSION)
+  if c == 1 then return format(L["newer than Hard Counters (%s)"], tostring(HC.VERSION)) end
+  return format(L["older than Hard Counters (%s)"], tostring(HC.VERSION))
+end
+
+local function titleText(p)
+  local s = L[p.title]
+  if p.version then s = s .. "  |cff808080" .. p.version .. "|r" end
+  local warn = versionWarning(p)
+  if warn then s = s .. "  |cffffb000" .. warn .. "|r" end
+  return s
+end
+
+--- A tick or the menu's Turn on / Turn off. (0.5.0) Turning off a loaded pack whose readings are on tiles asks
+--- first: after the reload those tiles read "needs <namespace>".
+local function setWanted(p, want)
+  if not p or p.builtin or p.missing then return end
+  local function go()
+    Packs.SetWanted(p, want)
+    refresh()
+  end
+  if not want and p.loaded then
+    local n, space = Packs.TilesUsing(p)
+    if n > 0 and ns.Boards and ns.Boards.Confirm then
+      ns.Boards.Confirm(format(L["%d tiles on your boards use %s. They will read 'needs %s' until it is back. Turn it off?"],
+        n, L[p.title], space), go)
+      refresh()                                                -- (the tick shows the state until the answer)
+      return
+    end
+  end
+  go()
+end
+
+--- The row's menu (right-click, or its "..."): Turn on or off, Its trackers, Its ready-made boards.
+local function rowItems(p)
+  if not p then return {} end
+  local items = { { text = L[p.title], title = true } }
+  if not p.builtin then
+    local w = wanted(p)
+    items[#items + 1] = { text = w and L["Turn off"] or L["Turn on"], disabled = p.missing,
+      func = function() setWanted(p, not w) end }
+  end
+  local group = p.loaded and Packs.PresetGroup(p) or nil
+  items[#items + 1] = { text = L["Its trackers"], disabled = not p.loaded or #p.trackers == 0,
+    tip = L["The Explorer on Trackers, searched by this pack's name."],
+    func = function()
+      local title = (packOf(p) or {}).title or p.title
+      if ns.ShowTracker then ns.ShowTracker(nil, title) end
+    end }
+  items[#items + 1] = { text = L["Its ready-made boards"], disabled = group == nil,
+    tip = L["The Explorer on the ready-made boards this pack adds."],
+    func = function() if ns.ShowExplorer and group then ns.ShowExplorer(true, "pg:" .. group) end end }
+  return items
+end
+Packs.RowItems = rowItems                                     -- (tests)
 
 local function newRow(i)
   local r = CreateFrame("Frame", nil, content)
@@ -210,21 +336,35 @@ local function newRow(i)
     if not p or p.builtin or p.missing then self:SetChecked(p and p.builtin or false); return end
     -- (the user, 2026-11-25: unticked a pack, /reload, and it was still there: the tick alone must count)
     -- The game is told at once, so a /reload by hand is enough (0.4.0: the tick is the whole choice).
-    Packs.SetWanted(p, not wanted(p))
-    refresh()
+    setWanted(p, not wanted(p))
   end)
   r.check = c
+  r.more = Wd.Button(r, "...", 26, function(self) if ns.Menu then ns.Menu.Show(self, rowItems(r.pack)) end end)
+  r.more:SetPoint("RIGHT", -6, 0)
+  Wd.RichTip(r.more, function() return { title = L["More..."], text = L["Turn it on or off, its trackers, its ready-made boards."],
+    click = L["Click: the menu. A right-click on the row opens it too."] } end)
   r.title = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   r.title:SetPoint("TOPLEFT", 40, -7)
   r.title:SetJustifyH("LEFT")
   r.state = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  r.state:SetPoint("TOPRIGHT", -10, -8)
+  r.state:SetPoint("TOPRIGHT", -40, -8)
   r.state:SetJustifyH("RIGHT")
   r.notes = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   r.notes:SetPoint("TOPLEFT", 40, -25)
-  r.notes:SetPoint("TOPRIGHT", -10, -25)
+  r.notes:SetPoint("TOPRIGHT", -40, -25)
   r.notes:SetJustifyH("LEFT")
   r.notes:SetWordWrap(false)
+  -- (0.5.0) the notes are cropped to one line: the tooltip has them whole, with the state and the version
+  Wd.RichTip(r, function()
+    local p = r.pack
+    if not p then return nil end
+    local text = p.notes and L[p.notes] or ""
+    if p.version then text = text .. (text ~= "" and "\n\n" or "") .. format(L["Version %s"], p.version) end
+    local warn = versionWarning(p)
+    if warn then text = text .. "  (" .. warn .. ")" end
+    return { title = L[p.title], state = stateText(p), text = text, click = L["Right-click: its menu."] }
+  end)
+  rightMenu(r, function() return rowItems(r.pack) end)
   rows[i] = r
   return r
 end
@@ -233,20 +373,30 @@ function refresh()
   if not (content and content:IsShown()) then return end
   local list = Packs.List()
   local y = -TOP_H
+  local captioned = false
   for i, p in ipairs(list) do
+    if p.tool and not captioned then
+      -- (0.5.0) Diagnostics adds no numbers: last, under a caption of its own
+      captioned = true
+      content.tools:ClearAllPoints()
+      content.tools:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + 2, y - 6)
+      y = y - CAPTION_H
+    end
     local r = rows[i] or newRow(i)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y)
     r:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
+    r.pack = p
     r.check.pack = p
     r.check:SetChecked(wanted(p))
     r.check:SetEnabled(not (p.builtin or p.missing))
-    r.title:SetText(L[p.title])
+    r.title:SetText(titleText(p))
     r.notes:SetText(p.notes and L[p.notes] or "")
     r.state:SetText(stateText(p))
     r:Show()
     y = y - ROW_H - 2
   end
+  content.tools:SetShown(captioned)
   for i = #list + 1, #rows do rows[i]:Hide() end
   if #list == 1 then
     content.none:SetText(L["No packs found beside Hard Counters. They come in the same download: Farmer, Character Stats, Traveler."])
@@ -282,7 +432,8 @@ function refresh()
 end
 Packs.Refresh = refresh
 
---- Apply every tick as it stands (the slash command and tests; the tab applies each tick as it is clicked).
+--- Apply every tick as it stands (tests only since 0.4.0: "Use these packs" went; the tab applies each tick as it
+--- is clicked).
 function Packs.Use()
   local want = {}
   for _, p in ipairs(Packs.List()) do
@@ -296,10 +447,7 @@ function Packs.Use()
     parts[#parts + 1] = format(L["The game refused for %s: use its AddOns list (Escape, AddOns) instead."], table.concat(res.failed, ", "))
   end
   if #parts == 0 then parts[1] = L["Done: nothing needed changing."] end
-  if content then
-    content.applied = true
-    content.message = table.concat(parts, " ")
-  end
+  if content then content.message = table.concat(parts, " ") end
   if ns.Print then ns.Print(table.concat(parts, " ")) end
   refresh()
   if ns.RefreshBoards then ns.RefreshBoards() end
@@ -312,7 +460,10 @@ local function build(f)
   f.intro:SetPoint("TOPLEFT", PAD + 2, -8)
   f.intro:SetPoint("TOPRIGHT", -PAD - 2, -8)
   f.intro:SetJustifyH("LEFT")
-  f.intro:SetText(L["Packs add numbers to Hard Counters. Tick the ones you want; untick the ones you don't: they cost nothing once unloaded."])
+  f.intro:SetText(L["Packs add numbers to Hard Counters. Your ticks are for this character. Tick the ones you want; untick the ones you don't: they cost nothing once unloaded."])
+  f.tools = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  f.tools:SetText(L["Tools"])
+  f.tools:Hide()
   f.none = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
   f.none:SetPoint("TOPLEFT", PAD + 2, -(TOP_H + ROW_H + 8))
   f.none:SetJustifyH("LEFT")
@@ -350,16 +501,17 @@ Packs.Rows = rows                                             -- (tests)
 ns.AddSlash("packs", function() ns.ShowPacks() end, L["the Packs tab: choose the packs you want"])
 
 local _ = ns.Help and ns.Help.Register(ID, {
-  what = "Packs are the add-ons that give Hard Counters its numbers: Farmer for loot, money and fishing, Character Stats for your character sheet, Traveler for distance and speed. This tab is where you choose which ones you want.",
+  what = "Packs are the add-ons that give Hard Counters its numbers: Farmer for loot, money and fishing, Character Stats for your character sheet, Traveler for distance and speed. This tab is where you choose which ones you want, for this character. Diagnostics, a tool for finding problems, is listed last.",
   can = {
-    "Tick or untick a pack: the game is told at once, and {Reload now} appears, since it loads or unloads a pack only at a reload (typing /reload does the same).",
-    "Read each pack's state on the right: on, off, or waiting for a reload, and how many of its trackers are on.",
+    "Tick or untick a pack: the game is told at once, and {Reload now} appears, since it loads or unloads a pack only at a reload (typing /reload does the same). Turning off a pack whose numbers are on your tiles asks first.",
+    "Read each pack's state on the right: on, off, or waiting for a reload, how many of its trackers are counting, or what it needs when it can't load. Hover a row for its whole description and version.",
+    "Right-click a row, or click its ..., to turn it on or off, see its trackers, or see its ready-made boards.",
     "{Open the Explorer on Trackers} to see every tracker, switch one off, or change how much history it keeps.",
   },
   effect = "A pack you keep adds its readings to + Tile and its ready-made boards to {New board...}; its trackers start counting, with daily history, the moment you place one of its tiles. A pack you untick is not loaded at all: no memory, no work in the background. Nothing here deletes saved history.",
   tour = {
-    { title = "One row per pack", text = "Each row is a pack: its name, what it adds, and on the right whether it is on. Hard Counters Basic (gold and experience) is built in and always on." },
-    { title = "Tick, then reload", text = "Tick the packs you want and untick the others: each tick counts at once. If a pack has to be loaded or unloaded, {Reload now} appears: click it, or type /reload later." },
+    { title = "One row per pack", text = "Each row is a pack: its name and version, what it adds, and on the right whether it is on. Hard Counters Basic (gold and experience) is built in and always on. Hover a row for its whole description." },
+    { title = "Tick, then reload", text = "Tick the packs you want and untick the others: each tick counts at once, for this character. If a pack has to be loaded or unloaded, {Reload now} appears: click it, or type /reload later." },
     { title = "Then place its tiles", text = "A pack's numbers count once you place one of its tiles: + Tile on a board, or a ready-made board. Its tracker goes on by itself, with daily history; {Options} says how long history is kept." },
   },
 })

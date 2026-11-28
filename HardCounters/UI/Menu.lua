@@ -142,3 +142,6 @@ function Menu.Show(anchor, items)
   catcher:Show()
   fill(1, anchor, items)
 end
+
+--- (0.5.0, public) The same menu for a pack's own window: HardCounters:ShowMenu(anchor, items) (docs/API.md §7).
+function ns.HC:ShowMenu(anchor, items) Menu.Show(anchor, items) end

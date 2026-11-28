@@ -290,9 +290,34 @@ stat is one small stock (one tuple per level per bucket), far below the root bud
     class's board under "Your class" and the other eight under "Other classes".
   - **Old keys stay** (boards remember the preset they came from): Tank, Melee and Caster are now Tank (physical),
     Melee DPS and Caster DPS; `hcstats:hunter` is the Hunter class board.
+- **Replaced 2026-11-28 (Hard Counters 0.5.0 E1, E2; the user: "no more warrior or melee dps but instead ... Warrior
+  (Melee Damage) and Warrior (Tank)"): one board per class and role.** The 7 role boards, the 9 class boards and the
+  8 schools boards above are no longer registered; boards made from them keep their tiles (a board holds its own;
+  `board.preset` is a note the tutorial reads). 18 presets take their place, `hcstats:<class>.<role>`, named
+  `<Class> (<Role>)`, `category = "class"`, `class`, and `role` (`tank`, `healer`, `melee`, `caster`, `ranged`:
+  stored by Hard Counters, read by nothing yet). Registered class by class (Warrior, Paladin, Hunter, Rogue, Priest,
+  Shaman, Mage, Warlock, Druid), the order New board... lists Other classes in, a title row per class.
+  - Warrior: Tank, Melee damage. Paladin: Healer, Tank, Melee damage. Hunter: Ranged. Rogue: Melee damage. Priest:
+    Healer, Caster. Shaman: Healer, Caster, Melee damage. Mage: Caster. Warlock: Caster. Druid: Healer, Tank, Melee
+    damage, Caster. Tiles as Hard Counters' design-0.5.0 E1 table; each starts with a Big number; a class that casts
+    ends with the five-second rule bar; skills and Defense are line bars.
+  - Shared tables: `HEAL_DIRECT` (Paladin (Healer) = Shaman (Healer): kept apart, the list is by class),
+    `TANK_SHIELD` (the first eight tiles of Warrior (Tank) and Paladin (Tank)), `MELEE_HEAD` (the first five of
+    Warrior, Paladin and Shaman (Melee damage)).
+  - Sizes `largeHalf` (Big, half width) and `lineHalf` (Line, half width) are asked for only when
+    `HC:Supports("tileSizes5")` (Hard Counters 0.5); an older core gets a medium half instead.
+  - **Tank (spell) has no successor:** resistance is a fight's gear set, not a role. The Resistance reading is one
+    + Tile away.
+  - Left out on purpose: off-hand tiles on Warrior (Melee damage) (a two-hander shows two "n/a"), parry on shamans
+    (`PARRY` has no shaman, though Enhancement has a Parry talent: a QUEUE row), per-school crit on Mage (the
+    tile's menu picks a school).
+  - The tip: "The stats a <class> watches as a <role>. Yours to change once made." (role as a noun: "melee damage
+    dealer", "ranged damage dealer").
 - **A Character Stats window** (an icon tab down the right edge of the Hard Counters window, since HC-69; a tab
   along the bottom since 2026-11-24): the full catalog grouped as §3, values
-  coloured against thresholds (hit cap, crit immunity), with each row's description as its tooltip. Phase 2 can
+  coloured against thresholds (hit cap, crit immunity), with each row's description as its tooltip. (0.5.0) A
+  right-click on a stat's row: `Add tile...` (`HC:AddTile`, as the Explorer's) and `Its tracker` (`HC:ShowTracker`),
+  with Hard Counters 0.5 (`HC:Supports("packMenus")`). Phase 2 can
   anchor it to the Character window like the reference addons; it isn't the selling point.
 - **Display rules:** units shown (%, rating, skill), "≈" on derived values, an arrow for change since login, grey in
   combat.
@@ -433,7 +458,8 @@ ones shows health regen or the five-second rule.
   has abilities in (casters, and a hunter's arcane, nature, fire and frost, a rogue's nature; a warrior has none). Spell
   damage and Spell crit apply to those classes; a board "<Class>: schools" (`hcstats:schools.<class>`, category
   class) pairs damage and crit per school, with spell hit and penetration for casters. Still the game's own sums:
-  CS-16's probes say whether talents are in them.
+  CS-16's probes say whether talents are in them. (2026-11-28: the schools boards are no longer offered, §6; the
+  class-and-role boards carry a caster's schools.)
 - **Not offered:** spell hit by school (the game gives one number; the per-school part is talents, which this pack
   does not read), miss and glancing tables (CS-15), MP5 split into gear and buffs.
 - **To see in game:** every call above answers on this client's documentation, not yet in a saved file; Diagnostics
