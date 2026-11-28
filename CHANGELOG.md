@@ -3,7 +3,14 @@
 What changed for players, newest first. Alpha and beta versions may reset saved data; when one does, its entry says
 so at the top. Developer notes (pack API changes) are at the end of an entry.
 
-## Unreleased
+## 0.5.0-beta1 (2026-11-28)
+
+A beta, **still experimental**. A bigger window with one Help button, boards with a look of their own and two new tile
+sizes, "how is this number made" on Alt+click, an Explorer that folds by kind, class boards by role, a Report a
+problem tab, and stints are runs again.
+
+**Saved data:** kept (boards, tiles, runs and settings carry over; boards made from the old role, class and schools
+boards stay as they are). **Updating:** **restart the game client** (new addon files; `/reload` is not enough).
 
 ### The window
 - The Hard Counters window is bigger: a little more room inside, and everything in it (text included) drawn about 8%
